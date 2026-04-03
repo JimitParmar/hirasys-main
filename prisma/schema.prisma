@@ -1,13 +1,545 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+}
+
+// ==========================================
+// AUTH & USERS
+// ==========================================
+
+enum UserRole {
+  ADMIN
+  HR
+  INTERVIEWER
+  CANDIDATE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  role          UserRole  @default(CANDIDATE)
+  phone         String?
+  avatarUrl     String?
+  department    String?
+  company       String?
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  lastLoginAt   DateTime?
+  skills        String[]  @default([])
+  resumeUrl     String?
+  resumeText    String?
+  profileData   Json      @default("{}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  jobsPosted       Job[]              @relation("JobPoster")
+  applications     Application[]
+  submissions      Submission[]
+  aiInterviews     AIInterview[]
+  f2fInterviewer   F2FInterview[]     @relation("Interviewer")
+  f2fCandidate     F2FInterview[]     @relation("F2FCandidate")
+  feedbacks        InterviewFeedback[]
+  notifications    Notification[]
+  sentMessages     Message[]          @relation("Sender")
+  receivedMessages Message[]          @relation("Receiver")
+  ratings          Rating[]
+  onboardingPlans  OnboardingPlan[]
+  pipelinesCreated Pipeline[]
+
+  @@index([email])
+  @@index([role])
+}
+
+// ==========================================
+// PIPELINES (The Core Feature)
+// ==========================================
+
+enum PipelineStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+model Pipeline {
+  id                  String         @id @default(cuid())
+  name                String
+  description         String?
+  status              PipelineStatus @default(DRAFT)
+  nodes               Json           @default("[]")    // Array of node configs
+  edges               Json           @default("[]")    // Array of edge connections
+  viewport            Json           @default("{}")    // Canvas position/zoom
+  estimatedApplicants Int            @default(100)
+  estimatedCost       Float          @default(0)
+  isTemplate          Boolean        @default(false)
+  templateCategory    String?
+  createdBy           String
+  metadata            Json           @default("{}")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  // Relations
+  creator    User          @relation(fields: [createdBy], references: [id])
+  jobs       Job[]
+  executions PipelineExecution[]
+
+  @@index([createdBy])
+  @@index([status])
+  @@index([isTemplate])
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  WAITING_FILTER
+  WAITING_APPROVAL
+  COMPLETED
+  FAILED
+}
+
+model PipelineExecution {
+  id              String          @id @default(cuid())
+  pipelineId      String
+  applicationId   String
+  candidateId     String
+  currentNodeId   String?
+  status          ExecutionStatus @default(PENDING)
+  nodeResults     Json            @default("{}")  // { nodeId: { score, status, data } }
+  filterResults   Json            @default("{}")  // { filterId: { passed, rank, batchId } }
+  totalCost       Float           @default(0)
+  costBreakdown   Json            @default("{}")
+  startedAt       DateTime        @default(now())
+  completedAt     DateTime?
+  metadata        Json            @default("{}")
+
+  // Relations
+  pipeline    Pipeline    @relation(fields: [pipelineId], references: [id])
+  application Application @relation(fields: [applicationId], references: [id])
+
+  @@index([pipelineId])
+  @@index([applicationId])
+  @@index([status])
+  @@index([currentNodeId])
+}
+
+// Filter batch - groups candidates for batch filtering
+model FilterBatch {
+  id            String   @id @default(cuid())
+  pipelineId    String
+  nodeId        String   // Which filter node
+  jobId         String
+  status        String   @default("collecting") // collecting, evaluating, completed
+  candidates    Json     @default("[]") // Array of { candidateId, applicationId, score }
+  passedIds     String[] @default([])
+  failedIds     String[] @default([])
+  config        Json     @default("{}") // Filter configuration
+  evaluatedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([pipelineId, nodeId])
+  @@index([jobId])
+  @@index([status])
+}
+
+// ==========================================
+// JOBS & APPLICATIONS
+// ==========================================
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+model Job {
+  id              String    @id @default(cuid())
+  title           String
+  description     String
+  requirements    String[]  @default([])
+  skills          String[]  @default([])
+  department      String
+  location        String
+  type            String    @default("full_time") // full_time, part_time, contract, internship
+  experienceMin   Int       @default(0)
+  experienceMax   Int       @default(99)
+  salaryMin       Float?
+  salaryMax       Float?
+  salaryCurrency  String    @default("USD")
+  status          JobStatus @default(DRAFT)
+  pipelineId      String?
+  postedBy        String
+  closingDate     DateTime?
+  applicantCount  Int       @default(0)
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  poster       User          @relation("JobPoster", fields: [postedBy], references: [id])
+  pipeline     Pipeline?     @relation(fields: [pipelineId], references: [id])
+  applications Application[]
+  assessments  Assessment[]
+  ratings      Rating[]
+
+  @@index([status])
+  @@index([postedBy])
+  @@index([department])
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SCREENING
+  ASSESSMENT
+  AI_INTERVIEW
+  F2F_INTERVIEW
+  UNDER_REVIEW
+  OFFERED
+  HIRED
+  ONBOARDING
+  REJECTED
+  WITHDRAWN
+}
+
+model Application {
+  id            String            @id @default(cuid())
+  jobId         String
+  candidateId   String
+  resumeUrl     String
+  resumeText    String?
+  resumeParsed  Json?             // Parsed resume data
+  coverLetter   String?
+  status        ApplicationStatus @default(APPLIED)
+  resumeScore   Float?
+  currentStage  String?           // Current pipeline node ID
+  notes         String?
+  rejectionFeedback Json?         // Personalized feedback
+  metadata      Json              @default("{}")
+  appliedAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Relations
+  job           Job                 @relation(fields: [jobId], references: [id])
+  candidate     User                @relation(fields: [candidateId], references: [id])
+  executions    PipelineExecution[]
+  submissions   Submission[]
+  aiInterviews  AIInterview[]
+  f2fInterviews F2FInterview[]
+  rating        Rating?
+
+  @@unique([jobId, candidateId])
+  @@index([jobId])
+  @@index([candidateId])
+  @@index([status])
+}
+
+// ==========================================
+// ASSESSMENTS
+// ==========================================
+
+enum AssessmentType {
+  CODING
+  MCQ
+  SUBJECTIVE
+  MIXED
+}
+
+model Assessment {
+  id           String         @id @default(cuid())
+  jobId        String
+  title        String
+  description  String?
+  type         AssessmentType @default(CODING)
+  duration     Int            @default(60) // minutes
+  totalPoints  Int            @default(100)
+  passingScore Int            @default(60)
+  questions    Json           @default("[]")
+  isActive     Boolean        @default(true)
+  createdBy    String
+  metadata     Json           @default("{}")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Relations
+  job         Job          @relation(fields: [jobId], references: [id])
+  submissions Submission[]
+
+  @@index([jobId])
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+model Submission {
+  id                   String           @id @default(cuid())
+  assessmentId         String
+  applicationId        String
+  candidateId          String
+  answers              Json             @default("[]")
+  totalScore           Float            @default(0)
+  maxScore             Float            @default(0)
+  percentage           Float            @default(0)
+  status               SubmissionStatus @default(IN_PROGRESS)
+  startedAt            DateTime         @default(now())
+  submittedAt          DateTime?
+  codeExecutionResults Json?
+  aiGradingResults     Json?
+  timeTaken            Int              @default(0) // seconds
+  metadata             Json             @default("{}")
+
+  // Relations
+  assessment  Assessment  @relation(fields: [assessmentId], references: [id])
+  application Application @relation(fields: [applicationId], references: [id])
+  candidate   User        @relation(fields: [candidateId], references: [id])
+
+  @@index([assessmentId])
+  @@index([applicationId])
+  @@index([candidateId])
+}
+
+// ==========================================
+// AI INTERVIEWS
+// ==========================================
+
+enum InterviewType {
+  TECHNICAL
+  BEHAVIORAL
+  CULTURE_FIT
+}
+
+enum InterviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model AIInterview {
+  id              String          @id @default(cuid())
+  applicationId   String
+  candidateId     String
+  type            InterviewType   @default(TECHNICAL)
+  status          InterviewStatus @default(PENDING)
+  jobContext      Json            @default("{}")  // JD + requirements
+  resumeContext   Json            @default("{}")  // Parsed resume
+  messages        Json            @default("[]")  // Conversation history
+  questionsAsked  Int             @default(0)
+  maxQuestions    Int             @default(10)
+  overallScore    Float?
+  scoreBreakdown  Json?
+  analysis        String?
+  strengths       String[]        @default([])
+  weaknesses      String[]        @default([])
+  startedAt       DateTime?
+  completedAt     DateTime?
+  duration        Int?            // seconds
+  metadata        Json            @default("{}")
+  createdAt       DateTime        @default(now())
+
+  // Relations
+  application Application @relation(fields: [applicationId], references: [id])
+  candidate   User        @relation(fields: [candidateId], references: [id])
+
+  @@index([applicationId])
+  @@index([candidateId])
+  @@index([status])
+}
+
+// ==========================================
+// F2F INTERVIEWS
+// ==========================================
+
+model F2FInterview {
+  id              String          @id @default(cuid())
+  applicationId   String
+  candidateId     String
+  interviewerId   String
+  scheduledAt     DateTime
+  duration        Int             @default(60) // minutes
+  meetingLink     String?
+  status          InterviewStatus @default(PENDING)
+  interviewType   String          @default("technical") // technical, behavioral, hiring_manager
+  notes           String?
+  metadata        Json            @default("{}")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  application Application          @relation(fields: [applicationId], references: [id])
+  candidate   User                 @relation("F2FCandidate", fields: [candidateId], references: [id])
+  interviewer User                 @relation("Interviewer", fields: [interviewerId], references: [id])
+  feedback    InterviewFeedback[]
+
+  @@index([applicationId])
+  @@index([interviewerId])
+  @@index([scheduledAt])
+}
+
+model InterviewFeedback {
+  id              String   @id @default(cuid())
+  interviewId     String
+  interviewerId   String
+  technicalScore  Int      @default(0) // 1-10
+  communicationScore Int   @default(0)
+  problemSolvingScore Int  @default(0)
+  cultureFitScore Int      @default(0)
+  overallScore    Int      @default(0)
+  recommendation  String   @default("maybe") // strong_yes, yes, maybe, no, strong_no
+  strengths       String?
+  concerns        String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  interview   F2FInterview @relation(fields: [interviewId], references: [id])
+  interviewer User         @relation(fields: [interviewerId], references: [id])
+
+  @@index([interviewId])
+}
+
+// ==========================================
+// RATINGS & RECOMMENDATIONS
+// ==========================================
+
+model Rating {
+  id                 String   @id @default(cuid())
+  applicationId      String   @unique
+  candidateId        String
+  jobId              String
+  resumeScore        Float    @default(0)
+  assessmentScore    Float    @default(0)
+  aiInterviewScore   Float    @default(0)
+  f2fInterviewScore  Float    @default(0)
+  overallScore       Float    @default(0)
+  breakdown          Json     @default("{}")
+  recommendation     String   @default("maybe") // strong_yes, yes, maybe, no, strong_no
+  showsPromise       Boolean  @default(false)
+  analysis           String?
+  strengths          String[] @default([])
+  weaknesses         String[] @default([])
+  calculatedAt       DateTime @default(now())
+
+  // Relations
+  application Application @relation(fields: [applicationId], references: [id])
+  candidate   User        @relation(fields: [candidateId], references: [id])
+  job         Job         @relation(fields: [jobId], references: [id])
+
+  @@index([jobId])
+  @@index([overallScore])
+}
+
+// ==========================================
+// NOTIFICATIONS & COMMUNICATION
+// ==========================================
+
+enum NotificationType {
+  STAGE_ADVANCED
+  ASSESSMENT_AVAILABLE
+  ASSESSMENT_RESULT
+  INTERVIEW_SCHEDULED
+  INTERVIEW_REMINDER
+  APPLICATION_UPDATE
+  FEEDBACK_AVAILABLE
+  JOB_RECOMMENDATION
+  OFFER_EXTENDED
+  REJECTION
+  GENERAL
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  data      Json             @default("{}")
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  senderId    String
+  receiverId  String
+  subject     String?
+  content     String
+  isRead      Boolean  @default(false)
+  relatedToId String?  // applicationId or jobId
+  relatedType String?  // "application" or "job"
+  createdAt   DateTime @default(now())
+
+  // Relations
+  sender   User @relation("Sender", fields: [senderId], references: [id])
+  receiver User @relation("Receiver", fields: [receiverId], references: [id])
+
+  @@index([receiverId, isRead])
+  @@index([senderId])
+}
+
+// ==========================================
+// ONBOARDING
+// ==========================================
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model OnboardingPlan {
+  id          String           @id @default(cuid())
+  candidateId String
+  jobId       String
+  status      OnboardingStatus @default(NOT_STARTED)
+  startDate   DateTime?
+  tasks       Json             @default("[]")
+  documents   Json             @default("[]")
+  progress    Float            @default(0) // 0-100
+  metadata    Json             @default("{}")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  candidate User @relation(fields: [candidateId], references: [id])
+
+  @@index([candidateId])
+}
+
+// ==========================================
+// USAGE TRACKING (Billing)
+// ==========================================
+
+model UsageRecord {
+  id          String   @id @default(cuid())
+  companyId   String   // User ID of HR/company admin
+  nodeType    String   // "ai_resume_screen", "coding_assessment", etc.
+  unitCount   Int      @default(1)
+  unitCost    Float
+  totalCost   Float
+  jobId       String?
+  pipelineId  String?
+  description String?
+  billedAt    DateTime @default(now())
+
+  @@index([companyId])
+  @@index([billedAt])
+  @@index([nodeType])
 }
