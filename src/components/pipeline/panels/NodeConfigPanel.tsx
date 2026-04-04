@@ -1,12 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Node } from "@xyflow/react";
 import { PipelineNodeData } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
@@ -21,98 +27,144 @@ interface NodeConfigPanelProps {
   onClose: () => void;
 }
 
-export function NodeConfigPanel({ node, onChange, onDelete, onClose }: NodeConfigPanelProps) {
-  const data = node.data as unknown as PipelineNodeData;
+export function NodeConfigPanel({
+  node,
+  onChange,
+  onDelete,
+  onClose,
+}: NodeConfigPanelProps) {
+  // Extract node data safely
+  const data: PipelineNodeData = node.data as PipelineNodeData;
 
+  // Local config state for immediate UI feedback
+  const [localConfig, setLocalConfig] = useState<Record<string, any>>(
+    data?.config ? JSON.parse(JSON.stringify(data.config)) : {}
+  );
+  const [localLabel, setLocalLabel] = useState(data?.label || "");
+
+  // Sync when node changes
+  useEffect(() => {
+    if (data?.config) {
+      setLocalConfig(JSON.parse(JSON.stringify(data.config)));
+    }
+    if (data?.label) {
+      setLocalLabel(data.label);
+    }
+  }, [node]);
+
+  // Update config and propagate to parent
   const updateConfig = (key: string, value: any) => {
-    onChange(node.id, {
-      config: { ...data.config, [key]: value },
-    });
+    const newConfig = { ...localConfig, [key]: value };
+    setLocalConfig(newConfig);
+    onChange(node.id, { config: newConfig });
   };
 
   const updateNestedConfig = (parentKey: string, key: string, value: any) => {
-    onChange(node.id, {
-      config: {
-        ...data.config,
-        [parentKey]: { ...(data.config[parentKey] || {}), [key]: value },
-      },
-    });
+    const parent = localConfig[parentKey] || {};
+    const newParent = { ...parent, [key]: value };
+    const newConfig = { ...localConfig, [parentKey]: newParent };
+    setLocalConfig(newConfig);
+    onChange(node.id, { config: newConfig });
   };
 
   const updateLabel = (label: string) => {
+    setLocalLabel(label);
     onChange(node.id, { label });
   };
 
+  if (!data) {
+    return null;
+  }
+
   return (
-    <div className="fixed right-0 top-0 h-full w-[380px] bg-white border-l border-slate-200 shadow-xl z-50 flex flex-col">
+    <div className="h-full w-[380px] bg-white border-l border-slate-200 shadow-2xl flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-100">
+      <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
         <div className="flex items-center gap-3">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: `${data.color}15` }}
+            style={{ backgroundColor: `${data.color || "#94A3B8"}20` }}
           >
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: data.color }} />
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: data.color || "#94A3B8" }}
+            />
           </div>
           <div>
-            <h3 className="font-semibold text-sm text-slate-700">Configure Node</h3>
-            <p className="text-xs text-slate-400">{data.subtype}</p>
+            <h3 className="font-semibold text-sm text-slate-700">
+              {data.label}
+            </h3>
+            <p className="text-[11px] text-slate-400">
+              {data.type} • {data.subtype?.replace(/_/g, " ")}
+            </p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
+        <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
           <X className="w-4 h-4" />
         </Button>
       </div>
 
       {/* Content */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-6">
-          {/* Common Fields */}
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-6">
+          {/* Common: Label */}
           <div className="space-y-3">
             <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Basic Settings
             </Label>
             <div className="space-y-2">
-              <Label htmlFor="label" className="text-sm">Node Label</Label>
+              <Label htmlFor="nodeLabel" className="text-sm">
+                Node Label
+              </Label>
               <Input
-                id="label"
-                value={data.label}
+                id="nodeLabel"
+                value={localLabel}
                 onChange={(e) => updateLabel(e.target.value)}
                 className="h-9"
               />
             </div>
-            {data.costPerUnit > 0 && (
+
+            {/* Cost indicator */}
+            {data.costPerUnit > 0 ? (
               <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
-                <span className="text-sm text-slate-600">Cost per candidate</span>
-                <Badge variant="outline">${data.costPerUnit}</Badge>
+                <span className="text-sm text-slate-600">
+                  Cost per candidate
+                </span>
+                <Badge variant="outline" className="font-mono">
+                  ${data.costPerUnit}
+                </Badge>
               </div>
-            )}
-            {data.costPerUnit === 0 && data.type === "filter" && (
+            ) : data.type === "filter" || data.type === "logic" ? (
               <div className="flex items-center justify-between bg-green-50 rounded-lg p-3">
-                <span className="text-sm text-green-700">Cost</span>
-                <Badge className="bg-green-100 text-green-700 hover:bg-green-100">FREE ✨</Badge>
+                <span className="text-sm text-green-700 font-medium">
+                  Cost
+                </span>
+                <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                  FREE ✨
+                </Badge>
               </div>
-            )}
+            ) : null}
           </div>
 
           <Separator />
 
-          {/* Type-specific configurations */}
-          {renderTypeConfig(data, updateConfig, updateNestedConfig)}
+          {/* Type-specific config */}
+          {renderNodeConfig(data, localConfig, updateConfig, updateNestedConfig)}
         </div>
       </ScrollArea>
 
       {/* Footer */}
-      <div className="p-4 border-t border-slate-100 flex justify-between">
+      <div className="p-4 border-t border-slate-100 flex justify-between bg-slate-50">
         <Button
           variant="destructive"
           size="sm"
           onClick={() => onDelete(node.id)}
+          className="h-9"
         >
           <Trash2 className="w-4 h-4 mr-2" />
-          Delete Node
+          Delete
         </Button>
-        <Button size="sm" onClick={onClose}>
+        <Button size="sm" onClick={onClose} className="h-9">
           Done
         </Button>
       </div>
@@ -120,790 +172,1151 @@ export function NodeConfigPanel({ node, onChange, onDelete, onClose }: NodeConfi
   );
 }
 
-function renderTypeConfig(
+// ==========================================
+// NODE TYPE CONFIGURATIONS
+// ==========================================
+
+function renderNodeConfig(
   data: PipelineNodeData,
+  config: Record<string, any>,
   updateConfig: (key: string, value: any) => void,
   updateNestedConfig: (parentKey: string, key: string, value: any) => void
 ) {
   switch (data.subtype) {
-    // ==========================================
-    // FILTER NODES
-    // ==========================================
+    // ── FILTER: TOP-N ──────────────────────
     case "top_n":
       return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Top-N Filter Settings
-          </Label>
-
-          <div className="space-y-2">
-            <Label className="text-sm">How many candidates pass through?</Label>
-            <div className="flex items-center gap-3">
-              <Slider
-                value={[data.config.n || 50]}
-                onValueChange={([v]) => updateConfig("n", v)}
-                min={1}
-                max={500}
-                step={1}
-                className="flex-1"
-              />
-              <Input
-                type="number"
-                value={data.config.n || 50}
-                onChange={(e) => updateConfig("n", parseInt(e.target.value) || 1)}
-                className="w-20 h-9"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Rank candidates by</Label>
-            <Select
-              value={data.config.rankBy || "previous_stage_score"}
-              onValueChange={(v) => updateConfig("rankBy", v)}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="previous_stage_score">Previous Stage Score</SelectItem>
-                <SelectItem value="resume_score">Resume Score</SelectItem>
-                <SelectItem value="overall_score">Overall Average Score</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Tiebreaker</Label>
-            <Select
-              value={data.config.tiebreaker || "none"}
-              onValueChange={(v) => updateConfig("tiebreaker", v === "none" ? undefined : v)}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No tiebreaker</SelectItem>
-                <SelectItem value="resume_score">Resume Score</SelectItem>
-                <SelectItem value="experience">Years of Experience</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Separator />
-
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Batch Settings
-          </Label>
-
-          <div className="space-y-2">
-            <Label className="text-sm">When to evaluate</Label>
-            <Select
-              value={data.config.batchMode || "count_or_time"}
-              onValueChange={(v) => updateConfig("batchMode", v)}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all_complete">After all candidates complete previous stage</SelectItem>
-                <SelectItem value="count_or_time">After N candidates OR X days</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {data.config.batchMode === "count_or_time" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Candidate count</Label>
-                <Input
-                  type="number"
-                  value={data.config.batchCount || 100}
-                  onChange={(e) => updateConfig("batchCount", parseInt(e.target.value))}
-                  className="h-9"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Days to wait</Label>
-                <Input
-                  type="number"
-                  value={data.config.batchDays || 7}
-                  onChange={(e) => updateConfig("batchDays", parseInt(e.target.value))}
-                  className="h-9"
-                />
-              </div>
-            </div>
-          )}
-
-          <Separator />
-
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Fast-Track (Optional)
-          </Label>
-
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Enable fast-track for top performers</Label>
-            <Switch
-              checked={data.config.fastTrack?.enabled || false}
-              onCheckedChange={(v) => updateNestedConfig("fastTrack", "enabled", v)}
-            />
-          </div>
-
-          {data.config.fastTrack?.enabled && (
-            <div className="space-y-2">
-              <Label className="text-sm">Fast-track if score ≥</Label>
-              <div className="flex items-center gap-3">
-                <Slider
-                  value={[data.config.fastTrack?.threshold || 90]}
-                  onValueChange={([v]) => updateNestedConfig("fastTrack", "threshold", v)}
-                  min={50}
-                  max={100}
-                  step={1}
-                  className="flex-1"
-                />
-                <span className="text-sm font-mono w-12 text-right">
-                  {data.config.fastTrack?.threshold || 90}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 flex items-center gap-1">
-                <Info className="w-3 h-3" />
-                Candidates scoring above this pass immediately without waiting for batch
-              </p>
-            </div>
-          )}
-
-          <Separator />
-
-          {renderFilteredActions(data, updateConfig, updateNestedConfig)}
-        </div>
+        <TopNConfig
+          config={config}
+          updateConfig={updateConfig}
+          updateNestedConfig={updateNestedConfig}
+        />
       );
 
+    // ── FILTER: SCORE GATE ─────────────────
     case "score_gate":
       return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Score Gate Settings
-          </Label>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Minimum score to pass</Label>
-            <div className="flex items-center gap-3">
-              <Slider
-                value={[data.config.minScore || 70]}
-                onValueChange={([v]) => updateConfig("minScore", v)}
-                min={0}
-                max={100}
-                step={1}
-                className="flex-1"
-              />
-              <span className="text-sm font-mono w-12 text-right font-semibold">
-                {data.config.minScore || 70}
-              </span>
-            </div>
-            <div className="flex justify-between text-[10px] text-slate-400">
-              <span>Lenient</span>
-              <span>Strict</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Score source</Label>
-            <Select
-              value={data.config.scoreSource || "previous_stage_score"}
-              onValueChange={(v) => updateConfig("scoreSource", v)}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="previous_stage_score">Previous Stage Score</SelectItem>
-                <SelectItem value="resume_score">Resume Score</SelectItem>
-                <SelectItem value="overall_score">Overall Average</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="bg-blue-50 p-3 rounded-lg">
-            <p className="text-xs text-blue-700 flex items-center gap-1">
-              <Info className="w-3 h-3" />
-              Score gates evaluate candidates in real-time — no waiting for batch.
-            </p>
-          </div>
-
-          <Separator />
-          {renderFilteredActions(data, updateConfig, updateNestedConfig)}
-        </div>
+        <ScoreGateConfig
+          config={config}
+          updateConfig={updateConfig}
+          updateNestedConfig={updateNestedConfig}
+        />
       );
 
+    // ── FILTER: PERCENTAGE ─────────────────
     case "percentage":
       return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Percentage Filter Settings
-          </Label>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Top percentage to pass</Label>
-            <div className="flex items-center gap-3">
-              <Slider
-                value={[data.config.percentage || 25]}
-                onValueChange={([v]) => updateConfig("percentage", v)}
-                min={1}
-                max={100}
-                step={1}
-                className="flex-1"
-              />
-              <span className="text-sm font-mono w-14 text-right font-semibold">
-                {data.config.percentage || 25}%
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Minimum to pass</Label>
-              <Input
-                type="number"
-                value={data.config.minPass || 3}
-                onChange={(e) => updateConfig("minPass", parseInt(e.target.value))}
-                className="h-9"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Maximum to pass</Label>
-              <Input
-                type="number"
-                value={data.config.maxPass || 100}
-                onChange={(e) => updateConfig("maxPass", parseInt(e.target.value))}
-                className="h-9"
-              />
-            </div>
-          </div>
-
-          <Separator />
-          {renderFilteredActions(data, updateConfig, updateNestedConfig)}
-        </div>
+        <PercentageConfig
+          config={config}
+          updateConfig={updateConfig}
+          updateNestedConfig={updateNestedConfig}
+        />
       );
 
+    // ── FILTER: HYBRID ─────────────────────
     case "hybrid":
       return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Hybrid Filter Settings
-          </Label>
-
-          <div className="bg-purple-50 p-3 rounded-lg space-y-1">
-            <p className="text-xs font-medium text-purple-700">How Hybrid works:</p>
-            <p className="text-xs text-purple-600">
-              1. Candidates scoring ≥ threshold pass IMMEDIATELY
-            </p>
-            <p className="text-xs text-purple-600">
-              2. Rest are batched and top N are selected
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Fast-track threshold</Label>
-            <div className="flex items-center gap-3">
-              <Slider
-                value={[data.config.fastTrackThreshold || 85]}
-                onValueChange={([v]) => updateConfig("fastTrackThreshold", v)}
-                min={50}
-                max={100}
-                step={1}
-                className="flex-1"
-              />
-              <span className="text-sm font-mono w-12 text-right">
-                ≥{data.config.fastTrackThreshold || 85}
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Batch: pick top N from remaining</Label>
-            <Input
-              type="number"
-              value={data.config.batchN || 40}
-              onChange={(e) => updateConfig("batchN", parseInt(e.target.value))}
-              className="h-9"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Rank by</Label>
-            <Select
-              value={data.config.rankBy || "previous_stage_score"}
-              onValueChange={(v) => updateConfig("rankBy", v)}
-            >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="previous_stage_score">Previous Stage Score</SelectItem>
-                <SelectItem value="resume_score">Resume Score</SelectItem>
-                <SelectItem value="overall_score">Overall Average</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Separator />
-          {renderFilteredActions(data, updateConfig, updateNestedConfig)}
-        </div>
+        <HybridConfig
+          config={config}
+          updateConfig={updateConfig}
+          updateNestedConfig={updateNestedConfig}
+        />
       );
 
+    // ── FILTER: HUMAN APPROVAL ─────────────
     case "human_approval":
       return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Human Approval Settings
-          </Label>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Who approves?</Label>
-            <Select
-              value={data.config.approverRole || "HR"}
-              onValueChange={(v) => updateConfig("approverRole", v)}
-            >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="HR">HR Manager</SelectItem>
-                <SelectItem value="HIRING_MANAGER">Hiring Manager</SelectItem>
-                <SelectItem value="ADMIN">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Deadline (days)</Label>
-            <Input
-              type="number"
-              value={data.config.deadline || 3}
-              onChange={(e) => updateConfig("deadline", parseInt(e.target.value))}
-              className="h-9"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">If no action taken</Label>
-            <Select
-              value={data.config.autoAction || "hold"}
-              onValueChange={(v) => updateConfig("autoAction", v)}
-            >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hold">Hold (wait for decision)</SelectItem>
-                <SelectItem value="advance">Auto-advance after deadline</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Show approver</Label>
-            <div className="space-y-2">
-              {["resume_score", "assessment_score", "ai_analysis", "resume_data", "interview_score"].map((field) => (
-                <div key={field} className="flex items-center gap-2">
-                  <Switch
-                    checked={(data.config.showData || []).includes(field)}
-                    onCheckedChange={(checked) => {
-                      const current = data.config.showData || [];
-                      updateConfig(
-                        "showData",
-                        checked ? [...current, field] : current.filter((f: string) => f !== field)
-                      );
-                    }}
-                  />
-                  <Label className="text-xs capitalize">{field.replace(/_/g, " ")}</Label>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <HumanApprovalConfig config={config} updateConfig={updateConfig} />
       );
 
-    // ==========================================
-    // STAGE NODES
-    // ==========================================
+    // ── STAGE: AI RESUME SCREEN ────────────
     case "ai_resume_screen":
-      return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Resume Screening Settings
-          </Label>
+      return <ResumeScreenConfig config={config} updateConfig={updateConfig} />;
 
-          <div className="space-y-2">
-            <Label className="text-sm">Scoring criteria</Label>
-            {["skills_match", "experience", "education", "project_relevance", "culture_keywords"].map((criterion) => (
-              <div key={criterion} className="flex items-center gap-2">
-                <Switch
-                  checked={(data.config.criteria || []).includes(criterion)}
-                  onCheckedChange={(checked) => {
-                    const current = data.config.criteria || [];
-                    updateConfig(
-                      "criteria",
-                      checked ? [...current, criterion] : current.filter((c: string) => c !== criterion)
-                    );
-                  }}
-                />
-                <Label className="text-xs capitalize">{criterion.replace(/_/g, " ")}</Label>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-
+    // ── STAGE: CODING ASSESSMENT ───────────
     case "coding_assessment":
       return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Coding Assessment Settings
-          </Label>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Duration (minutes)</Label>
-            <div className="flex items-center gap-3">
-              <Slider
-                value={[data.config.duration || 90]}
-                onValueChange={([v]) => updateConfig("duration", v)}
-                min={15}
-                max={180}
-                step={15}
-                className="flex-1"
-              />
-              <span className="text-sm font-mono w-16 text-right">
-                {data.config.duration || 90} min
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Difficulty</Label>
-            <Select
-              value={data.config.difficulty || "medium"}
-              onValueChange={(v) => updateConfig("difficulty", v)}
-            >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="easy">Easy</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="hard">Hard</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Allowed languages</Label>
-            {["javascript", "python", "typescript", "java", "cpp", "go"].map((lang) => (
-              <div key={lang} className="flex items-center gap-2">
-                <Switch
-                  checked={(data.config.languages || []).includes(lang)}
-                  onCheckedChange={(checked) => {
-                    const current = data.config.languages || [];
-                    updateConfig(
-                      "languages",
-                      checked ? [...current, lang] : current.filter((l: string) => l !== lang)
-                    );
-                  }}
-                />
-                <Label className="text-xs capitalize">{lang}</Label>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Number of questions</Label>
-            <Input
-              type="number"
-              value={data.config.questionCount || 3}
-              onChange={(e) => updateConfig("questionCount", parseInt(e.target.value))}
-              className="h-9"
-              min={1}
-              max={10}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">AI-generate questions from JD</Label>
-            <Switch
-              checked={data.config.autoGenerate !== false}
-              onCheckedChange={(v) => updateConfig("autoGenerate", v)}
-            />
-          </div>
-        </div>
+        <CodingAssessmentConfig config={config} updateConfig={updateConfig} />
       );
 
+    // ── STAGE: MCQ ASSESSMENT ──────────────
+    case "mcq_assessment":
+      return <MCQConfig config={config} updateConfig={updateConfig} />;
+
+    // ── STAGE: AI INTERVIEW ────────────────
     case "ai_technical_interview":
     case "ai_behavioral_interview":
       return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            AI Interview Settings
-          </Label>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Max questions</Label>
-            <div className="flex items-center gap-3">
-              <Slider
-                value={[data.config.maxQuestions || 10]}
-                onValueChange={([v]) => updateConfig("maxQuestions", v)}
-                min={3}
-                max={20}
-                step={1}
-                className="flex-1"
-              />
-              <span className="text-sm font-mono w-8 text-right">
-                {data.config.maxQuestions || 10}
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Estimated duration (minutes)</Label>
-            <div className="flex items-center gap-3">
-              <Slider
-                value={[data.config.duration || 30]}
-                onValueChange={([v]) => updateConfig("duration", v)}
-                min={10}
-                max={60}
-                step={5}
-                className="flex-1"
-              />
-              <span className="text-sm font-mono w-16 text-right">
-                {data.config.duration || 30} min
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Adapt questions based on responses</Label>
-            <Switch
-              checked={data.config.adaptive !== false}
-              onCheckedChange={(v) => updateConfig("adaptive", v)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Consider resume context</Label>
-            <Switch
-              checked={data.config.useResumeContext !== false}
-              onCheckedChange={(v) => updateConfig("useResumeContext", v)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Allow candidate to ask questions</Label>
-            <Switch
-              checked={data.config.allowCandidateQuestions || false}
-              onCheckedChange={(v) => updateConfig("allowCandidateQuestions", v)}
-            />
-          </div>
-        </div>
+        <AIInterviewConfig config={config} updateConfig={updateConfig} />
       );
 
+    // ── STAGE: F2F INTERVIEW ───────────────
     case "f2f_interview":
     case "panel_interview":
       return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Interview Settings
-          </Label>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Duration (minutes)</Label>
-            <Select
-              value={String(data.config.duration || 60)}
-              onValueChange={(v) => updateConfig("duration", parseInt(v))}
-            >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="30">30 minutes</SelectItem>
-                <SelectItem value="45">45 minutes</SelectItem>
-                <SelectItem value="60">60 minutes</SelectItem>
-                <SelectItem value="90">90 minutes</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Interview type</Label>
-            <Select
-              value={data.config.interviewType || "technical"}
-              onValueChange={(v) => updateConfig("interviewType", v)}
-            >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="technical">Technical</SelectItem>
-                <SelectItem value="behavioral">Behavioral</SelectItem>
-                <SelectItem value="hiring_manager">Hiring Manager</SelectItem>
-                <SelectItem value="culture_fit">Culture Fit</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {data.subtype === "panel_interview" && (
-            <div className="space-y-2">
-              <Label className="text-sm">Panel size</Label>
-              <Input
-                type="number"
-                value={data.config.panelSize || 3}
-                onChange={(e) => updateConfig("panelSize", parseInt(e.target.value))}
-                className="h-9"
-                min={2}
-                max={6}
-              />
-            </div>
-          )}
-        </div>
+        <F2FInterviewConfig
+          config={config}
+          updateConfig={updateConfig}
+          isPanel={data.subtype === "panel_interview"}
+        />
       );
 
-    // Action Nodes
+    // ── ACTION: SEND EMAIL ─────────────────
     case "send_email":
-      return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Email Settings
-          </Label>
+      return <EmailConfig config={config} updateConfig={updateConfig} />;
 
-          <div className="space-y-2">
-            <Label className="text-sm">Email type</Label>
-            <Select
-              value={data.config.emailType || "ai_personalized"}
-              onValueChange={(v) => updateConfig("emailType", v)}
-            >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ai_personalized">AI Personalized ($0.05)</SelectItem>
-                <SelectItem value="template">Template ($0.02)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {data.config.emailType === "template" && (
-            <div className="space-y-2">
-              <Label className="text-sm">Email subject</Label>
-              <Input
-                value={data.config.subject || ""}
-                onChange={(e) => updateConfig("subject", e.target.value)}
-                className="h-9"
-                placeholder="Your application update"
-              />
-            </div>
-          )}
-        </div>
-      );
-
-    // Exit Nodes
+    // ── EXIT: REJECTION ────────────────────
     case "rejection":
-      return (
-        <div className="space-y-4">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Rejection Settings
-          </Label>
+      return <RejectionConfig config={config} updateConfig={updateConfig} />;
 
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Send personalized feedback</Label>
-            <Switch
-              checked={data.config.sendFeedback !== false}
-              onCheckedChange={(v) => updateConfig("sendFeedback", v)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Add to talent pool</Label>
-            <Switch
-              checked={data.config.addToTalentPool || false}
-              onCheckedChange={(v) => updateConfig("addToTalentPool", v)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Recommend other jobs</Label>
-            <Switch
-              checked={data.config.recommendJobs !== false}
-              onCheckedChange={(v) => updateConfig("recommendJobs", v)}
-            />
-          </div>
-
-          {data.config.sendFeedback && (
-            <div className="bg-emerald-50 p-3 rounded-lg">
-              <p className="text-xs text-emerald-700">
-                ✨ Candidates will receive personalized skill feedback, improvement tips,
-                and recommended jobs — making Hirasys the most candidate-friendly platform.
-              </p>
-            </div>
-          )}
-        </div>
-      );
+    // ── EXIT: OFFER ────────────────────────
+    case "offer":
+      return <OfferConfig config={config} updateConfig={updateConfig} />;
 
     default:
       return (
-        <div className="text-sm text-slate-400 text-center py-4">
-          No additional configuration needed for this node.
+        <div className="text-sm text-slate-400 text-center py-8">
+          <p>No additional configuration needed.</p>
+          <p className="text-xs mt-1">This node works with default settings.</p>
         </div>
       );
   }
 }
 
-// Shared filtered candidates action config
-function renderFilteredActions(
-  data: PipelineNodeData,
-  updateConfig: (key: string, value: any) => void,
-  updateNestedConfig: (parentKey: string, key: string, value: any) => void
-) {
-  return (
-    <div className="space-y-4">
-      <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-        Filtered-Out Candidates
-      </Label>
+// ==========================================
+// FILTER CONFIGS
+// ==========================================
 
-      <div className="flex items-center justify-between">
-        <Label className="text-sm">Keep waitlist (backup)</Label>
-        <Switch
-          checked={data.config.filtered?.waitlist || false}
-          onCheckedChange={(v) => updateNestedConfig("filtered", "waitlist", v)}
+function TopNConfig({
+  config,
+  updateConfig,
+  updateNestedConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+  updateNestedConfig: (p: string, k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Top-N Filter Settings</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">
+          How many candidates pass through?
+        </Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[config.n || 50]}
+            onValueChange={([v]) => updateConfig("n", v)}
+            min={1}
+            max={500}
+            step={1}
+            className="flex-1"
+          />
+          <Input
+            type="number"
+            value={config.n || 50}
+            onChange={(e) =>
+              updateConfig("n", parseInt(e.target.value) || 1)
+            }
+            className="w-20 h-9 font-mono text-center"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Rank candidates by</Label>
+        <Select
+          value={config.rankBy || "previous_stage_score"}
+          onValueChange={(v) => updateConfig("rankBy", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="previous_stage_score">
+              Previous Stage Score
+            </SelectItem>
+            <SelectItem value="resume_score">Resume Score</SelectItem>
+            <SelectItem value="overall_score">
+              Overall Average Score
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Tiebreaker (optional)</Label>
+        <Select
+          value={config.tiebreaker || "none"}
+          onValueChange={(v) =>
+            updateConfig("tiebreaker", v === "none" ? undefined : v)
+          }
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No tiebreaker</SelectItem>
+            <SelectItem value="resume_score">Resume Score</SelectItem>
+            <SelectItem value="experience">Years of Experience</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Separator />
+      <SectionTitle>Batch Settings</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">When to evaluate</Label>
+        <Select
+          value={config.batchMode || "count_or_time"}
+          onValueChange={(v) => updateConfig("batchMode", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all_complete">
+              After all candidates complete previous stage
+            </SelectItem>
+            <SelectItem value="count_or_time">
+              After N candidates OR X days
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {config.batchMode === "count_or_time" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">Candidate count</Label>
+            <Input
+              type="number"
+              value={config.batchCount || 100}
+              onChange={(e) =>
+                updateConfig("batchCount", parseInt(e.target.value) || 100)
+              }
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-slate-500">OR days to wait</Label>
+            <Input
+              type="number"
+              value={config.batchDays || 7}
+              onChange={(e) =>
+                updateConfig("batchDays", parseInt(e.target.value) || 7)
+              }
+              className="h-9"
+            />
+          </div>
+        </div>
+      )}
+
+      <Separator />
+      <SectionTitle>Fast-Track (Optional)</SectionTitle>
+
+      <ToggleRow
+        label="Enable fast-track for top performers"
+        checked={config.fastTrack?.enabled || false}
+        onChange={(v) => updateNestedConfig("fastTrack", "enabled", v)}
+      />
+
+      {config.fastTrack?.enabled && (
+        <div className="space-y-2 pl-1">
+          <Label className="text-sm">Fast-track if score ≥</Label>
+          <div className="flex items-center gap-3">
+            <Slider
+              value={[config.fastTrack?.threshold || 90]}
+              onValueChange={([v]) =>
+                updateNestedConfig("fastTrack", "threshold", v)
+              }
+              min={50}
+              max={100}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-sm font-mono w-10 text-right font-semibold">
+              {config.fastTrack?.threshold || 90}
+            </span>
+          </div>
+          <HintBox>
+            Candidates scoring above this pass immediately without waiting for
+            the batch.
+          </HintBox>
+        </div>
+      )}
+
+      <Separator />
+      <FilteredActionsConfig
+        config={config}
+        updateNestedConfig={updateNestedConfig}
+      />
+    </div>
+  );
+}
+
+function ScoreGateConfig({
+  config,
+  updateConfig,
+  updateNestedConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+  updateNestedConfig: (p: string, k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Score Gate Settings</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">
+          Minimum score to pass
+        </Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[config.minScore || 70]}
+            onValueChange={([v]) => updateConfig("minScore", v)}
+            min={0}
+            max={100}
+            step={1}
+            className="flex-1"
+          />
+          <span className="text-lg font-mono font-bold text-slate-700 w-10 text-right">
+            {config.minScore || 70}
+          </span>
+        </div>
+        <div className="flex justify-between text-[10px] text-slate-400 px-1">
+          <span>Lenient (more pass)</span>
+          <span>Strict (fewer pass)</span>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Score source</Label>
+        <Select
+          value={config.scoreSource || "previous_stage_score"}
+          onValueChange={(v) => updateConfig("scoreSource", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="previous_stage_score">
+              Previous Stage Score
+            </SelectItem>
+            <SelectItem value="resume_score">Resume Score</SelectItem>
+            <SelectItem value="overall_score">Overall Average</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg">
+        <p className="text-xs text-blue-700 flex items-start gap-2">
+          <Info className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Score gates evaluate candidates <strong>in real-time</strong> — no
+            waiting for batch. Anyone scoring ≥{config.minScore || 70} passes
+            immediately.
+          </span>
+        </p>
+      </div>
+
+      <Separator />
+      <FilteredActionsConfig
+        config={config}
+        updateNestedConfig={updateNestedConfig}
+      />
+    </div>
+  );
+}
+
+function PercentageConfig({
+  config,
+  updateConfig,
+  updateNestedConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+  updateNestedConfig: (p: string, k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Top % Filter Settings</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">
+          Top percentage to pass
+        </Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[config.percentage || 25]}
+            onValueChange={([v]) => updateConfig("percentage", v)}
+            min={1}
+            max={100}
+            step={1}
+            className="flex-1"
+          />
+          <span className="text-lg font-mono font-bold text-slate-700 w-14 text-right">
+            {config.percentage || 25}%
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">Minimum to pass</Label>
+          <Input
+            type="number"
+            value={config.minPass || 3}
+            onChange={(e) =>
+              updateConfig("minPass", parseInt(e.target.value) || 1)
+            }
+            className="h-9"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">Maximum to pass</Label>
+          <Input
+            type="number"
+            value={config.maxPass || 100}
+            onChange={(e) =>
+              updateConfig("maxPass", parseInt(e.target.value) || 100)
+            }
+            className="h-9"
+          />
+        </div>
+      </div>
+
+      <Separator />
+      <FilteredActionsConfig
+        config={config}
+        updateNestedConfig={updateNestedConfig}
+      />
+    </div>
+  );
+}
+
+function HybridConfig({
+  config,
+  updateConfig,
+  updateNestedConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+  updateNestedConfig: (p: string, k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Hybrid Filter Settings</SectionTitle>
+
+      <div className="bg-purple-50 border border-purple-100 p-3 rounded-lg space-y-1">
+        <p className="text-xs font-semibold text-purple-700">
+          How Hybrid works:
+        </p>
+        <p className="text-xs text-purple-600">
+          ① Candidates scoring ≥ threshold pass <strong>immediately</strong>
+        </p>
+        <p className="text-xs text-purple-600">
+          ② Remaining are batched — top N from batch also pass
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Fast-track threshold</Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[config.fastTrackThreshold || 85]}
+            onValueChange={([v]) => updateConfig("fastTrackThreshold", v)}
+            min={50}
+            max={100}
+            step={1}
+            className="flex-1"
+          />
+          <span className="text-sm font-mono w-10 text-right font-semibold">
+            ≥{config.fastTrackThreshold || 85}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">
+          Batch: pick top N from remaining
+        </Label>
+        <Input
+          type="number"
+          value={config.batchN || 40}
+          onChange={(e) =>
+            updateConfig("batchN", parseInt(e.target.value) || 10)
+          }
+          className="h-9"
         />
       </div>
 
-      {data.config.filtered?.waitlist && (
-        <div className="space-y-2 pl-4">
-          <Label className="text-xs">Waitlist size</Label>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Rank by</Label>
+        <Select
+          value={config.rankBy || "previous_stage_score"}
+          onValueChange={(v) => updateConfig("rankBy", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="previous_stage_score">
+              Previous Stage Score
+            </SelectItem>
+            <SelectItem value="resume_score">Resume Score</SelectItem>
+            <SelectItem value="overall_score">Overall Average</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Separator />
+      <FilteredActionsConfig
+        config={config}
+        updateNestedConfig={updateNestedConfig}
+      />
+    </div>
+  );
+}
+
+function HumanApprovalConfig({
+  config,
+  updateConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Human Approval Settings</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Who approves?</Label>
+        <Select
+          value={config.approverRole || "HR"}
+          onValueChange={(v) => updateConfig("approverRole", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="HR">HR Manager</SelectItem>
+            <SelectItem value="HIRING_MANAGER">Hiring Manager</SelectItem>
+            <SelectItem value="ADMIN">Admin</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Deadline (days)</Label>
+        <Input
+          type="number"
+          value={config.deadline || 3}
+          onChange={(e) =>
+            updateConfig("deadline", parseInt(e.target.value) || 1)
+          }
+          className="h-9"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">If no action taken</Label>
+        <Select
+          value={config.autoAction || "hold"}
+          onValueChange={(v) => updateConfig("autoAction", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="hold">Hold (wait for decision)</SelectItem>
+            <SelectItem value="advance">Auto-advance after deadline</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Show to approver</Label>
+        <div className="space-y-2">
+          {[
+            { key: "resume_score", label: "Resume Score" },
+            { key: "assessment_score", label: "Assessment Score" },
+            { key: "ai_analysis", label: "AI Analysis Summary" },
+            { key: "resume_data", label: "Resume Details" },
+            { key: "interview_score", label: "Interview Score" },
+          ].map(({ key, label }) => (
+            <ToggleRow
+              key={key}
+              label={label}
+              checked={(config.showData || []).includes(key)}
+              onChange={(checked) => {
+                const current = config.showData || [];
+                updateConfig(
+                  "showData",
+                  checked
+                    ? [...current, key]
+                    : current.filter((f: string) => f !== key)
+                );
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// STAGE CONFIGS
+// ==========================================
+
+function ResumeScreenConfig({
+  config,
+  updateConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>AI Resume Screening</SectionTitle>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Scoring criteria</Label>
+        {[
+          { key: "skills_match", label: "Skills Match" },
+          { key: "experience", label: "Relevant Experience" },
+          { key: "education", label: "Education" },
+          { key: "project_relevance", label: "Project Relevance" },
+          { key: "culture_keywords", label: "Culture Keywords" },
+        ].map(({ key, label }) => (
+          <ToggleRow
+            key={key}
+            label={label}
+            checked={(config.criteria || []).includes(key)}
+            onChange={(checked) => {
+              const current = config.criteria || [];
+              updateConfig(
+                "criteria",
+                checked
+                  ? [...current, key]
+                  : current.filter((c: string) => c !== key)
+              );
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CodingAssessmentConfig({
+  config,
+  updateConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Coding Assessment</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Duration (minutes)</Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[config.duration || 90]}
+            onValueChange={([v]) => updateConfig("duration", v)}
+            min={15}
+            max={180}
+            step={15}
+            className="flex-1"
+          />
+          <span className="text-sm font-mono w-16 text-right font-semibold">
+            {config.duration || 90} min
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Difficulty</Label>
+        <Select
+          value={config.difficulty || "medium"}
+          onValueChange={(v) => updateConfig("difficulty", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="easy">Easy</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="hard">Hard</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Allowed languages</Label>
+        {["javascript", "python", "typescript", "java", "cpp", "go"].map(
+          (lang) => (
+            <ToggleRow
+              key={lang}
+              label={lang.charAt(0).toUpperCase() + lang.slice(1)}
+              checked={(config.languages || []).includes(lang)}
+              onChange={(checked) => {
+                const current = config.languages || [];
+                updateConfig(
+                  "languages",
+                  checked
+                    ? [...current, lang]
+                    : current.filter((l: string) => l !== lang)
+                );
+              }}
+            />
+          )
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Number of questions</Label>
+        <Input
+          type="number"
+          value={config.questionCount || 3}
+          onChange={(e) =>
+            updateConfig("questionCount", parseInt(e.target.value) || 1)
+          }
+          className="h-9"
+          min={1}
+          max={10}
+        />
+      </div>
+
+      <ToggleRow
+        label="AI-generate questions from Job Description"
+        checked={config.autoGenerate !== false}
+        onChange={(v) => updateConfig("autoGenerate", v)}
+      />
+    </div>
+  );
+}
+
+function MCQConfig({
+  config,
+  updateConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>MCQ Assessment</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Duration (minutes)</Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[config.duration || 45]}
+            onValueChange={([v]) => updateConfig("duration", v)}
+            min={10}
+            max={120}
+            step={5}
+            className="flex-1"
+          />
+          <span className="text-sm font-mono w-16 text-right">
+            {config.duration || 45} min
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Number of questions</Label>
+        <Input
+          type="number"
+          value={config.questionCount || 30}
+          onChange={(e) =>
+            updateConfig("questionCount", parseInt(e.target.value) || 10)
+          }
+          className="h-9"
+        />
+      </div>
+    </div>
+  );
+}
+
+function AIInterviewConfig({
+  config,
+  updateConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>AI Interview</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Max questions</Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[config.maxQuestions || 10]}
+            onValueChange={([v]) => updateConfig("maxQuestions", v)}
+            min={3}
+            max={20}
+            step={1}
+            className="flex-1"
+          />
+          <span className="text-sm font-mono w-8 text-right font-semibold">
+            {config.maxQuestions || 10}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">
+          Duration estimate (minutes)
+        </Label>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[config.duration || 30]}
+            onValueChange={([v]) => updateConfig("duration", v)}
+            min={10}
+            max={60}
+            step={5}
+            className="flex-1"
+          />
+          <span className="text-sm font-mono w-16 text-right">
+            {config.duration || 30} min
+          </span>
+        </div>
+      </div>
+
+      <ToggleRow
+        label="Adapt questions based on responses"
+        checked={config.adaptive !== false}
+        onChange={(v) => updateConfig("adaptive", v)}
+      />
+
+      <ToggleRow
+        label="Use resume context for questions"
+        checked={config.useResumeContext !== false}
+        onChange={(v) => updateConfig("useResumeContext", v)}
+      />
+
+      <ToggleRow
+        label="Allow candidate to ask questions"
+        checked={config.allowCandidateQuestions || false}
+        onChange={(v) => updateConfig("allowCandidateQuestions", v)}
+      />
+    </div>
+  );
+}
+
+function F2FInterviewConfig({
+  config,
+  updateConfig,
+  isPanel,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+  isPanel: boolean;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>{isPanel ? "Panel" : "F2F"} Interview</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Duration</Label>
+        <Select
+          value={String(config.duration || 60)}
+          onValueChange={(v) => updateConfig("duration", parseInt(v))}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="30">30 minutes</SelectItem>
+            <SelectItem value="45">45 minutes</SelectItem>
+            <SelectItem value="60">60 minutes</SelectItem>
+            <SelectItem value="90">90 minutes</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Interview type</Label>
+        <Select
+          value={config.interviewType || "technical"}
+          onValueChange={(v) => updateConfig("interviewType", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="technical">Technical</SelectItem>
+            <SelectItem value="behavioral">Behavioral</SelectItem>
+            <SelectItem value="hiring_manager">Hiring Manager</SelectItem>
+            <SelectItem value="culture_fit">Culture Fit</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isPanel && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Panel size</Label>
           <Input
             type="number"
-            value={data.config.filtered?.waitlistSize || 20}
-            onChange={(e) => updateNestedConfig("filtered", "waitlistSize", parseInt(e.target.value))}
+            value={config.panelSize || 3}
+            onChange={(e) =>
+              updateConfig("panelSize", parseInt(e.target.value) || 2)
+            }
+            className="h-9"
+            min={2}
+            max={6}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// ACTION/EXIT CONFIGS
+// ==========================================
+
+function EmailConfig({
+  config,
+  updateConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Email Settings</SectionTitle>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Email type</Label>
+        <Select
+          value={config.emailType || "ai_personalized"}
+          onValueChange={(v) => updateConfig("emailType", v)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ai_personalized">
+              AI Personalized ($0.05)
+            </SelectItem>
+            <SelectItem value="template">Template ($0.02)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {config.emailType === "template" && (
+        <div className="space-y-2">
+          <Label className="text-sm">Subject</Label>
+          <Input
+            value={config.subject || ""}
+            onChange={(e) => updateConfig("subject", e.target.value)}
+            className="h-9"
+            placeholder="Your application update..."
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RejectionConfig({
+  config,
+  updateConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Rejection Settings</SectionTitle>
+
+      <ToggleRow
+        label="Send personalized feedback"
+        checked={config.sendFeedback !== false}
+        onChange={(v) => updateConfig("sendFeedback", v)}
+      />
+
+      <ToggleRow
+        label="Add to talent pool"
+        checked={config.addToTalentPool || false}
+        onChange={(v) => updateConfig("addToTalentPool", v)}
+      />
+
+      <ToggleRow
+        label="Recommend other matching jobs"
+        checked={config.recommendJobs !== false}
+        onChange={(v) => updateConfig("recommendJobs", v)}
+      />
+
+      {config.sendFeedback && (
+        <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-lg">
+          <p className="text-xs text-emerald-700">
+            ✨ Candidates will receive personalized skill feedback, improvement
+            tips, and recommended jobs — making Hirasys the most
+            candidate-friendly hiring platform.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OfferConfig({
+  config,
+  updateConfig,
+}: {
+  config: any;
+  updateConfig: (k: string, v: any) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionTitle>Offer Settings</SectionTitle>
+
+      <ToggleRow
+        label="Auto-generate offer letter"
+        checked={config.autoGenerate || false}
+        onChange={(v) => updateConfig("autoGenerate", v)}
+      />
+
+      <ToggleRow
+        label="Trigger onboarding on acceptance"
+        checked={config.triggerOnboarding !== false}
+        onChange={(v) => updateConfig("triggerOnboarding", v)}
+      />
+
+      <ToggleRow
+        label="Notify hiring team"
+        checked={config.notifyTeam !== false}
+        onChange={(v) => updateConfig("notifyTeam", v)}
+      />
+    </div>
+  );
+}
+
+// ==========================================
+// SHARED: Filtered Actions (for all filter nodes)
+// ==========================================
+
+function FilteredActionsConfig({
+  config,
+  updateNestedConfig,
+}: {
+  config: any;
+  updateNestedConfig: (p: string, k: string, v: any) => void;
+}) {
+  const filtered = config.filtered || {};
+
+  return (
+    <div className="space-y-4">
+      <SectionTitle>Filtered-Out Candidates</SectionTitle>
+
+      <ToggleRow
+        label="Keep waitlist (backup candidates)"
+        checked={filtered.waitlist || false}
+        onChange={(v) => updateNestedConfig("filtered", "waitlist", v)}
+      />
+
+      {filtered.waitlist && (
+        <div className="pl-4 space-y-2">
+          <Label className="text-xs text-slate-500">Waitlist size</Label>
+          <Input
+            type="number"
+            value={filtered.waitlistSize || 20}
+            onChange={(e) =>
+              updateNestedConfig(
+                "filtered",
+                "waitlistSize",
+                parseInt(e.target.value) || 5
+              )
+            }
             className="h-8"
           />
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <Label className="text-sm">Send rejection email</Label>
-        <Switch
-          checked={data.config.filtered?.rejectEmail !== false}
-          onCheckedChange={(v) => updateNestedConfig("filtered", "rejectEmail", v)}
-        />
-      </div>
+      <ToggleRow
+        label="Send rejection email with feedback"
+        checked={filtered.rejectEmail !== false}
+        onChange={(v) => updateNestedConfig("filtered", "rejectEmail", v)}
+      />
 
-      {data.config.filtered?.rejectEmail && (
-        <div className="space-y-2 pl-4">
-          <Label className="text-xs">Email type</Label>
+      {filtered.rejectEmail && (
+        <div className="pl-4 space-y-2">
+          <Label className="text-xs text-slate-500">Email type</Label>
           <Select
-            value={data.config.filtered?.emailType || "ai_personalized"}
-            onValueChange={(v) => updateNestedConfig("filtered", "emailType", v)}
+            value={filtered.emailType || "ai_personalized"}
+            onValueChange={(v) =>
+              updateNestedConfig("filtered", "emailType", v)
+            }
           >
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ai_personalized">AI Personalized (with feedback)</SelectItem>
+              <SelectItem value="ai_personalized">
+                AI Personalized (with skill feedback)
+              </SelectItem>
               <SelectItem value="template">Basic Template</SelectItem>
             </SelectContent>
           </Select>
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <Label className="text-sm">Add to talent pool</Label>
-        <Switch
-          checked={data.config.filtered?.addToTalentPool || false}
-          onCheckedChange={(v) => updateNestedConfig("filtered", "addToTalentPool", v)}
-        />
-      </div>
+      <ToggleRow
+        label="Add to talent pool for future roles"
+        checked={filtered.addToTalentPool || false}
+        onChange={(v) =>
+          updateNestedConfig("filtered", "addToTalentPool", v)
+        }
+      />
     </div>
+  );
+}
+
+// ==========================================
+// REUSABLE UI COMPONENTS
+// ==========================================
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+      {children}
+    </Label>
+  );
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <Label className="text-sm text-slate-600 cursor-pointer">{label}</Label>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
+function HintBox({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs text-slate-400 flex items-start gap-1.5 bg-slate-50 p-2 rounded-lg">
+      <Info className="w-3 h-3 shrink-0 mt-0.5" />
+      <span>{children}</span>
+    </p>
   );
 }

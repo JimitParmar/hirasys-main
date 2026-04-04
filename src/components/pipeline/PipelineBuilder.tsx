@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef, useState, useMemo } from "react";
+import React, { useCallback, useRef, useState, useReducer } from "react";
 import {
   ReactFlow,
   Background,
@@ -20,7 +20,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Button } from "@/components/ui/button";
-import { PipelineNodeData, NODE_CATALOG, NodeCategory } from "@/types";
+import { PipelineNodeData, NODE_CATALOG } from "@/types";
 import { StageNode } from "./nodes/StageNode";
 import { FilterNode } from "./nodes/FilterNode";
 import { LogicNode } from "./nodes/LogicNode";
@@ -30,7 +30,7 @@ import { ExitNode } from "./nodes/ExitNode";
 import { NodePalette } from "./NodePalette";
 import { NodeConfigPanel } from "./panels/NodeConfigPanel";
 import { CostEstimatorPanel } from "./panels/CostEstimatorPanel";
-import { Save, Play, DollarSign, LayoutTemplate, Undo2, Redo2 } from "lucide-react";
+import { Save, DollarSign, LayoutTemplate } from "lucide-react";
 import { estimatePipelineCost } from "@/modules/pipeline/cost-estimator";
 import toast from "react-hot-toast";
 
@@ -43,56 +43,79 @@ const nodeTypes: NodeTypes = {
   exit: ExitNode,
 };
 
-const defaultEdgeOptions = {
-  animated: true,
-  markerEnd: { type: MarkerType.ArrowClosed },
-  style: { strokeWidth: 2 },
-};
+// Module-level: stores the forceUpdate function
+let _forceUpdate: (() => void) | null = null;
+let _getNodes: (() => Node[]) | null = null;
+let _editingNodeId: string | null = null;
+
+export function openNodeConfig(nodeId: string) {
+  console.log("openNodeConfig:", nodeId);
+  _editingNodeId = nodeId;
+  if (_forceUpdate) _forceUpdate();
+}
+
+export function closeNodeConfig() {
+  _editingNodeId = null;
+  if (_forceUpdate) _forceUpdate();
+}
 
 interface PipelineBuilderProps {
   pipelineId?: string;
-  initialNodes?: Node<PipelineNodeData>[];
+  initialNodes?: Node[];
   initialEdges?: Edge[];
+  onSave?: (nodes: Node[], edges: Edge[]) => void;
 }
 
-function PipelineBuilderInner({ pipelineId, initialNodes, initialEdges }: PipelineBuilderProps) {
+function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBuilderProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<PipelineNodeData>>(initialNodes || []);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes || []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges || []);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [showPalette, setShowPalette] = useState(false);
   const [showCostPanel, setShowCostPanel] = useState(false);
   const [palettePosition, setPalettePosition] = useState({ x: 0, y: 0 });
   const [estimatedApplicants, setEstimatedApplicants] = useState(500);
+  const [estimatedHires, setEstimatedHires] = useState(2);
 
+  // Force re-render trick
+  const [, forceRender] = useReducer((x: number) => x + 1, 0);
+  _forceUpdate = forceRender;
+
+  // Track if edit was just clicked to prevent pane click from clearing
+  const justClickedEdit = useRef(false);
+
+  // Find the editing node from current nodes
+  const editingNode = _editingNodeId ? nodes.find((n) => n.id === _editingNodeId) : null;
+
+  // Connections
   const onConnect = useCallback(
     (connection: Connection) => {
       const sourceNode = nodes.find((n) => n.id === connection.source);
-      const targetNode = nodes.find((n) => n.id === connection.target);
-
-      // Color edges based on source type
-      const edgeColor = sourceNode?.data?.type === "filter" ? "#F59E0B" : "#94A3B8";
-
+      let edgeColor = "#94A3B8";
+      if (sourceNode?.type === "filter") {
+        edgeColor = connection.sourceHandle === "reject" ? "#EF4444" : "#10B981";
+      } else if (sourceNode?.type === "source") {
+        edgeColor = "#10B981";
+      } else if (sourceNode?.type === "logic") {
+        edgeColor = "#8B5CF6";
+      }
       setEdges((eds) =>
-        addEdge(
-          {
-            ...connection,
-            animated: true,
-            style: { stroke: edgeColor, strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
-          },
-          eds
-        )
+        addEdge({
+          ...connection,
+          id: `e_${Date.now()}`,
+          animated: true,
+          style: { stroke: edgeColor, strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor, width: 20, height: 20 },
+        }, eds)
       );
     },
     [nodes, setEdges]
   );
 
-  // Right-click to add nodes
   const onPaneContextMenu = useCallback(
-    (event: React.MouseEvent | MouseEvent) => {
+    (event: MouseEvent | React.MouseEvent) => {
       event.preventDefault();
+      closeNodeConfig();
       setPalettePosition({ x: event.clientX, y: event.clientY });
       setShowPalette(true);
     },
@@ -101,41 +124,41 @@ function PipelineBuilderInner({ pipelineId, initialNodes, initialEdges }: Pipeli
 
   const addNode = useCallback(
     (catalogItem: (typeof NODE_CATALOG)[0]) => {
-      const position = screenToFlowPosition({
-        x: palettePosition.x,
-        y: palettePosition.y,
-      });
-
-      const newNode: Node<PipelineNodeData> = {
-        id: `${catalogItem.subtype}_${Date.now()}`,
-        type: catalogItem.category,
-        position,
-        data: {
-  id: `${catalogItem.subtype}_${Date.now()}`,
-  type: catalogItem.category,
-  subtype: catalogItem.subtype,
-  label: catalogItem.label,
-  config: { ...catalogItem.defaultConfig },
-  costPerUnit: catalogItem.costPerUnit,
-  description: catalogItem.description,
-  icon: catalogItem.icon,
-  color: catalogItem.color,
-}
-      };
-
-      setNodes((nds) => [...nds, newNode]);
+      const position = screenToFlowPosition({ x: palettePosition.x, y: palettePosition.y });
+      const nodeId = `${catalogItem.subtype}_${Date.now()}`;
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: nodeId,
+          type: catalogItem.category,
+          position,
+          selectable: true,
+          data: {
+            id: nodeId,
+            type: catalogItem.category,
+            subtype: catalogItem.subtype,
+            label: catalogItem.label,
+            config: JSON.parse(JSON.stringify(catalogItem.defaultConfig)),
+            costPerUnit: catalogItem.costPerUnit,
+            description: catalogItem.description,
+            icon: catalogItem.icon,
+            color: catalogItem.color,
+          } as PipelineNodeData,
+        },
+      ]);
       setShowPalette(false);
       toast.success(`Added ${catalogItem.label}`);
     },
     [screenToFlowPosition, palettePosition, setNodes]
   );
 
-  const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
-    setSelectedNode(node);
-  }, []);
-
   const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
+    // Don't close if edit button was just clicked
+    if (justClickedEdit.current) {
+      justClickedEdit.current = false;
+      return;
+    }
+    closeNodeConfig();
     setShowPalette(false);
   }, []);
 
@@ -143,7 +166,7 @@ function PipelineBuilderInner({ pipelineId, initialNodes, initialEdges }: Pipeli
     (nodeId: string, newData: Partial<PipelineNodeData>) => {
       setNodes((nds) =>
         nds.map((n) =>
-          n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n
+          n.id !== nodeId ? n : { ...n, data: { ...n.data, ...newData } }
         )
       );
     },
@@ -153,31 +176,47 @@ function PipelineBuilderInner({ pipelineId, initialNodes, initialEdges }: Pipeli
   const deleteNode = useCallback(
     (nodeId: string) => {
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-      setEdges((eds) =>
-        eds.filter((e) => e.source !== nodeId && e.target !== nodeId)
-      );
-      setSelectedNode(null);
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      closeNodeConfig();
       toast.success("Node removed");
     },
     [setNodes, setEdges]
   );
 
   const handleSave = useCallback(() => {
-  toast.success("Pipeline saved!");
-}, []);
+    onSave?.(nodes, edges);
+    toast.success("Pipeline saved!");
+  }, [nodes, edges, onSave]);
 
-  // Cost estimation
-  const costEstimate = useMemo(() => {
-    const pipelineNodes = nodes.map((n) => n.data as unknown as PipelineNodeData);
-    const pipelineEdges = edges.map((e) => ({
-      source: e.source,
-      target: e.target,
-    }));
-    return estimatePipelineCost(pipelineNodes, pipelineEdges, estimatedApplicants);
-  }, [nodes, edges, estimatedApplicants]);
+  const getCost = () => {
+    if (nodes.length === 0)
+      return { totalCost: 0, perHireCost: 0, estimatedHires, stageBreakdown: [], funnelStages: [], savingsVsNoFilters: 0, savingsPercentage: 0, monthlyEstimate: 0 };
+    try {
+      return estimatePipelineCost(
+        nodes.map((n) => n.data as PipelineNodeData),
+        edges.map((e) => ({ source: e.source, target: e.target })),
+        estimatedApplicants
+      );
+    } catch {
+      return { totalCost: 0, perHireCost: 0, estimatedHires, stageBreakdown: [], funnelStages: [], savingsVsNoFilters: 0, savingsPercentage: 0, monthlyEstimate: 0 };
+    }
+  };
+  const costEstimate = getCost();
+
+  // Intercept edit clicks to set flag
+  const handleEditClick = useCallback(() => {
+    justClickedEdit.current = true;
+  }, []);
 
   return (
-    <div className="w-full h-[calc(100vh-64px)] relative" ref={reactFlowWrapper}>
+    <div
+      className="w-full h-full relative"
+      ref={reactFlowWrapper}
+      onClickCapture={() => {
+        // This fires before React Flow's pane click
+        // If an edit button set justClickedEdit, we keep it
+      }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -185,62 +224,72 @@ function PipelineBuilderInner({ pipelineId, initialNodes, initialEdges }: Pipeli
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onPaneContextMenu={onPaneContextMenu}
-        onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
-        defaultEdgeOptions={defaultEdgeOptions}
         fitView
         snapToGrid
         snapGrid={[15, 15]}
         className="bg-slate-50"
+        deleteKeyCode={["Backspace", "Delete"]}
+        nodesDraggable
+        nodesConnectable
+        elementsSelectable
+        defaultEdgeOptions={{
+          animated: true,
+          style: { strokeWidth: 2, stroke: "#94A3B8" },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#94A3B8" },
+        }}
       >
         <Background gap={15} size={1} color="#E2E8F0" />
-        <Controls />
+        <Controls showInteractive={false} />
         <MiniMap
-          nodeColor={(n) => {
-            const data = n.data as unknown as PipelineNodeData;
-            return data?.color || "#94A3B8";
-          }}
-          maskColor="rgba(0,0,0,0.1)"
+          nodeColor={(n) => (n.data as PipelineNodeData)?.color || "#94A3B8"}
+          maskColor="rgba(0,0,0,0.08)"
         />
 
-        {/* Top Toolbar */}
-        <Panel position="top-left" className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleSave}>
-            <Save className="w-4 h-4 mr-2" />
-            Save Pipeline
+        <Panel position="top-left" className="flex gap-2 items-center">
+          <Button variant="default" size="sm" onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700">
+            <Save className="w-4 h-4 mr-2" /> Save
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowCostPanel(!showCostPanel)}>
+          <Button
+            variant={showCostPanel ? "default" : "outline"} size="sm"
+            onClick={() => setShowCostPanel(!showCostPanel)}
+            className={showCostPanel ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+          >
             <DollarSign className="w-4 h-4 mr-2" />
-            Cost: ${costEstimate.totalCost}
+            {nodes.length > 0 ? `$${costEstimate.totalCost}` : "Costs"}
           </Button>
           <Button variant="outline" size="sm">
-            <LayoutTemplate className="w-4 h-4 mr-2" />
-            Templates
+            <LayoutTemplate className="w-4 h-4 mr-2" /> Templates
           </Button>
         </Panel>
 
-        {/* Right-click hint */}
-        <Panel position="bottom-center">
-          <div className="bg-white/80 backdrop-blur px-4 py-2 rounded-full shadow-sm text-sm text-slate-500">
-            Right-click to add nodes • Drag to connect • Click node to configure
-          </div>
-        </Panel>
-
-        {/* Cost Estimator Panel */}
         {showCostPanel && (
-          <Panel position="top-right" className="w-80">
-            <CostEstimatorPanel
-              estimate={costEstimate}
-              applicants={estimatedApplicants}
-              onApplicantsChange={setEstimatedApplicants}
-              onClose={() => setShowCostPanel(false)}
-            />
+          <Panel position="top-right">
+            <div className="w-80">
+              <CostEstimatorPanel
+                estimate={costEstimate}
+                applicants={estimatedApplicants}
+                hires={estimatedHires}
+                onApplicantsChange={setEstimatedApplicants}
+                onHiresChange={setEstimatedHires}
+                onClose={() => setShowCostPanel(false)}
+              />
+            </div>
           </Panel>
         )}
+
+        <Panel position="bottom-center">
+          <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm border text-xs text-slate-500 flex items-center gap-3">
+            <span><kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono">Right Click</kbd> Add</span>
+            <span className="text-slate-300">|</span>
+            <span>Hover → ✏️ Configure</span>
+            <span className="text-slate-300">|</span>
+            <span>{nodes.length} nodes • {edges.length} edges</span>
+          </div>
+        </Panel>
       </ReactFlow>
 
-      {/* Right-click Node Palette */}
       {showPalette && (
         <NodePalette
           position={palettePosition}
@@ -249,14 +298,25 @@ function PipelineBuilderInner({ pipelineId, initialNodes, initialEdges }: Pipeli
         />
       )}
 
-      {/* Node Configuration Panel */}
-      {selectedNode && (
-        <NodeConfigPanel
-          node={selectedNode}
-          onChange={onNodeConfigChange}
-          onDelete={deleteNode}
-          onClose={() => setSelectedNode(null)}
-        />
+      {/* CONFIG PANEL — rendered based on module-level _editingNodeId */}
+      {editingNode && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            right: 0,
+            height: "100vh",
+            zIndex: 9999,
+          }}
+        >
+          <NodeConfigPanel
+            key={editingNode.id}
+            node={editingNode}
+            onChange={onNodeConfigChange}
+            onDelete={deleteNode}
+            onClose={() => closeNodeConfig()}
+          />
+        </div>
       )}
     </div>
   );
