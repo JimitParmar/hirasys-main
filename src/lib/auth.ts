@@ -1,74 +1,80 @@
-import type { NextAuthConfig } from "next-auth"
-import CredentialsProvider from "next-auth/providers/credentials"
-import bcrypt from "bcryptjs"
-import { db } from "./db"
+import NextAuth from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { queryOne, query } from "./db";
 
-export const authOptions: NextAuthConfig = {
+export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     CredentialsProvider({
-  name: "credentials",
-  credentials: {
-    email: {},
-    password: {},
-  },
-  async authorize(credentials) {
-    const email = credentials?.email as string
-    const password = credentials?.password as string
+      name: "credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (
+  typeof credentials?.email !== "string" ||
+  typeof credentials?.password !== "string"
+) {
+  return null;
+}
 
-    if (!email || !password) return null
+        const user = await queryOne(
+          "SELECT * FROM users WHERE email = $1 AND is_active = true",
+          [credentials.email]
+        );
 
-    const user = await db.user.findUnique({
-      where: { email },
-    })
+        if (!user) return null;
 
-    if (!user || !user.isActive) return null
+        const isValid = await bcrypt.compare(
+          credentials.password,
+          user.password_hash
+        );
+        if (!isValid) return null;
 
-    const isValid = await bcrypt.compare(password, user.passwordHash)
+        await query(
+          "UPDATE users SET last_login_at = NOW() WHERE id = $1",
+          [user.id]
+        );
 
-    if (!isValid) return null
-
-    await db.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    })
-
-    return {
-      id: String(user.id),
-      email: user.email,
-      name: `${user.firstName} ${user.lastName}`,
-      role: user.role,
-      firstName: user.firstName,
-      lastName: user.lastName,
-    }
-  },
-}),
+        return {
+          id: user.id,
+          email: user.email,
+          name: `${user.first_name} ${user.last_name}`,
+          role: user.role,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          company: user.company,
+        } as any;
+      },
+    }),
   ],
 
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.role = (user as any).role
-        token.firstName = (user as any).firstName
-        token.lastName = (user as any).lastName
+        token.id = (user as any).id;
+        token.role = (user as any).role;
+        token.firstName = (user as any).firstName;
+        token.lastName = (user as any).lastName;
+        token.company = (user as any).company;
       }
-      return token
+      return token;
     },
 
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string
-        ;(session.user as any).role = token.role
-        ;(session.user as any).firstName = token.firstName
-        ;(session.user as any).lastName = token.lastName
+        (session.user as any).id = token.id;
+        (session.user as any).role = token.role;
+        (session.user as any).firstName = token.firstName;
+        (session.user as any).lastName = token.lastName;
+        (session.user as any).company = token.company;
       }
-      return session
+      return session;
     },
   },
 
-  pages: {
-    signIn: "/login",
-  },
+  pages: { signIn: "/login" },
 
   session: {
     strategy: "jwt",
@@ -76,4 +82,4 @@ export const authOptions: NextAuthConfig = {
   },
 
   secret: process.env.NEXTAUTH_SECRET,
-}
+});
