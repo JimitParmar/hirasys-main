@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ArrowLeft, Loader2, Users, Mail, Briefcase, Star,
-  ChevronRight, FileText,
+  ChevronRight, FileText, Pencil
 } from "lucide-react";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
@@ -114,6 +114,11 @@ const fetchData = async () => {
           >
             {job.status}
           </Badge>
+          <Link href={`/hr/jobs/${id}/edit`}>
+  <Button variant="outline" size="sm">
+    <Pencil className="w-4 h-4 mr-1" /> Edit Job
+  </Button>
+</Link>
         </div>
       </header>
 

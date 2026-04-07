@@ -60,15 +60,46 @@ export async function PUT(
     const { id } = await params;
     const body = await req.json();
 
-    // Build dynamic update
+    // Build dynamic update query
     const fields: string[] = [];
     const values: any[] = [];
     let idx = 2; // $1 is id
 
-    if (body.title !== undefined) { fields.push(`title = $${idx}`); values.push(body.title); idx++; }
-    if (body.description !== undefined) { fields.push(`description = $${idx}`); values.push(body.description); idx++; }
-    if (body.status !== undefined) { fields.push(`status = $${idx}`); values.push(body.status); idx++; }
-    if (body.pipeline_id !== undefined) { fields.push(`pipeline_id = $${idx}`); values.push(body.pipeline_id); idx++; }
+    const fieldMap: Record<string, string> = {
+      title: "title",
+      description: "description",
+      department: "department",
+      location: "location",
+      type: "type",
+      status: "status",
+      experienceMin: "experience_min",
+      experienceMax: "experience_max",
+      salaryMin: "salary_min",
+      salaryMax: "salary_max",
+      salaryCurrency: "salary_currency",
+      pipelineId: "pipeline_id",
+    };
+
+    for (const [jsKey, dbKey] of Object.entries(fieldMap)) {
+      if (body[jsKey] !== undefined) {
+        fields.push(`${dbKey} = $${idx}`);
+        values.push(body[jsKey]);
+        idx++;
+      }
+    }
+
+    // Handle arrays separately
+    if (body.skills !== undefined) {
+      fields.push(`skills = $${idx}`);
+      values.push(body.skills);
+      idx++;
+    }
+
+    if (body.requirements !== undefined) {
+      fields.push(`requirements = $${idx}`);
+      values.push(body.requirements);
+      idx++;
+    }
 
     if (fields.length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
@@ -81,8 +112,12 @@ export async function PUT(
       [id, ...values]
     );
 
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
     return NextResponse.json({ success: true, job });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Job update error:", error);
     return NextResponse.json({ error: "Failed to update" }, { status: 500 });
   }

@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import toast from "react-hot-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Briefcase, MapPin, Building2, Loader2, ArrowLeft,
@@ -363,6 +364,28 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
                     Step {currentStageIndex + 1} of {stages.length}
                   </p>
                 </div>
+              </div>
+            )}
+
+                        {/* Action buttons based on current stage */}
+            {!isHired && !isRejected && stages[currentStageIndex] && (
+              <div className="mt-3">
+                {["coding_assessment", "mcq_assessment"].includes(stages[currentStageIndex]?.subtype) && (
+  <Button
+    size="sm"
+    className="bg-indigo-600 hover:bg-indigo-700"
+    onClick={() => {
+      // Navigate to assessment using the pipeline node subtype
+      window.location.href = `/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+    }}
+  >
+    <Code className="w-4 h-4 mr-2" />
+    {stages[currentStageIndex].subtype === "mcq_assessment"
+      ? "Take Quiz →"
+      : "Start Coding Challenge →"
+    }
+  </Button>
+)}
               </div>
             )}
 

@@ -205,3 +205,21 @@ export async function initializeDatabase() {
   `);
   console.log("Database schema initialized");
 }
+
+  // Fix submissions table — ensure assessment_id can accept pipeline node IDs
+  await query(`
+    DO $$ BEGIN
+      ALTER TABLE submissions ALTER COLUMN assessment_id TYPE TEXT;
+      ALTER TABLE submissions ALTER COLUMN max_score SET DEFAULT 100;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END $$;
+  `);
+
+  // Drop the foreign key constraint on assessment_id if it exists
+  // (because we now use pipeline node IDs which aren't in the assessments table)
+  await query(`
+    DO $$ BEGIN
+      ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_assessment_id_fkey;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END $$;
+  `);

@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     let resumeScore = 0;
     let resumeParsed: any = null;
 
-    if (resumeText && process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "sk-your-key-here") {
+    if (resumeText && process.env.GEMINI_API_KEY) {
       try {
         const { aiJSON } = await import("@/lib/ai");
         const result = await aiJSON<{

@@ -110,6 +110,9 @@ export default function HRDashboard() {
             <Link href="/pipeline">
               <Button variant="ghost" size="sm">Pipeline Builder</Button>
             </Link>
+            <Link href="/hr/assessments/new">
+            <Button variant="ghost" size="sm">Assessments</Button>
+            </Link>
             <div className="h-6 w-px bg-slate-200 mx-2" />
             <span className="text-sm text-slate-500">{user?.firstName}</span>
             <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8">
@@ -248,6 +251,11 @@ export default function HRDashboard() {
                             >
                               <Eye className="w-4 h-4 mr-2" /> View Applications
                             </DropdownMenuItem>
+                                <DropdownMenuItem
+        onClick={() => router.push(`/hr/jobs/${job.id}/edit`)}
+    >
+        <Pencil className="w-4 h-4 mr-2" /> Edit Job
+    </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => toggleJobStatus(job.id, job.status)}
                             >
