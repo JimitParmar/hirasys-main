@@ -135,7 +135,29 @@ export async function POST(req: NextRequest) {
 
     // Increment count
     await query("UPDATE jobs SET applicant_count = applicant_count + 1 WHERE id = $1", [jobId]);
-
+        // ==========================================
+    // TRIGGER PIPELINE — Start automatic execution
+    // ==========================================
+    try {
+      // Small delay to ensure DB writes are complete
+      setTimeout(async () => {
+        try {
+          await fetch(
+            `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/pipeline/execute`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                applicationId: application.id,
+                trigger: "application_submitted",
+              }),
+            }
+          );
+        } catch (err) {
+          console.error("Pipeline trigger failed (non-critical):", err);
+        }
+      }, 1000);
+    } catch {}
     return NextResponse.json({
       success: true,
       application: { ...application, resumeScore },

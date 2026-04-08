@@ -184,101 +184,38 @@ function renderNodeConfig(
   updateNestedConfig: (parentKey: string, key: string, value: any) => void
 ) {
   switch (data.subtype) {
-    // ── FILTER: TOP-N ──────────────────────
     case "top_n":
-      return (
-        <TopNConfig
-          config={config}
-          updateConfig={updateConfig}
-          updateNestedConfig={updateNestedConfig}
-        />
-      );
-
-    // ── FILTER: SCORE GATE ─────────────────
+      return <TopNConfig config={config} updateConfig={updateConfig} updateNestedConfig={updateNestedConfig} />;
     case "score_gate":
-      return (
-        <ScoreGateConfig
-          config={config}
-          updateConfig={updateConfig}
-          updateNestedConfig={updateNestedConfig}
-        />
-      );
-
-    // ── FILTER: PERCENTAGE ─────────────────
+      return <ScoreGateConfig config={config} updateConfig={updateConfig} updateNestedConfig={updateNestedConfig} />;
     case "percentage":
-      return (
-        <PercentageConfig
-          config={config}
-          updateConfig={updateConfig}
-          updateNestedConfig={updateNestedConfig}
-        />
-      );
-
-    // ── FILTER: HYBRID ─────────────────────
+      return <PercentageConfig config={config} updateConfig={updateConfig} updateNestedConfig={updateNestedConfig} />;
     case "hybrid":
-      return (
-        <HybridConfig
-          config={config}
-          updateConfig={updateConfig}
-          updateNestedConfig={updateNestedConfig}
-        />
-      );
-
-    // ── FILTER: HUMAN APPROVAL ─────────────
+      return <HybridConfig config={config} updateConfig={updateConfig} updateNestedConfig={updateNestedConfig} />;
     case "human_approval":
-      return (
-        <HumanApprovalConfig config={config} updateConfig={updateConfig} />
-      );
-
-    // ── STAGE: AI RESUME SCREEN ────────────
+      return <HumanApprovalConfig config={config} updateConfig={updateConfig} />;
     case "ai_resume_screen":
       return <ResumeScreenConfig config={config} updateConfig={updateConfig} />;
-
-    // ── STAGE: CODING ASSESSMENT ───────────
     case "coding_assessment":
-      return (
-        <CodingAssessmentConfig config={config} updateConfig={updateConfig} />
-      );
-
-    // ── STAGE: MCQ ASSESSMENT ──────────────
+      return <CodingAssessmentConfig config={config} updateConfig={updateConfig} />;
     case "mcq_assessment":
       return <MCQConfig config={config} updateConfig={updateConfig} />;
-
-    // ── STAGE: AI INTERVIEW ────────────────
     case "ai_technical_interview":
     case "ai_behavioral_interview":
-      return (
-        <AIInterviewConfig config={config} updateConfig={updateConfig} />
-      );
-
-    // ── STAGE: F2F INTERVIEW ───────────────
+      return <AIInterviewConfig config={config} updateConfig={updateConfig} />;
     case "f2f_interview":
     case "panel_interview":
-      return (
-        <F2FInterviewConfig
-          config={config}
-          updateConfig={updateConfig}
-          isPanel={data.subtype === "panel_interview"}
-        />
-      );
-
-    // ── ACTION: SEND EMAIL ─────────────────
+      return <F2FInterviewConfig config={config} updateConfig={updateConfig} isPanel={data.subtype === "panel_interview"} />;
     case "send_email":
       return <EmailConfig config={config} updateConfig={updateConfig} />;
-
-    // ── EXIT: REJECTION ────────────────────
     case "rejection":
       return <RejectionConfig config={config} updateConfig={updateConfig} />;
-
-    // ── EXIT: OFFER ────────────────────────
     case "offer":
       return <OfferConfig config={config} updateConfig={updateConfig} />;
-
     default:
       return (
         <div className="text-sm text-slate-400 text-center py-8">
           <p>No additional configuration needed.</p>
-          <p className="text-xs mt-1">This node works with default settings.</p>
         </div>
       );
   }
@@ -822,12 +759,9 @@ function CodingAssessmentConfig({
 }) {
   const [generating, setGenerating] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-
   const questions = config.questions || [];
 
   const generateQuestions = async () => {
-    // We need the job context — get it from the linked job
-    // For now, generate based on config
     setGenerating(true);
     try {
       const res = await fetch("/api/assessments/generate-for-node", {
@@ -838,45 +772,38 @@ function CodingAssessmentConfig({
           difficulty: config.difficulty || "medium",
           questionCount: config.questionCount || 3,
           languages: config.languages || ["javascript", "python"],
-          skills: config.skills || [],
-          context: config.jobContext || "",
         }),
       });
       const data = await res.json();
       if (data.questions) {
         updateConfig("questions", data.questions);
-        toast.success(`Generated ${data.questions.length} coding questions!`);
+        toast.success(`Generated ${data.questions.length} questions!`);
       }
-    } catch (err) {
-      toast.error("Failed to generate questions");
+    } catch {
+      toast.error("Failed to generate");
     } finally {
       setGenerating(false);
     }
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <SectionTitle>Coding Assessment</SectionTitle>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Duration (minutes)</Label>
-        <div className="flex items-center gap-3">
-          <Slider
-            value={[config.duration || 90]}
-            onValueChange={([v]) => updateConfig("duration", v)}
-            min={15}
-            max={180}
-            step={15}
-            className="flex-1"
-          />
-          <span className="text-sm font-mono w-16 text-right font-semibold">
-            {config.duration || 90} min
-          </span>
-        </div>
+        <Label className="text-sm">Duration (minutes)</Label>
+        <Input
+          type="number"
+          value={config.duration || 90}
+          onChange={(e) => updateConfig("duration", parseInt(e.target.value) || 30)}
+          min={15}
+          max={180}
+          className="h-9"
+        />
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Difficulty</Label>
+        <Label className="text-sm">Difficulty</Label>
         <Select
           value={config.difficulty || "medium"}
           onValueChange={(v) => updateConfig("difficulty", v)}
@@ -891,33 +818,27 @@ function CodingAssessmentConfig({
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Number of Questions</Label>
-        <div className="flex items-center gap-3">
-          <Slider
-            value={[config.questionCount || 3]}
-            onValueChange={([v]) => updateConfig("questionCount", v)}
-            min={1}
-            max={10}
-            step={1}
-            className="flex-1"
-          />
-          <span className="text-sm font-mono w-8 text-right font-semibold">
-            {config.questionCount || 3}
-          </span>
-        </div>
+        <Label className="text-sm">Number of Questions</Label>
+        <Input
+          type="number"
+          value={config.questionCount || 3}
+          onChange={(e) => updateConfig("questionCount", parseInt(e.target.value) || 1)}
+          min={1}
+          max={10}
+          className="h-9"
+        />
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Allowed Languages</Label>
-        {["javascript", "python", "typescript", "java", "cpp", "go"].map((lang) => (
+        <Label className="text-sm">Languages</Label>
+        {["javascript", "python", "typescript", "java", "cpp"].map((lang) => (
           <ToggleRow
             key={lang}
             label={lang.charAt(0).toUpperCase() + lang.slice(1)}
             checked={(config.languages || []).includes(lang)}
             onChange={(checked) => {
               const current = config.languages || [];
-              updateConfig(
-                "languages",
+              updateConfig("languages",
                 checked ? [...current, lang] : current.filter((l: string) => l !== lang)
               );
             }}
@@ -926,21 +847,16 @@ function CodingAssessmentConfig({
       </div>
 
       <Separator />
-
-      {/* QUESTION GENERATION — Inside the node config */}
       <SectionTitle>Questions</SectionTitle>
 
       {questions.length > 0 ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-emerald-600 font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" />
-              {questions.length} questions ready
+            <span className="text-sm text-emerald-600 font-medium">
+              ✅ {questions.length} questions ready
             </span>
             <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs h-7"
+              variant="ghost" size="sm" className="text-xs h-7"
               onClick={() => setPreviewOpen(!previewOpen)}
             >
               {previewOpen ? "Hide" : "Preview"}
@@ -948,85 +864,33 @@ function CodingAssessmentConfig({
           </div>
 
           {previewOpen && (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            <div className="space-y-2 max-h-[250px] overflow-y-auto">
               {questions.map((q: any, i: number) => (
-                <div key={i} className="bg-slate-50 rounded-lg p-3 text-xs">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge variant="outline" className="text-[10px]">
-                      Q{i + 1}
-                    </Badge>
-                    <Badge
-                      className={`text-[10px] ${
-                        q.difficulty === "easy" ? "bg-emerald-100 text-emerald-700" :
-                        q.difficulty === "hard" ? "bg-red-100 text-red-700" :
-                        "bg-amber-100 text-amber-700"
-                      }`}
-                    >
-                      {q.difficulty}
-                    </Badge>
-                    <span className="text-slate-400">{q.points} pts</span>
-                  </div>
-                  <p className="font-medium text-slate-700">{q.title}</p>
-                  <p className="text-slate-500 mt-1 line-clamp-2">{q.description}</p>
-                  {q.testCases && (
-                    <p className="text-slate-400 mt-1">
-                      {q.testCases.length} test cases
-                    </p>
-                  )}
+                <div key={i} className="bg-slate-50 rounded-lg p-2 text-xs">
+                  <p className="font-medium text-slate-700">Q{i + 1}: {q.title}</p>
+                  <p className="text-slate-400 mt-0.5">{q.difficulty} • {q.points} pts • {q.testCases?.length || 0} tests</p>
                 </div>
               ))}
             </div>
           )}
 
           <Button
-            variant="outline"
-            size="sm"
-            className="w-full text-xs"
-            onClick={generateQuestions}
-            disabled={generating}
+            variant="outline" size="sm" className="w-full text-xs"
+            onClick={generateQuestions} disabled={generating}
           >
-            {generating ? (
-              <Loader2 className="w-3 h-3 animate-spin mr-1" />
-            ) : (
-              <RefreshCw className="w-3 h-3 mr-1" />
-            )}
-            Regenerate Questions
+            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+            Regenerate
           </Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-xs text-amber-700">
-              ⚠️ No questions yet. Generate questions using AI based on the job description.
-            </p>
-          </div>
-
-          <Button
-            className="w-full bg-purple-600 hover:bg-purple-700"
-            size="sm"
-            onClick={generateQuestions}
-            disabled={generating}
-          >
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Generating from job description...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 mr-2" />
-                AI Generate Questions
-              </>
-            )}
-          </Button>
-        </div>
+        <Button
+          className="w-full bg-purple-600 hover:bg-purple-700" size="sm"
+          onClick={generateQuestions} disabled={generating}
+        >
+          {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+          AI Generate Questions
+        </Button>
       )}
-
-      <ToggleRow
-        label="Allow candidates to switch languages"
-        checked={config.allowLanguageSwitch !== false}
-        onChange={(v) => updateConfig("allowLanguageSwitch", v)}
-      />
     </div>
   );
 }
@@ -1040,7 +904,6 @@ function MCQConfig({
 }) {
   const [generating, setGenerating] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-
   const questions = config.questions || [];
 
   const generateQuestions = async () => {
@@ -1053,14 +916,12 @@ function MCQConfig({
           type: "mcq",
           difficulty: config.difficulty || "medium",
           questionCount: config.questionCount || 20,
-          skills: config.skills || [],
-          context: config.jobContext || "",
         }),
       });
       const data = await res.json();
       if (data.questions) {
         updateConfig("questions", data.questions);
-        toast.success(`Generated ${data.questions.length} MCQ questions!`);
+        toast.success(`Generated ${data.questions.length} MCQs!`);
       }
     } catch {
       toast.error("Failed to generate");
@@ -1070,28 +931,23 @@ function MCQConfig({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <SectionTitle>MCQ Assessment</SectionTitle>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Duration (minutes)</Label>
-        <div className="flex items-center gap-3">
-          <Slider
-            value={[config.duration || 45]}
-            onValueChange={([v]) => updateConfig("duration", v)}
-            min={10}
-            max={120}
-            step={5}
-            className="flex-1"
-          />
-          <span className="text-sm font-mono w-16 text-right">
-            {config.duration || 45} min
-          </span>
-        </div>
+        <Label className="text-sm">Duration (minutes)</Label>
+        <Input
+          type="number"
+          value={config.duration || 45}
+          onChange={(e) => updateConfig("duration", parseInt(e.target.value) || 15)}
+          min={10}
+          max={120}
+          className="h-9"
+        />
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Difficulty</Label>
+        <Label className="text-sm">Difficulty</Label>
         <Select
           value={config.difficulty || "medium"}
           onValueChange={(v) => updateConfig("difficulty", v)}
@@ -1106,82 +962,41 @@ function MCQConfig({
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Number of Questions</Label>
-        <div className="flex items-center gap-3">
-          <Slider
-            value={[config.questionCount || 20]}
-            onValueChange={([v]) => updateConfig("questionCount", v)}
-            min={5}
-            max={50}
-            step={5}
-            className="flex-1"
-          />
-          <span className="text-sm font-mono w-8 text-right font-semibold">
-            {config.questionCount || 20}
-          </span>
-        </div>
+        <Label className="text-sm">Number of Questions</Label>
+        <Input
+          type="number"
+          value={config.questionCount || 20}
+          onChange={(e) => updateConfig("questionCount", parseInt(e.target.value) || 5)}
+          min={5}
+          max={50}
+          className="h-9"
+        />
       </div>
 
       <Separator />
       <SectionTitle>Questions</SectionTitle>
 
       {questions.length > 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-emerald-600 font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" />
-              {questions.length} MCQs ready
-            </span>
-            <Button
-              variant="ghost" size="sm" className="text-xs h-7"
-              onClick={() => setPreviewOpen(!previewOpen)}
-            >
-              {previewOpen ? "Hide" : "Preview"}
-            </Button>
-          </div>
-
-          {previewOpen && (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {questions.map((q: any, i: number) => (
-                <div key={i} className="bg-slate-50 rounded-lg p-3 text-xs">
-                  <p className="font-medium text-slate-700 mb-1">Q{i + 1}: {q.title}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {q.options?.map((o: any) => (
-                      <Badge
-                        key={o.id}
-                        variant={o.id === q.correctAnswer ? "default" : "outline"}
-                        className="text-[10px]"
-                      >
-                        {o.id}: {o.text}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
+        <div className="space-y-2">
+          <span className="text-sm text-emerald-600 font-medium">
+            ✅ {questions.length} MCQs ready
+          </span>
           <Button
             variant="outline" size="sm" className="w-full text-xs"
             onClick={generateQuestions} disabled={generating}
           >
-            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
             Regenerate
           </Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-xs text-amber-700">⚠️ No questions yet. Generate using AI.</p>
-          </div>
-          <Button
-            className="w-full bg-purple-600 hover:bg-purple-700" size="sm"
-            onClick={generateQuestions} disabled={generating}
-          >
-            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            AI Generate MCQs
-          </Button>
-        </div>
+        <Button
+          className="w-full bg-purple-600 hover:bg-purple-700" size="sm"
+          onClick={generateQuestions} disabled={generating}
+        >
+          {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+          AI Generate MCQs
+        </Button>
       )}
     </div>
   );
@@ -1195,66 +1010,147 @@ function AIInterviewConfig({
   updateConfig: (k: string, v: any) => void;
 }) {
   return (
-    <div className="space-y-5">
-      <SectionTitle>AI Interview</SectionTitle>
+    <div className="space-y-4">
+      <SectionTitle>AI Interview Settings</SectionTitle>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Max questions</Label>
-        <div className="flex items-center gap-3">
-          <Slider
-            value={[config.maxQuestions || 10]}
-            onValueChange={([v]) => updateConfig("maxQuestions", v)}
-            min={3}
-            max={20}
-            step={1}
-            className="flex-1"
-          />
-          <span className="text-sm font-mono w-8 text-right font-semibold">
-            {config.maxQuestions || 10}
-          </span>
-        </div>
+        <Label className="text-sm">Interview Mode</Label>
+        <Select
+          value={config.interviewMode || "technical"}
+          onValueChange={(v) => updateConfig("interviewMode", v)}
+        >
+          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="technical">Technical</SelectItem>
+            <SelectItem value="behavioral">Behavioral</SelectItem>
+            <SelectItem value="mixed">Mixed</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm font-medium">
-          Duration estimate (minutes)
-        </Label>
-        <div className="flex items-center gap-3">
-          <Slider
-            value={[config.duration || 30]}
-            onValueChange={([v]) => updateConfig("duration", v)}
-            min={10}
-            max={60}
-            step={5}
-            className="flex-1"
-          />
-          <span className="text-sm font-mono w-16 text-right">
-            {config.duration || 30} min
-          </span>
-        </div>
+        <Label className="text-sm">Number of Questions</Label>
+        <Input
+          type="number"
+          value={config.maxQuestions || 10}
+          onChange={(e) => updateConfig("maxQuestions", parseInt(e.target.value) || 5)}
+          min={3}
+          max={25}
+          className="h-9"
+        />
       </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm">Duration (minutes)</Label>
+        <Input
+          type="number"
+          value={config.duration || 30}
+          onChange={(e) => updateConfig("duration", parseInt(e.target.value) || 15)}
+          min={5}
+          max={60}
+          className="h-9"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm">Difficulty</Label>
+        <Select
+          value={config.difficulty || "progressive"}
+          onValueChange={(v) => updateConfig("difficulty", v)}
+        >
+          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="easy">Easy</SelectItem>
+            <SelectItem value="progressive">Progressive (Easy → Hard)</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="hard">Hard</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Separator />
+      <SectionTitle>Options</SectionTitle>
 
       <ToggleRow
-        label="Adapt questions based on responses"
+        label="Adaptive follow-ups"
         checked={config.adaptive !== false}
         onChange={(v) => updateConfig("adaptive", v)}
       />
 
       <ToggleRow
-        label="Use resume context for questions"
+        label="Use resume context"
         checked={config.useResumeContext !== false}
         onChange={(v) => updateConfig("useResumeContext", v)}
       />
 
       <ToggleRow
-        label="Allow candidate to ask questions"
-        checked={config.allowCandidateQuestions || false}
-        onChange={(v) => updateConfig("allowCandidateQuestions", v)}
+        label="Provide hints when stuck"
+        checked={config.provideHints !== false}
+        onChange={(v) => updateConfig("provideHints", v)}
       />
+
+      {/* Simple summary */}
+      <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-700">
+        {config.maxQuestions || 10} questions •{" "}
+        {config.duration || 30} min •{" "}
+        {config.interviewMode || "technical"} •{" "}
+        {config.difficulty || "progressive"}
+      </div>
     </div>
   );
 }
 
+// Topic input helper component
+function TopicInput({
+  topics,
+  onChange,
+}: {
+  topics: string[];
+  onChange: (topics: string[]) => void;
+}) {
+  const [input, setInput] = React.useState("");
+
+  const addTopic = () => {
+    if (input.trim() && !topics.includes(input.trim())) {
+      onChange([...topics, input.trim()]);
+      setInput("");
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); addTopic(); }
+          }}
+          placeholder="e.g. System Design, React Hooks"
+          className="h-8 text-xs flex-1"
+        />
+        <Button variant="outline" size="sm" className="h-8 text-xs px-2" onClick={addTopic}>
+          +
+        </Button>
+      </div>
+      {topics.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {topics.map((topic) => (
+            <Badge key={topic} variant="secondary" className="text-[10px] pl-2 pr-0.5 py-0.5 gap-1">
+              {topic}
+              <button
+                onClick={() => onChange(topics.filter((t) => t !== topic))}
+                className="ml-0.5 hover:bg-slate-300 rounded-full p-0.5"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function F2FInterviewConfig({
   config,
   updateConfig,

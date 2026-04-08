@@ -11,7 +11,7 @@ import {
   Briefcase, MapPin, Building2, Loader2, ArrowLeft,
   FileSearch, Code, Bot, Video, Award, XCircle, Clock,
   Sparkles, ListChecks, MessageSquare, Users, Rocket,
-  CheckCircle, FileText,
+  CheckCircle, FileText, BookOpen,
 } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
@@ -388,6 +388,18 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
 )}
               </div>
             )}
+                            {["ai_technical_interview", "ai_behavioral_interview"].includes(stages[currentStageIndex]?.subtype) && (
+                  <Button
+                    size="sm"
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    onClick={() => {
+                      window.location.href = `/interview/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+                    }}
+                  >
+                    <Bot className="w-4 h-4 mr-2" />
+                    Start AI Interview →
+                  </Button>
+                )}
 
             {isHired && (
               <div className="mt-4 bg-emerald-50 rounded-lg p-3 flex items-start gap-2">
@@ -403,16 +415,17 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
               </div>
             )}
           </div>
-        ) : isRejected ? (
+                ) : isRejected ? (
           <div className="mt-4 bg-slate-50 rounded-lg p-4">
-            <p className="text-sm text-slate-600 mb-2">
-              Thank you for your interest. We&apos;ve decided to move forward
-              with other candidates.
+            <p className="text-sm text-slate-600 mb-3">
+              Thank you for your interest. We&apos;ve decided to move forward with other candidates.
             </p>
-            <p className="text-xs text-slate-400">
-              💡 Check your email for personalized feedback on how to strengthen
-              future applications.
-            </p>
+            <Link href={`/feedback/${app.id}`}>
+              <Button size="sm" variant="outline" className="text-indigo-600 border-indigo-200 hover:bg-indigo-50">
+                <BookOpen className="w-4 h-4 mr-2" />
+                View Personalized Feedback →
+              </Button>
+            </Link>
           </div>
         ) : (
           <div className="mt-3">

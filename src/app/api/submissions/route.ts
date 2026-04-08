@@ -434,6 +434,24 @@ export async function POST(req: NextRequest) {
           timeTaken,
         ]
       );
+            // ==========================================
+      // TRIGGER PIPELINE EXECUTION
+      // ==========================================
+      try {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/pipeline/execute`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              applicationId: submission.application_id,
+              trigger: "assessment_completed",
+            }),
+          }
+        );
+      } catch (err) {
+        console.error("Pipeline execution trigger failed (non-critical):", err);
+      }
 
       return NextResponse.json({
         success: true,
