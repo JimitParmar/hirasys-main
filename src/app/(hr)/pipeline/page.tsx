@@ -169,7 +169,7 @@ function PipelinePageInner() {
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
-          <div className="w-7 h-7 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded-lg flex items-center justify-center">
+          <div className="w-7 h-7 bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] rounded-lg flex items-center justify-center">
             <GitBranch className="w-3.5 h-3.5 text-white" />
           </div>
           <div>

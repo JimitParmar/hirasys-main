@@ -18,7 +18,7 @@ export default function LandingPage() {
       <nav className="border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] rounded-lg flex items-center justify-center">
               <Briefcase className="w-4 h-4 text-white" />
             </div>
             <span className="font-bold text-xl text-slate-800">Hirasys</span>
@@ -43,7 +43,7 @@ export default function LandingPage() {
 
           <h1 className="text-5xl sm:text-6xl font-bold text-slate-900 leading-tight max-w-4xl mx-auto">
             Build Your Perfect
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0245EF] to-purple-600"> Hiring Pipeline</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0245EF] to-[#5B3FE6]"> Hiring Pipeline</span>
           </h1>
 
           <p className="text-xl text-slate-500 mt-6 max-w-2xl mx-auto leading-relaxed">
@@ -215,7 +215,7 @@ export default function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-20 bg-gradient-to-r from-[#0245EF] to-purple-700 text-white">
+      <section className="py-20 bg-gradient-to-r from-[#0245EF] to-[#4B32C4] text-white">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold">Ready to transform your hiring?</h2>
           <p className="text-lg text-[#A3BDFF] mt-3">
@@ -235,7 +235,7 @@ export default function LandingPage() {
       <footer className="py-12 border-t border-slate-200">
         <div className="max-w-6xl mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-6 h-6 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded flex items-center justify-center">
+            <div className="w-6 h-6 bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] rounded flex items-center justify-center">
               <Briefcase className="w-3 h-3 text-white" />
             </div>
             <span className="font-bold text-slate-800">Hirasys</span>

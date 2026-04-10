@@ -99,7 +99,7 @@ export default function JobsPage() {
       
 
       {/* Hero + Search */}
-      <div className="bg-gradient-to-br from-[#0245EF] via-[#02298F] to-purple-800 text-white">
+      <div className="bg-gradient-to-br from-[#0245EF] via-[#02298F] to-[#3B26A3] text-white">
         <div className="max-w-6xl mx-auto px-4 py-16 text-center">
           <h1 className="text-4xl font-bold mb-3">
             Find Your Next Opportunity

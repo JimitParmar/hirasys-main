@@ -74,7 +74,7 @@ export default function FeedbackPage() {
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* Greeting */}
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-[#0245EF] to-purple-600 text-white">
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] text-white">
           <CardContent className="p-6">
             <Heart className="w-8 h-8 mb-3 opacity-80" />
             <p className="text-lg font-medium">{feedback.greeting}</p>

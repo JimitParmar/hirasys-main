@@ -49,7 +49,7 @@ export default function TestPage() {
           </CardContent>
         </Card>
 
-        <div className="bg-gradient-to-r from-[#0245EF] to-purple-600 rounded-2xl p-8 text-white text-center">
+        <div className="bg-gradient-to-r from-[#0245EF] to-[#5B3FE6] rounded-2xl p-8 text-white text-center">
           <h2 className="text-2xl font-bold">Gradient Box</h2>
           <p className="text-[#D1DEFF] mt-2">If this has a purple gradient, CSS is working perfectly.</p>
         </div>

@@ -148,7 +148,7 @@ export default function JobDetailPage() {
             </Button>
           </Link>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded flex items-center justify-center">
+            <div className="w-6 h-6 bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] rounded flex items-center justify-center">
               <Briefcase className="w-3 h-3 text-white" />
             </div>
             <span className="font-semibold text-slate-800 text-sm">Hirasys</span>

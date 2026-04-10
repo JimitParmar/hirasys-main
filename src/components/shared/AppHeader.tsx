@@ -34,7 +34,7 @@ export function AppHeader() {
           {/* Logo + Nav */}
           <div className="flex items-center gap-6">
             <Link href={isHR ? "/hr/dashboard" : "/jobs"} className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
+              <div className="w-8 h-8 bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] rounded-lg flex items-center justify-center shadow-sm">
                 <Briefcase className="w-4 h-4 text-white" />
               </div>
               <span className="font-bold text-lg text-slate-800 hidden sm:block">Hirasys</span>

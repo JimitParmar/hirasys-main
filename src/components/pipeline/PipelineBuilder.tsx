@@ -30,7 +30,8 @@ import { ExitNode } from "./nodes/ExitNode";
 import { NodePalette } from "./NodePalette";
 import { NodeConfigPanel } from "./panels/NodeConfigPanel";
 import { CostEstimatorPanel } from "./panels/CostEstimatorPanel";
-import { Save, DollarSign, LayoutTemplate } from "lucide-react";
+import { AIGenerateDialog } from "./AIGenerateDialog";
+import { Save, DollarSign, LayoutTemplate, Wand2 } from "lucide-react";
 import { estimatePipelineCost } from "@/modules/pipeline/cost-estimator";
 import toast from "react-hot-toast";
 
@@ -43,13 +44,11 @@ const nodeTypes: NodeTypes = {
   exit: ExitNode,
 };
 
-// Module-level: stores the forceUpdate function
+// Module-level: stores the forceUpdate function and nodes getter
 let _forceUpdate: (() => void) | null = null;
-let _getNodes: (() => Node[]) | null = null;
 let _editingNodeId: string | null = null;
 
 export function openNodeConfig(nodeId: string) {
-  console.log("openNodeConfig:", nodeId);
   _editingNodeId = nodeId;
   if (_forceUpdate) _forceUpdate();
 }
@@ -73,21 +72,22 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges || []);
   const [showPalette, setShowPalette] = useState(false);
   const [showCostPanel, setShowCostPanel] = useState(false);
+  const [showAIGenerate, setShowAIGenerate] = useState(false);
   const [palettePosition, setPalettePosition] = useState({ x: 0, y: 0 });
   const [estimatedApplicants, setEstimatedApplicants] = useState(500);
   const [estimatedHires, setEstimatedHires] = useState(2);
 
-  // Force re-render trick
+  // Force re-render trick for node config panel
   const [, forceRender] = useReducer((x: number) => x + 1, 0);
   _forceUpdate = forceRender;
 
-  // Track if edit was just clicked to prevent pane click from clearing
+  // Track if edit button was just clicked
   const justClickedEdit = useRef(false);
 
   // Find the editing node from current nodes
   const editingNode = _editingNodeId ? nodes.find((n) => n.id === _editingNodeId) : null;
 
-  // Connections
+  // Handle edge connections
   const onConnect = useCallback(
     (connection: Connection) => {
       const sourceNode = nodes.find((n) => n.id === connection.source);
@@ -112,6 +112,7 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
     [nodes, setEdges]
   );
 
+  // Right-click → palette
   const onPaneContextMenu = useCallback(
     (event: MouseEvent | React.MouseEvent) => {
       event.preventDefault();
@@ -122,9 +123,13 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
     []
   );
 
+  // Add node from palette
   const addNode = useCallback(
     (catalogItem: (typeof NODE_CATALOG)[0]) => {
-      const position = screenToFlowPosition({ x: palettePosition.x, y: palettePosition.y });
+      const position = screenToFlowPosition({
+        x: palettePosition.x,
+        y: palettePosition.y,
+      });
       const nodeId = `${catalogItem.subtype}_${Date.now()}`;
       setNodes((nds) => [
         ...nds,
@@ -152,8 +157,8 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
     [screenToFlowPosition, palettePosition, setNodes]
   );
 
+  // Pane click → close panels (with debounce protection)
   const onPaneClick = useCallback(() => {
-    // Don't close if edit button was just clicked
     if (justClickedEdit.current) {
       justClickedEdit.current = false;
       return;
@@ -162,6 +167,7 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
     setShowPalette(false);
   }, []);
 
+  // Update node from config panel
   const onNodeConfigChange = useCallback(
     (nodeId: string, newData: Partial<PipelineNodeData>) => {
       setNodes((nds) =>
@@ -173,6 +179,7 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
     [setNodes]
   );
 
+  // Delete node
   const deleteNode = useCallback(
     (nodeId: string) => {
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
@@ -183,14 +190,39 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
     [setNodes, setEdges]
   );
 
+  // Save
   const handleSave = useCallback(() => {
     onSave?.(nodes, edges);
-    toast.success("Pipeline saved!");
   }, [nodes, edges, onSave]);
 
+  // AI Generate — replace entire canvas
+  const handleAIGenerated = useCallback(
+    (newNodes: any[], newEdges: any[], name: string) => {
+      setNodes(newNodes);
+      setEdges(
+        newEdges.map((e: any) => ({
+          ...e,
+          animated: true,
+          style: { strokeWidth: 2, stroke: e.sourceHandle === "reject" ? "#EF4444" : "#94A3B8" },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: e.sourceHandle === "reject" ? "#EF4444" : "#94A3B8",
+          },
+        }))
+      );
+      toast.success(`"${name}" loaded with ${newNodes.length} nodes!`);
+    },
+    [setNodes, setEdges]
+  );
+
+  // Cost estimation
   const getCost = () => {
     if (nodes.length === 0)
-      return { totalCost: 0, perHireCost: 0, estimatedHires, stageBreakdown: [], funnelStages: [], savingsVsNoFilters: 0, savingsPercentage: 0, monthlyEstimate: 0 };
+      return {
+        totalCost: 0, perHireCost: 0, estimatedHires,
+        stageBreakdown: [], funnelStages: [],
+        savingsVsNoFilters: 0, savingsPercentage: 0, monthlyEstimate: 0,
+      };
     try {
       return estimatePipelineCost(
         nodes.map((n) => n.data as PipelineNodeData),
@@ -198,25 +230,17 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
         estimatedApplicants
       );
     } catch {
-      return { totalCost: 0, perHireCost: 0, estimatedHires, stageBreakdown: [], funnelStages: [], savingsVsNoFilters: 0, savingsPercentage: 0, monthlyEstimate: 0 };
+      return {
+        totalCost: 0, perHireCost: 0, estimatedHires,
+        stageBreakdown: [], funnelStages: [],
+        savingsVsNoFilters: 0, savingsPercentage: 0, monthlyEstimate: 0,
+      };
     }
   };
   const costEstimate = getCost();
 
-  // Intercept edit clicks to set flag
-  const handleEditClick = useCallback(() => {
-    justClickedEdit.current = true;
-  }, []);
-
   return (
-    <div
-      className="w-full h-full relative"
-      ref={reactFlowWrapper}
-      onClickCapture={() => {
-        // This fires before React Flow's pane click
-        // If an edit button set justClickedEdit, we keep it
-      }}
-    >
+    <div className="w-full h-full relative" ref={reactFlowWrapper}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -247,12 +271,27 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
           maskColor="rgba(0,0,0,0.08)"
         />
 
+        {/* Toolbar */}
         <Panel position="top-left" className="flex gap-2 items-center">
-          <Button variant="default" size="sm" onClick={handleSave} className="bg-[#0245EF] hover:bg-[#0237BF]">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleSave}
+            className="bg-[#0245EF] hover:bg-[#0237BF]"
+          >
             <Save className="w-4 h-4 mr-2" /> Save
           </Button>
           <Button
-            variant={showCostPanel ? "default" : "outline"} size="sm"
+            variant="default"
+            size="sm"
+            onClick={() => setShowAIGenerate(true)}
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            <Wand2 className="w-4 h-4 mr-2" /> AI Generate
+          </Button>
+          <Button
+            variant={showCostPanel ? "default" : "outline"}
+            size="sm"
             onClick={() => setShowCostPanel(!showCostPanel)}
             className={showCostPanel ? "bg-emerald-600 hover:bg-emerald-700" : ""}
           >
@@ -264,6 +303,7 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
           </Button>
         </Panel>
 
+        {/* Cost Panel */}
         {showCostPanel && (
           <Panel position="top-right">
             <div className="w-80">
@@ -279,9 +319,12 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
           </Panel>
         )}
 
+        {/* Bottom hint */}
         <Panel position="bottom-center">
           <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm border text-xs text-slate-500 flex items-center gap-3">
-            <span><kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono">Right Click</kbd> Add</span>
+            <span>
+              <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono">Right Click</kbd> Add
+            </span>
             <span className="text-slate-300">|</span>
             <span>Hover → ✏️ Configure</span>
             <span className="text-slate-300">|</span>
@@ -290,6 +333,7 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
         </Panel>
       </ReactFlow>
 
+      {/* Node Palette */}
       {showPalette && (
         <NodePalette
           position={palettePosition}
@@ -298,8 +342,8 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
         />
       )}
 
-      {/* CONFIG PANEL — rendered based on module-level _editingNodeId */}
-      {editingNode && (
+      {/* Config Panel */}
+      {editingNode && editingNode.data && (
         <div
           style={{
             position: "fixed",
@@ -318,6 +362,13 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
           />
         </div>
       )}
+
+      {/* AI Generate Dialog */}
+      <AIGenerateDialog
+        open={showAIGenerate}
+        onOpenChange={setShowAIGenerate}
+        onGenerated={handleAIGenerated}
+      />
     </div>
   );
 }

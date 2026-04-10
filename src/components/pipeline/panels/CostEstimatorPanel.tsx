@@ -42,7 +42,7 @@ export function CostEstimatorPanel({
   return (
     <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden w-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#0245EF] to-purple-600 text-white">
+      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#0245EF] to-[#5B3FE6] text-white">
         <div>
           <h3 className="font-semibold text-sm">💰 Cost Estimator</h3>
           <p className="text-xs opacity-80">Real-time pipeline cost preview</p>

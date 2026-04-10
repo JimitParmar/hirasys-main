@@ -73,7 +73,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded-2xl mb-4 shadow-lg">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] rounded-2xl mb-4 shadow-lg">
             <Briefcase className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-slate-800">Hirasys</h1>
