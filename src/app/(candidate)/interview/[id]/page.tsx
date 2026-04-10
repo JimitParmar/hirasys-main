@@ -161,7 +161,7 @@ export default function InterviewPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-4" />
+          <Loader2 className="w-8 h-8 animate-spin text-[#0245EF] mx-auto mb-4" />
           <p className="text-slate-500">Preparing your interview...</p>
         </div>
       </div>
@@ -178,7 +178,7 @@ export default function InterviewPage() {
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
-          <Bot className="w-6 h-6 text-indigo-500" />
+          <Bot className="w-6 h-6 text-[#0245EF]" />
           <div>
             <h1 className="font-semibold text-sm text-slate-800">
               AI {interviewType.includes("behavioral") ? "Behavioral" : "Technical"} Interview
@@ -193,7 +193,7 @@ export default function InterviewPage() {
           <div className="hidden sm:flex items-center gap-2">
             <div className="w-32 h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                className="h-full bg-[#0245EF] rounded-full transition-all duration-500"
                 style={{ width: `${(questionsAsked / maxQuestions) * 100}%` }}
               />
             </div>
@@ -220,10 +220,10 @@ export default function InterviewPage() {
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
           {/* Welcome card */}
           {messages.length <= 1 && !isComplete && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
-              <Bot className="w-10 h-10 text-indigo-500 mx-auto mb-2" />
-              <h2 className="font-semibold text-indigo-800">AI Interview</h2>
-              <p className="text-sm text-indigo-600 mt-1">
+            <div className="bg-[#EBF0FF] border border-[#D1DEFF] rounded-xl p-4 text-center">
+              <Bot className="w-10 h-10 text-[#0245EF] mx-auto mb-2" />
+              <h2 className="font-semibold text-[#011B5F]">AI Interview</h2>
+              <p className="text-sm text-[#0245EF] mt-1">
                 Answer each question thoughtfully. Take your time — there&apos;s no rush.
                 Press Enter to send, Shift+Enter for new line.
               </p>
@@ -238,11 +238,11 @@ export default function InterviewPage() {
             >
               <div
                 className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                  msg.role === "assistant" ? "bg-indigo-100" : "bg-emerald-100"
+                  msg.role === "assistant" ? "bg-[#D1DEFF]" : "bg-emerald-100"
                 }`}
               >
                 {msg.role === "assistant" ? (
-                  <Bot className="w-5 h-5 text-indigo-600" />
+                  <Bot className="w-5 h-5 text-[#0245EF]" />
                 ) : (
                   <User className="w-5 h-5 text-emerald-600" />
                 )}
@@ -253,7 +253,7 @@ export default function InterviewPage() {
                   className={`inline-block rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                     msg.role === "assistant"
                       ? "bg-white border border-slate-200 text-slate-700 rounded-tl-md"
-                      : "bg-indigo-600 text-white rounded-tr-md"
+                      : "bg-[#0245EF] text-white rounded-tr-md"
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -269,8 +269,8 @@ export default function InterviewPage() {
           {/* Typing indicator */}
           {sending && (
             <div className="flex gap-3">
-              <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-indigo-600" />
+              <div className="w-9 h-9 rounded-full bg-[#D1DEFF] flex items-center justify-center">
+                <Bot className="w-5 h-5 text-[#0245EF]" />
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-md px-4 py-3">
                 <div className="flex gap-1">
@@ -284,7 +284,7 @@ export default function InterviewPage() {
 
           {/* Interview Complete — Single card, no duplicates */}
           {isComplete && (
-            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-6 text-center space-y-4">
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-[#A3BDFF] rounded-xl p-6 text-center space-y-4">
               <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto" />
               <div>
                 <h3 className="font-bold text-lg text-slate-800">
@@ -299,17 +299,17 @@ export default function InterviewPage() {
                 </p>
               </div>
 
-              <div className="bg-white rounded-lg p-4 border border-indigo-100 max-w-sm mx-auto">
+              <div className="bg-white rounded-lg p-4 border border-[#D1DEFF] max-w-sm mx-auto">
                 <div className="flex items-center justify-center gap-6 text-sm">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-indigo-600">
+                    <p className="text-2xl font-bold text-[#0245EF]">
                       {messages.filter((m) => m.role === "user").length}
                     </p>
                     <p className="text-xs text-slate-400">Questions Answered</p>
                   </div>
                   <div className="w-px h-10 bg-slate-200" />
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-indigo-600">
+                    <p className="text-2xl font-bold text-[#0245EF]">
                       {Math.round((Date.now() - startTime) / 60000)}
                     </p>
                     <p className="text-xs text-slate-400">Minutes</p>
@@ -319,7 +319,7 @@ export default function InterviewPage() {
 
               <Button
                 onClick={() => router.push("/applications")}
-                className="bg-indigo-600 hover:bg-indigo-700"
+                className="bg-[#0245EF] hover:bg-[#0237BF]"
               >
                 Back to Applications
               </Button>
@@ -348,7 +348,7 @@ export default function InterviewPage() {
             <Button
               onClick={sendMessage}
               disabled={sending || !inputMessage.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700 h-auto px-4"
+              className="bg-[#0245EF] hover:bg-[#0237BF] h-auto px-4"
             >
               {sending ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

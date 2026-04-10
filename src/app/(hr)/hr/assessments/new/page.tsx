@@ -120,7 +120,7 @@ export default function NewAssessmentPage() {
           <Button
             onClick={handleSave}
             disabled={saving || questions.length === 0}
-            className="bg-indigo-600 hover:bg-indigo-700"
+            className="bg-[#0245EF] hover:bg-[#0237BF]"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
             Save Assessment

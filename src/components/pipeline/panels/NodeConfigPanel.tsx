@@ -6,6 +6,7 @@ import { PipelineNodeData } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import {
   Select,
@@ -77,10 +78,10 @@ export function NodeConfigPanel({
     return null;
   }
 
-  return (
-    <div className="h-full w-[380px] bg-white border-l border-slate-200 shadow-2xl flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+    return (
+    <div className="h-full w-[380px] bg-white border-l border-slate-200 shadow-2xl flex flex-col" style={{ zIndex: 9999 }}>
+      {/* Header — Fixed */}
+      <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50 shrink-0">
         <div className="flex items-center gap-3">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -92,9 +93,7 @@ export function NodeConfigPanel({
             />
           </div>
           <div>
-            <h3 className="font-semibold text-sm text-slate-700">
-              {data.label}
-            </h3>
+            <h3 className="font-semibold text-sm text-slate-700">{data.label}</h3>
             <p className="text-[11px] text-slate-400">
               {data.type} • {data.subtype?.replace(/_/g, " ")}
             </p>
@@ -105,8 +104,8 @@ export function NodeConfigPanel({
         </Button>
       </div>
 
-      {/* Content */}
-      <ScrollArea className="flex-1">
+      {/* Content — Scrollable */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         <div className="p-4 space-y-6">
           {/* Common: Label */}
           <div className="space-y-3">
@@ -114,9 +113,7 @@ export function NodeConfigPanel({
               Basic Settings
             </Label>
             <div className="space-y-2">
-              <Label htmlFor="nodeLabel" className="text-sm">
-                Node Label
-              </Label>
+              <Label htmlFor="nodeLabel" className="text-sm">Node Label</Label>
               <Input
                 id="nodeLabel"
                 value={localLabel}
@@ -125,24 +122,15 @@ export function NodeConfigPanel({
               />
             </div>
 
-            {/* Cost indicator */}
             {data.costPerUnit > 0 ? (
               <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
-                <span className="text-sm text-slate-600">
-                  Cost per candidate
-                </span>
-                <Badge variant="outline" className="font-mono">
-                  ${data.costPerUnit}
-                </Badge>
+                <span className="text-sm text-slate-600">Cost per candidate</span>
+                <Badge variant="outline" className="font-mono">${data.costPerUnit}</Badge>
               </div>
             ) : data.type === "filter" || data.type === "logic" ? (
               <div className="flex items-center justify-between bg-green-50 rounded-lg p-3">
-                <span className="text-sm text-green-700 font-medium">
-                  Cost
-                </span>
-                <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-                  FREE ✨
-                </Badge>
+                <span className="text-sm text-green-700 font-medium">Cost</span>
+                <Badge className="bg-green-100 text-green-700">FREE ✨</Badge>
               </div>
             ) : null}
           </div>
@@ -152,22 +140,14 @@ export function NodeConfigPanel({
           {/* Type-specific config */}
           {renderNodeConfig(data, localConfig, updateConfig, updateNestedConfig)}
         </div>
-      </ScrollArea>
+      </div>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-slate-100 flex justify-between bg-slate-50">
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={() => onDelete(node.id)}
-          className="h-9"
-        >
-          <Trash2 className="w-4 h-4 mr-2" />
-          Delete
+      {/* Footer — Fixed */}
+      <div className="p-4 border-t border-slate-100 flex justify-between bg-slate-50 shrink-0">
+        <Button variant="destructive" size="sm" onClick={() => onDelete(node.id)} className="h-9">
+          <Trash2 className="w-4 h-4 mr-2" /> Delete
         </Button>
-        <Button size="sm" onClick={onClose} className="h-9">
-          Done
-        </Button>
+        <Button size="sm" onClick={onClose} className="h-9">Done</Button>
       </div>
     </div>
   );
@@ -719,28 +699,26 @@ function ResumeScreenConfig({
   updateConfig: (k: string, v: any) => void;
 }) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <SectionTitle>AI Resume Screening</SectionTitle>
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Scoring criteria</Label>
+
+      <div className="space-y-1.5">
         {[
-          { key: "skills_match", label: "Skills Match" },
-          { key: "experience", label: "Relevant Experience" },
-          { key: "education", label: "Education" },
-          { key: "project_relevance", label: "Project Relevance" },
-          { key: "culture_keywords", label: "Culture Keywords" },
-        ].map(({ key, label }) => (
+          { id: "skills_match", label: "Skills Match", desc: "Match candidate skills against job requirements" },
+          { id: "experience", label: "Experience", desc: "Evaluate years and relevance of experience" },
+          { id: "education", label: "Education", desc: "Check educational background" },
+          { id: "project_relevance", label: "Project Relevance", desc: "Analyze past project similarity" },
+          { id: "culture_keywords", label: "Culture Keywords", desc: "Look for culture-fit indicators" },
+        ].map(({ id, label, desc }) => (
           <ToggleRow
-            key={key}
+            key={id}
             label={label}
-            checked={(config.criteria || []).includes(key)}
+            description={desc}
+            checked={(config.criteria || []).includes(id)}
             onChange={(checked) => {
               const current = config.criteria || [];
-              updateConfig(
-                "criteria",
-                checked
-                  ? [...current, key]
-                  : current.filter((c: string) => c !== key)
+              updateConfig("criteria",
+                checked ? [...current, id] : current.filter((c: string) => c !== id)
               );
             }}
           />
@@ -764,6 +742,33 @@ function CodingAssessmentConfig({
   const generateQuestions = async () => {
     setGenerating(true);
     try {
+      // First fetch the linked job to get context
+      let jobContext = null;
+      try {
+        const pipelineRes = await fetch("/api/pipeline");
+        const pipelineData = await pipelineRes.json();
+        const pipelines = pipelineData.pipelines || [];
+
+        // Find a pipeline with a linked job
+        for (const pipeline of pipelines) {
+          if (pipeline.linked_job_id) {
+            const jobRes = await fetch(`/api/jobs/${pipeline.linked_job_id}`);
+            const jobData = await jobRes.json();
+            if (jobData.job) {
+              jobContext = {
+                title: jobData.job.title,
+                description: jobData.job.description,
+                skills: jobData.job.skills || [],
+                requirements: jobData.job.requirements || [],
+              };
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.log("Could not fetch job context:", err);
+      }
+
       const res = await fetch("/api/assessments/generate-for-node", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -772,12 +777,13 @@ function CodingAssessmentConfig({
           difficulty: config.difficulty || "medium",
           questionCount: config.questionCount || 3,
           languages: config.languages || ["javascript", "python"],
+          jobContext,
         }),
       });
       const data = await res.json();
       if (data.questions) {
         updateConfig("questions", data.questions);
-        toast.success(`Generated ${data.questions.length} questions!`);
+        toast.success(`Generated ${data.questions.length} questions based on job description!`);
       }
     } catch {
       toast.error("Failed to generate");
@@ -792,22 +798,14 @@ function CodingAssessmentConfig({
 
       <div className="space-y-2">
         <Label className="text-sm">Duration (minutes)</Label>
-        <Input
-          type="number"
-          value={config.duration || 90}
+        <Input type="number" value={config.duration || 90}
           onChange={(e) => updateConfig("duration", parseInt(e.target.value) || 30)}
-          min={15}
-          max={180}
-          className="h-9"
-        />
+          min={15} max={180} className="h-9" />
       </div>
 
       <div className="space-y-2">
         <Label className="text-sm">Difficulty</Label>
-        <Select
-          value={config.difficulty || "medium"}
-          onValueChange={(v) => updateConfig("difficulty", v)}
-        >
+        <Select value={config.difficulty || "medium"} onValueChange={(v) => updateConfig("difficulty", v)}>
           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="easy">Easy</SelectItem>
@@ -819,27 +817,33 @@ function CodingAssessmentConfig({
 
       <div className="space-y-2">
         <Label className="text-sm">Number of Questions</Label>
-        <Input
-          type="number"
-          value={config.questionCount || 3}
+        <Input type="number" value={config.questionCount || 3}
           onChange={(e) => updateConfig("questionCount", parseInt(e.target.value) || 1)}
-          min={1}
-          max={10}
-          className="h-9"
-        />
+          min={1} max={10} className="h-9" />
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-sm">Languages</Label>
-        {["javascript", "python", "typescript", "java", "cpp"].map((lang) => (
+      <Separator />
+      <SectionTitle>Languages</SectionTitle>
+
+      <div className="space-y-1.5">
+        {[
+          { id: "javascript", label: "JavaScript", desc: "Node.js runtime" },
+          { id: "python", label: "Python", desc: "Python 3.x runtime" },
+          { id: "typescript", label: "TypeScript", desc: "Compiled to JavaScript" },
+          { id: "sql", label: "SQL / MySQL", desc: "Database queries" },
+          { id: "postgresql", label: "PostgreSQL", desc: "Advanced SQL" },
+          { id: "java", label: "Java", desc: "Requires Docker" },
+          { id: "cpp", label: "C++", desc: "Requires Docker" },
+        ].map((lang) => (
           <ToggleRow
-            key={lang}
-            label={lang.charAt(0).toUpperCase() + lang.slice(1)}
-            checked={(config.languages || []).includes(lang)}
+            key={lang.id}
+            label={lang.label}
+            description={lang.desc}
+            checked={(config.languages || []).includes(lang.id)}
             onChange={(checked) => {
               const current = config.languages || [];
               updateConfig("languages",
-                checked ? [...current, lang] : current.filter((l: string) => l !== lang)
+                checked ? [...current, lang.id] : current.filter((l: string) => l !== lang.id)
               );
             }}
           />
@@ -852,44 +856,35 @@ function CodingAssessmentConfig({
       {questions.length > 0 ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-emerald-600 font-medium">
-              ✅ {questions.length} questions ready
-            </span>
-            <Button
-              variant="ghost" size="sm" className="text-xs h-7"
-              onClick={() => setPreviewOpen(!previewOpen)}
-            >
+            <span className="text-sm text-emerald-600 font-medium">✅ {questions.length} questions ready</span>
+            <button onClick={() => setPreviewOpen(!previewOpen)} className="text-xs text-[#0245EF] hover:underline">
               {previewOpen ? "Hide" : "Preview"}
-            </Button>
+            </button>
           </div>
-
           {previewOpen && (
             <div className="space-y-2 max-h-[250px] overflow-y-auto">
               {questions.map((q: any, i: number) => (
-                <div key={i} className="bg-slate-50 rounded-lg p-2 text-xs">
+                <div key={i} className="bg-slate-50 rounded-lg p-2 text-xs border border-slate-100">
                   <p className="font-medium text-slate-700">Q{i + 1}: {q.title}</p>
                   <p className="text-slate-400 mt-0.5">{q.difficulty} • {q.points} pts • {q.testCases?.length || 0} tests</p>
                 </div>
               ))}
             </div>
           )}
-
-          <Button
-            variant="outline" size="sm" className="w-full text-xs"
-            onClick={generateQuestions} disabled={generating}
-          >
-            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-            Regenerate
+          <Button variant="outline" size="sm" className="w-full text-xs" onClick={generateQuestions} disabled={generating}>
+            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null} Regenerate
           </Button>
         </div>
       ) : (
-        <Button
-          className="w-full bg-purple-600 hover:bg-purple-700" size="sm"
-          onClick={generateQuestions} disabled={generating}
-        >
-          {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-          AI Generate Questions
-        </Button>
+        <div className="space-y-2">
+          <Button className="w-full bg-purple-600 hover:bg-purple-700" size="sm" onClick={generateQuestions} disabled={generating}>
+            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+            AI Generate Questions
+          </Button>
+          <p className="text-[10px] text-slate-400 text-center">
+            Questions will be based on the linked job description
+          </p>
+        </div>
       )}
     </div>
   );
@@ -909,6 +904,27 @@ function MCQConfig({
   const generateQuestions = async () => {
     setGenerating(true);
     try {
+      let jobContext = null;
+      try {
+        const pipelineRes = await fetch("/api/pipeline");
+        const pipelineData = await pipelineRes.json();
+        for (const pipeline of pipelineData.pipelines || []) {
+          if (pipeline.linked_job_id) {
+            const jobRes = await fetch(`/api/jobs/${pipeline.linked_job_id}`);
+            const jobData = await jobRes.json();
+            if (jobData.job) {
+              jobContext = {
+                title: jobData.job.title,
+                description: jobData.job.description,
+                skills: jobData.job.skills || [],
+                requirements: jobData.job.requirements || [],
+              };
+              break;
+            }
+          }
+        }
+      } catch {}
+
       const res = await fetch("/api/assessments/generate-for-node", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -916,12 +932,13 @@ function MCQConfig({
           type: "mcq",
           difficulty: config.difficulty || "medium",
           questionCount: config.questionCount || 20,
+          jobContext,
         }),
       });
       const data = await res.json();
       if (data.questions) {
         updateConfig("questions", data.questions);
-        toast.success(`Generated ${data.questions.length} MCQs!`);
+        toast.success(`Generated ${data.questions.length} MCQs based on job description!`);
       }
     } catch {
       toast.error("Failed to generate");
@@ -936,22 +953,14 @@ function MCQConfig({
 
       <div className="space-y-2">
         <Label className="text-sm">Duration (minutes)</Label>
-        <Input
-          type="number"
-          value={config.duration || 45}
+        <Input type="number" value={config.duration || 45}
           onChange={(e) => updateConfig("duration", parseInt(e.target.value) || 15)}
-          min={10}
-          max={120}
-          className="h-9"
-        />
+          min={10} max={120} className="h-9" />
       </div>
 
       <div className="space-y-2">
         <Label className="text-sm">Difficulty</Label>
-        <Select
-          value={config.difficulty || "medium"}
-          onValueChange={(v) => updateConfig("difficulty", v)}
-        >
+        <Select value={config.difficulty || "medium"} onValueChange={(v) => updateConfig("difficulty", v)}>
           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="easy">Easy</SelectItem>
@@ -963,14 +972,9 @@ function MCQConfig({
 
       <div className="space-y-2">
         <Label className="text-sm">Number of Questions</Label>
-        <Input
-          type="number"
-          value={config.questionCount || 20}
+        <Input type="number" value={config.questionCount || 20}
           onChange={(e) => updateConfig("questionCount", parseInt(e.target.value) || 5)}
-          min={5}
-          max={50}
-          className="h-9"
-        />
+          min={5} max={50} className="h-9" />
       </div>
 
       <Separator />
@@ -978,25 +982,21 @@ function MCQConfig({
 
       {questions.length > 0 ? (
         <div className="space-y-2">
-          <span className="text-sm text-emerald-600 font-medium">
-            ✅ {questions.length} MCQs ready
-          </span>
-          <Button
-            variant="outline" size="sm" className="w-full text-xs"
-            onClick={generateQuestions} disabled={generating}
-          >
-            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-            Regenerate
+          <span className="text-sm text-emerald-600 font-medium">✅ {questions.length} MCQs ready</span>
+          <Button variant="outline" size="sm" className="w-full text-xs" onClick={generateQuestions} disabled={generating}>
+            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null} Regenerate
           </Button>
         </div>
       ) : (
-        <Button
-          className="w-full bg-purple-600 hover:bg-purple-700" size="sm"
-          onClick={generateQuestions} disabled={generating}
-        >
-          {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-          AI Generate MCQs
-        </Button>
+        <div className="space-y-2">
+          <Button className="w-full bg-purple-600 hover:bg-purple-700" size="sm" onClick={generateQuestions} disabled={generating}>
+            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+            AI Generate MCQs
+          </Button>
+          <p className="text-[10px] text-slate-400 text-center">
+            Questions based on job description and required skills
+          </p>
+        </div>
       )}
     </div>
   );
@@ -1011,14 +1011,11 @@ function AIInterviewConfig({
 }) {
   return (
     <div className="space-y-4">
-      <SectionTitle>AI Interview Settings</SectionTitle>
+      <SectionTitle>AI Interview</SectionTitle>
 
       <div className="space-y-2">
         <Label className="text-sm">Interview Mode</Label>
-        <Select
-          value={config.interviewMode || "technical"}
-          onValueChange={(v) => updateConfig("interviewMode", v)}
-        >
+        <Select value={config.interviewMode || "technical"} onValueChange={(v) => updateConfig("interviewMode", v)}>
           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="technical">Technical</SelectItem>
@@ -1030,34 +1027,21 @@ function AIInterviewConfig({
 
       <div className="space-y-2">
         <Label className="text-sm">Number of Questions</Label>
-        <Input
-          type="number"
-          value={config.maxQuestions || 10}
+        <Input type="number" value={config.maxQuestions || 10}
           onChange={(e) => updateConfig("maxQuestions", parseInt(e.target.value) || 5)}
-          min={3}
-          max={25}
-          className="h-9"
-        />
+          min={3} max={25} className="h-9" />
       </div>
 
       <div className="space-y-2">
         <Label className="text-sm">Duration (minutes)</Label>
-        <Input
-          type="number"
-          value={config.duration || 30}
+        <Input type="number" value={config.duration || 30}
           onChange={(e) => updateConfig("duration", parseInt(e.target.value) || 15)}
-          min={5}
-          max={60}
-          className="h-9"
-        />
+          min={5} max={60} className="h-9" />
       </div>
 
       <div className="space-y-2">
         <Label className="text-sm">Difficulty</Label>
-        <Select
-          value={config.difficulty || "progressive"}
-          onValueChange={(v) => updateConfig("difficulty", v)}
-        >
+        <Select value={config.difficulty || "progressive"} onValueChange={(v) => updateConfig("difficulty", v)}>
           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="easy">Easy</SelectItem>
@@ -1069,32 +1053,45 @@ function AIInterviewConfig({
       </div>
 
       <Separator />
-      <SectionTitle>Options</SectionTitle>
+      <SectionTitle>Behavior</SectionTitle>
 
-      <ToggleRow
-        label="Adaptive follow-ups"
-        checked={config.adaptive !== false}
-        onChange={(v) => updateConfig("adaptive", v)}
-      />
+      <div className="space-y-1.5">
+        <ToggleRow
+          label="Adaptive follow-ups"
+          description="AI adjusts next question based on candidate's answer"
+          checked={config.adaptive !== false}
+          onChange={(v) => updateConfig("adaptive", v)}
+        />
+        <ToggleRow
+          label="Use resume context"
+          description="AI references candidate's resume for relevant questions"
+          checked={config.useResumeContext !== false}
+          onChange={(v) => updateConfig("useResumeContext", v)}
+        />
+        <ToggleRow
+          label="Provide hints"
+          description="AI gives small hints if candidate struggles"
+          checked={config.provideHints !== false}
+          onChange={(v) => updateConfig("provideHints", v)}
+        />
+        <ToggleRow
+          label="Candidate can ask questions"
+          description="Allow candidate to ask clarifying questions"
+          checked={config.allowCandidateQuestions || false}
+          onChange={(v) => updateConfig("allowCandidateQuestions", v)}
+        />
+      </div>
 
-      <ToggleRow
-        label="Use resume context"
-        checked={config.useResumeContext !== false}
-        onChange={(v) => updateConfig("useResumeContext", v)}
-      />
-
-      <ToggleRow
-        label="Provide hints when stuck"
-        checked={config.provideHints !== false}
-        onChange={(v) => updateConfig("provideHints", v)}
-      />
-
-      {/* Simple summary */}
-      <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-700">
-        {config.maxQuestions || 10} questions •{" "}
-        {config.duration || 30} min •{" "}
-        {config.interviewMode || "technical"} •{" "}
-        {config.difficulty || "progressive"}
+      {/* Summary */}
+      <div className="bg-[#EBF0FF] border border-[#D1DEFF] rounded-lg p-3 text-xs text-[#0237BF] space-y-0.5">
+        <p className="font-semibold">Preview</p>
+        <p>{config.maxQuestions || 10} questions • {config.duration || 30} min</p>
+        <p>{config.interviewMode || "technical"} • {config.difficulty || "progressive"}</p>
+        <p>
+          {config.adaptive !== false ? "✓ Adaptive" : "✗ Fixed"} •
+          {config.useResumeContext !== false ? " ✓ Resume" : " ✗ No resume"} •
+          {config.provideHints !== false ? " ✓ Hints" : " ✗ No hints"}
+        </p>
       </div>
     </div>
   );
@@ -1437,19 +1434,61 @@ function ToggleRow({
   label,
   checked,
   onChange,
+  description,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  description?: string;
 }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <Label className="text-sm text-slate-600 cursor-pointer">{label}</Label>
-      <Switch checked={checked} onCheckedChange={onChange} />
-    </div>
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "w-full flex items-center justify-between py-2.5 px-3 rounded-lg transition-all duration-200 text-left group",
+        checked
+          ? "bg-[#EBF0FF] border border-[#A3BDFF]"
+          : "bg-slate-50 border border-slate-100 hover:border-slate-200"
+      )}
+    >
+      <div className="flex-1 min-w-0 mr-3">
+        <div className="flex items-center gap-2">
+          {/* Status dot */}
+          <div className={cn(
+            "w-2 h-2 rounded-full shrink-0 transition-colors",
+            checked ? "bg-[#0245EF]" : "bg-slate-300"
+          )} />
+          <span className={cn(
+            "text-sm transition-colors",
+            checked ? "text-[#0237BF] font-medium" : "text-slate-600"
+          )}>
+            {label}
+          </span>
+        </div>
+        {description && (
+          <p className={cn(
+            "text-[11px] mt-0.5 ml-4 transition-colors",
+            checked ? "text-[#4775FF]" : "text-slate-400"
+          )}>
+            {description}
+          </p>
+        )}
+      </div>
+
+      {/* Toggle switch */}
+      <div className={cn(
+        "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-all duration-200",
+        checked ? "bg-[#0245EF]" : "bg-slate-300"
+      )}>
+        <span className={cn(
+          "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200",
+          checked ? "translate-x-5" : "translate-x-0"
+        )} />
+      </div>
+    </button>
   );
 }
-
 function HintBox({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-xs text-slate-400 flex items-start gap-1.5 bg-slate-50 p-2 rounded-lg">

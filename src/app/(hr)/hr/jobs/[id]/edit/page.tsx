@@ -202,7 +202,7 @@ export default function EditJobPage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
       </div>
     );
   }
@@ -278,7 +278,7 @@ export default function EditJobPage() {
               onClick={() => handleSave(status === "DRAFT" ? "PUBLISHED" : status)}
               disabled={saving}
               size="sm"
-              className="bg-indigo-600 hover:bg-indigo-700"
+              className="bg-[#0245EF] hover:bg-[#0237BF]"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-1" />
@@ -293,10 +293,10 @@ export default function EditJobPage() {
 
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {/* Pipeline Selection */}
-        <Card className="border-2 border-indigo-200 bg-indigo-50/30">
+        <Card className="border-2 border-[#A3BDFF] bg-[#EBF0FF]/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <GitBranch className="w-5 h-5 text-indigo-600" />
+              <GitBranch className="w-5 h-5 text-[#0245EF]" />
               Hiring Pipeline
             </CardTitle>
             <CardDescription>
@@ -315,7 +315,7 @@ export default function EditJobPage() {
                 {pipelines.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     <div className="flex items-center gap-2">
-                      <GitBranch className="w-4 h-4 text-indigo-500" />
+                      <GitBranch className="w-4 h-4 text-[#0245EF]" />
                       <span>{p.name}</span>
                       <Badge variant="secondary" className="text-[10px] ml-1">
                         {getNodeCount(p)} nodes
@@ -327,7 +327,7 @@ export default function EditJobPage() {
             </Select>
 
             {selectedPipeline && (
-              <div className="bg-white rounded-lg border border-indigo-100 p-4">
+              <div className="bg-white rounded-lg border border-[#D1DEFF] p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-semibold text-sm text-slate-700">{selectedPipeline.name}</h4>
                   <Link href={`/pipeline?id=${selectedPipeline.id}`} target="_blank">

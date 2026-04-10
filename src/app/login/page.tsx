@@ -73,7 +73,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mb-4 shadow-lg">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded-2xl mb-4 shadow-lg">
             <Briefcase className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-slate-800">Hirasys</h1>
@@ -121,7 +121,7 @@ export default function LoginPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-11 bg-indigo-600 hover:bg-indigo-700"
+                    className="w-full h-11 bg-[#0245EF] hover:bg-[#0237BF]"
                     disabled={isLoading}
                   >
                     {isLoading ? (
@@ -229,7 +229,7 @@ export default function LoginPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-11 bg-indigo-600 hover:bg-indigo-700"
+                    className="w-full h-11 bg-[#0245EF] hover:bg-[#0237BF]"
                     disabled={isLoading}
                   >
                     {isLoading ? (

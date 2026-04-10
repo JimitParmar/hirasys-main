@@ -12,7 +12,6 @@ export default async function Home() {
     redirect("/jobs");
   }
 
-  redirect("/login");
+  // Not logged in — show landing page
+  redirect("/landing");
 }
-
-

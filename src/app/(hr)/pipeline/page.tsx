@@ -155,7 +155,7 @@ function PipelinePageInner() {
   if (authLoading || loading) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
       </div>
     );
   }
@@ -169,7 +169,7 @@ function PipelinePageInner() {
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
-          <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+          <div className="w-7 h-7 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded-lg flex items-center justify-center">
             <GitBranch className="w-3.5 h-3.5 text-white" />
           </div>
           <div>
@@ -252,7 +252,7 @@ function PipelinePageInner() {
             <Button
               onClick={confirmSave}
               disabled={saving || !pipelineName.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700"
+              className="bg-[#0245EF] hover:bg-[#0237BF]"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
               Save
@@ -268,7 +268,7 @@ export default function PipelinePage() {
   return (
     <Suspense fallback={
       <div className="h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
       </div>
     }>
       <PipelinePageInner />

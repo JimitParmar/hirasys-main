@@ -154,7 +154,7 @@ export default function NewJobPage() {
             <Button
               onClick={() => handleSave(true)}
               disabled={saving}
-              className="bg-indigo-600 hover:bg-indigo-700"
+              className="bg-[#0245EF] hover:bg-[#0237BF]"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -169,10 +169,10 @@ export default function NewJobPage() {
 
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {/* Pipeline Selection — FIRST and PROMINENT */}
-        <Card className="border-2 border-indigo-200 bg-indigo-50/30">
+        <Card className="border-2 border-[#A3BDFF] bg-[#EBF0FF]/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <GitBranch className="w-5 h-5 text-indigo-600" />
+              <GitBranch className="w-5 h-5 text-[#0245EF]" />
               Hiring Pipeline
             </CardTitle>
             <CardDescription>
@@ -194,7 +194,7 @@ export default function NewJobPage() {
                   {pipelines.map((pipeline) => (
                     <SelectItem key={pipeline.id} value={pipeline.id}>
                       <div className="flex items-center gap-2">
-                        <GitBranch className="w-4 h-4 text-indigo-500" />
+                        <GitBranch className="w-4 h-4 text-[#0245EF]" />
                         <span>{pipeline.name}</span>
                         <Badge variant="secondary" className="text-[10px] ml-1">
                           {getNodeCount(pipeline)} nodes
@@ -208,7 +208,7 @@ export default function NewJobPage() {
 
             {/* Pipeline preview */}
             {selectedPipeline && (
-              <div className="bg-white rounded-lg border border-indigo-100 p-4">
+              <div className="bg-white rounded-lg border border-[#D1DEFF] p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-semibold text-sm text-slate-700">
                     {selectedPipeline.name}
@@ -261,7 +261,7 @@ export default function NewJobPage() {
                 <GitBranch className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-sm text-slate-500">No pipelines created yet</p>
                 <Link href="/pipeline">
-                  <Button size="sm" className="mt-2 bg-indigo-600 hover:bg-indigo-700">
+                  <Button size="sm" className="mt-2 bg-[#0245EF] hover:bg-[#0237BF]">
                     <Plus className="w-4 h-4 mr-1" /> Create Pipeline
                   </Button>
                 </Link>

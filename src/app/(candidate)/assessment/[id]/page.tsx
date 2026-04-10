@@ -87,6 +87,19 @@ export default function AssessmentPage() {
     }
   }, [currentQuestionIndex, assessment]);
 
+  function getMonacoLanguage(lang: string): string {
+  const map: Record<string, string> = {
+    javascript: "javascript",
+    python: "python",
+    typescript: "typescript",
+    java: "java",
+    cpp: "cpp",
+    sql: "sql",
+    mysql: "sql",
+    postgresql: "sql",
+  };
+  return map[lang] || lang;
+}
   const loadAssessment = async () => {
     try {
       // Fetch assessment from pipeline
@@ -379,7 +392,7 @@ export default function AssessmentPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#4775FF]" />
       </div>
     );
   }
@@ -391,7 +404,7 @@ export default function AssessmentPage() {
           <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-slate-800 mb-2">Assessment Complete!</h2>
           <p className="text-slate-500 mb-6">Your answers have been submitted and graded.</p>
-          <Button onClick={() => router.push("/applications")} className="bg-indigo-600 hover:bg-indigo-700">
+          <Button onClick={() => router.push("/applications")} className="bg-[#0245EF] hover:bg-[#0237BF]">
             Back to Applications
           </Button>
         </div>
@@ -443,7 +456,7 @@ export default function AssessmentPage() {
       {/* Top Bar */}
       <div className="h-12 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
-          <Code className="w-5 h-5 text-indigo-400" />
+          <Code className="w-5 h-5 text-[#4775FF]" />
           <span className="font-semibold text-sm">{assessment.title}</span>
           <Badge variant="outline" className="text-[10px] border-slate-600 text-slate-300">
             {questions.length} question{questions.length > 1 ? "s" : ""}
@@ -465,9 +478,10 @@ export default function AssessmentPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Question */}
-        <div className="w-[420px] bg-slate-800 border-r border-slate-700 flex flex-col shrink-0">
+                {/* Left Panel — Question */}
+        <div className="w-[420px] bg-slate-800 border-r border-slate-700 flex flex-col shrink-0 overflow-hidden">
           {/* Question nav */}
-          <div className="flex items-center justify-between p-3 border-b border-slate-700">
+          <div className="flex items-center justify-between p-3 border-b border-slate-700 shrink-0">
             <Button variant="ghost" size="sm" disabled={currentQuestionIndex === 0}
               onClick={() => { setCurrentQuestionIndex((i) => i - 1); setTestResults([]); setOutput(""); }}
               className="text-slate-300 hover:text-white">
@@ -482,7 +496,7 @@ export default function AssessmentPage() {
           </div>
 
           {/* Question dots */}
-          <div className="flex gap-2 p-3 border-b border-slate-700 flex-wrap">
+          <div className="flex gap-2 p-3 border-b border-slate-700 flex-wrap shrink-0">
             {questions.map((_: any, i: number) => {
               const q = questions[i];
               const ans = answers[q?.title];
@@ -490,7 +504,7 @@ export default function AssessmentPage() {
               return (
                 <button key={i} onClick={() => { setCurrentQuestionIndex(i); setTestResults([]); setOutput(""); }}
                   className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
-                    i === currentQuestionIndex ? "bg-indigo-500 text-white ring-2 ring-indigo-400"
+                    i === currentQuestionIndex ? "bg-[#0245EF] text-white ring-2 ring-[#4775FF]"
                     : hasAnswer ? "bg-emerald-900/50 text-emerald-400 border border-emerald-700"
                     : "bg-slate-700 text-slate-400 hover:bg-slate-600"
                   }`}>
@@ -500,84 +514,71 @@ export default function AssessmentPage() {
             })}
           </div>
 
-          {/* Question content */}
-          <ScrollArea className="flex-1 p-4">
-            {currentQuestion && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className={`${
-                    currentQuestion.difficulty === "easy" ? "bg-emerald-900 text-emerald-300" :
-                    currentQuestion.difficulty === "hard" ? "bg-red-900 text-red-300" :
-                    "bg-amber-900 text-amber-300"
-                  }`}>
-                    {currentQuestion.difficulty}
-                  </Badge>
-                  <Badge variant="outline" className="border-slate-600 text-slate-300">
-                    {currentQuestion.points} pts
-                  </Badge>
-                  <Badge variant="outline" className="border-slate-600 text-slate-300">
-                    {currentQuestion.type}
-                  </Badge>
-                </div>
-
-                <h3 className="text-lg font-semibold">{currentQuestion.title}</h3>
-
-                <div className="text-sm text-slate-300 whitespace-pre-line leading-relaxed">
-                  {currentQuestion.description}
-                </div>
-
-                {/* VISIBLE TEST CASES — shown as examples */}
-                {currentQuestion.type === "coding" && (
-                  <div className="space-y-3 mt-4">
-                    <h4 className="text-sm font-semibold text-indigo-400">📋 Test Cases</h4>
-                    {currentQuestion.testCases?.filter((tc: any) => !tc.isHidden).map((tc: any, i: number) => (
-                      <div key={tc.id} className="bg-slate-900/80 rounded-lg p-3 text-xs font-mono border border-slate-700">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-slate-400 font-sans text-[11px]">Example {i + 1}</span>
-                          <Badge variant="outline" className="text-[9px] border-slate-600">{tc.points} pts</Badge>
-                        </div>
-                        <div className="space-y-1.5">
-                          <div>
-                            <span className="text-slate-500">Input: </span>
-                            <span className="text-cyan-400">{tc.input}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500">Expected: </span>
-                            <span className="text-emerald-400">{tc.expectedOutput}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
-                    {currentQuestion.testCases?.some((tc: any) => tc.isHidden) && (
-                      <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50 text-xs text-slate-500 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-500" />
-                        + {currentQuestion.testCases.filter((tc: any) => tc.isHidden).length} hidden test cases
-                      </div>
-                    )}
+          {/* Question content — THIS IS THE SCROLLABLE PART */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+            <div className="p-4 space-y-4">
+              {currentQuestion && (
+                <>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge className={`${
+                      currentQuestion.difficulty === "easy" ? "bg-emerald-900 text-emerald-300" :
+                      currentQuestion.difficulty === "hard" ? "bg-red-900 text-red-300" :
+                      "bg-amber-900 text-amber-300"
+                    }`}>
+                      {currentQuestion.difficulty}
+                    </Badge>
+                    <Badge variant="outline" className="border-slate-600 text-slate-300">
+                      {currentQuestion.points} pts
+                    </Badge>
+                    <Badge variant="outline" className="border-slate-600 text-slate-300">
+                      {currentQuestion.type}
+                    </Badge>
                   </div>
-                )}
 
-                {/* MCQ Options */}
-                {currentQuestion.type === "mcq" && (
-                  <div className="space-y-2 mt-4">
-                    {currentQuestion.options?.map((opt: any) => (
-                      <button key={opt.id}
-                        onClick={() => updateAnswer(currentQuestion.title, { selectedOption: opt.id })}
-                        className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
-                          currentAnswer.selectedOption === opt.id
-                            ? "border-indigo-500 bg-indigo-900/30 text-white"
-                            : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500"
-                        }`}>
-                        <span className="font-mono mr-2 text-slate-500">{opt.id.toUpperCase()}.</span>
-                        {opt.text}
-                      </button>
-                    ))}
+                  <h3 className="text-lg font-semibold">{currentQuestion.title}</h3>
+
+                  <div className="text-sm text-slate-300 whitespace-pre-line leading-relaxed">
+                    {currentQuestion.description}
                   </div>
-                )}
-              </div>
-            )}
-          </ScrollArea>
+
+                  {/* Test Cases — Formatted Nicely */}
+                  {currentQuestion.type === "coding" && currentQuestion.testCases?.some((tc: any) => !tc.isHidden) && (
+                    <div className="space-y-3 mt-4">
+                      <h4 className="text-sm font-semibold text-[#4775FF]">📋 Test Cases</h4>
+                      {currentQuestion.testCases?.filter((tc: any) => !tc.isHidden).map((tc: any, i: number) => (
+                        <TestCaseDisplay key={tc.id} testCase={tc} index={i} />
+                      ))}
+
+                      {currentQuestion.testCases?.some((tc: any) => tc.isHidden) && (
+                        <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50 text-xs text-slate-500 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-500" />
+                          + {currentQuestion.testCases.filter((tc: any) => tc.isHidden).length} hidden test cases
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* MCQ Options */}
+                  {currentQuestion.type === "mcq" && (
+                    <div className="space-y-2 mt-4">
+                      {currentQuestion.options?.map((opt: any) => (
+                        <button key={opt.id}
+                          onClick={() => updateAnswer(currentQuestion.title, { selectedOption: opt.id })}
+                          className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
+                            currentAnswer.selectedOption === opt.id
+                              ? "border-[#0245EF] bg-[#010E30]/30 text-white"
+                              : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500"
+                          }`}>
+                          <span className="font-mono mr-2 text-slate-500">{opt.id.toUpperCase()}.</span>
+                          {opt.text}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right: Editor + Output */}
@@ -623,12 +624,15 @@ export default function AssessmentPage() {
     <SelectValue />
   </SelectTrigger>
   <SelectContent>
-    {(assessment.languages || ["javascript", "python"]).map((l: string) => (
-      <SelectItem key={l} value={l}>
-        {l.charAt(0).toUpperCase() + l.slice(1)}
-      </SelectItem>
-    ))}
-  </SelectContent>
+  {(assessment.languages || ["javascript", "python"]).map((l: string) => (
+    <SelectItem key={l} value={l}>
+      {l === "sql" ? "SQL / MySQL" :
+       l === "postgresql" ? "PostgreSQL" :
+       l === "cpp" ? "C++" :
+       l.charAt(0).toUpperCase() + l.slice(1)}
+    </SelectItem>
+  ))}
+</SelectContent>
 </Select>
 
               <div className="flex gap-2">
@@ -648,8 +652,8 @@ export default function AssessmentPage() {
             {/* Editor */}
             <div className="flex-1">
               <Editor
-                height="100%"
-                language={language === "cpp" ? "cpp" : language}
+  height="100%"
+  language={getMonacoLanguage(language)}
                 theme="vs-dark"
                 value={currentAnswer.code || ""}
                 onChange={(value) => updateAnswer(currentQuestion.title, { code: value || "" })}
@@ -683,7 +687,7 @@ export default function AssessmentPage() {
                   <ScrollArea className="h-full p-3">
                     <pre className="text-xs font-mono whitespace-pre-wrap">
                       {running ? (
-                        <span className="text-indigo-400">⏳ Running your code...</span>
+                        <span className="text-[#4775FF]">⏳ Running your code...</span>
                       ) : output ? (
                         <span className={output.includes("❌") ? "text-red-400" : "text-slate-300"}>
                           {output}
@@ -701,7 +705,7 @@ export default function AssessmentPage() {
                 <TabsContent value="tests" className="flex-1 m-0">
                   <ScrollArea className="h-full p-3">
                     {runningTests ? (
-                      <div className="flex items-center gap-2 text-indigo-400 text-xs">
+                      <div className="flex items-center gap-2 text-[#4775FF] text-xs">
                         <Loader2 className="w-4 h-4 animate-spin" /> Running all test cases...
                       </div>
                     ) : testResults.length === 0 ? (
@@ -792,4 +796,188 @@ function normalizeCode(code: string): string {
     })
     .join("\n")
     .trim();
+}
+function TestCaseDisplay({ testCase, index }: { testCase: any; index: number }) {
+  let input = testCase.input || "";
+  let expectedOutput = testCase.expectedOutput || "";
+  let isSQL = false;
+  let setupSQL = "";
+
+  // Check if input is SQL setup JSON
+  try {
+    if (typeof input === "string" && input.startsWith("{")) {
+      const parsed = JSON.parse(input);
+      if (parsed.setup) {
+        isSQL = true;
+        setupSQL = parsed.setup;
+      }
+    }
+  } catch {}
+
+  // Parse expected output into table format
+  const renderOutput = (output: string) => {
+    const lines = output.split("\n").filter((l) => l.trim());
+
+    // Check if output is pipe-separated (table format)
+    if (lines.length > 0 && lines[0].includes("|")) {
+      const headers = lines[0].split("|").map((h) => h.trim());
+      const rows = lines.slice(1).map((line) => line.split("|").map((c) => c.trim()));
+
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-slate-600">
+                {headers.map((h, i) => (
+                  <th key={i} className="text-left py-1 px-2 text-[#4775FF] font-semibold">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, ri) => (
+                <tr key={ri} className="border-b border-slate-700/50">
+                  {row.map((cell, ci) => (
+                    <td key={ci} className="py-1 px-2 text-emerald-400">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    // Plain text output
+    return <span className="text-emerald-400">{output}</span>;
+  };
+
+  if (isSQL) {
+    // SQL test case — show tables and expected result nicely
+    const tables = parseCreateStatements(setupSQL);
+
+    return (
+      <div className="bg-slate-900/80 rounded-lg border border-slate-700 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700 bg-slate-800/50">
+          <span className="text-[11px] text-slate-400">Example {index + 1}</span>
+          <Badge variant="outline" className="text-[9px] border-slate-600">{testCase.points} pts</Badge>
+        </div>
+
+        <div className="p-3 space-y-3">
+          {/* Show tables */}
+          <div>
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Tables</span>
+            <div className="mt-1 space-y-2">
+              {tables.map((table, ti) => (
+                <div key={ti}>
+                  <span className="text-xs text-cyan-400 font-mono font-semibold">{table.name}</span>
+                  <div className="mt-0.5 overflow-x-auto">
+                    <table className="text-xs font-mono">
+                      <thead>
+                        <tr className="border-b border-slate-700">
+                          {table.columns.map((col, ci) => (
+                            <th key={ci} className="text-left py-0.5 px-2 text-slate-400 font-medium">
+                              {col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {table.rows.map((row, ri) => (
+                          <tr key={ri} className="border-b border-slate-800">
+                            {row.map((cell, ci) => (
+                              <td key={ci} className="py-0.5 px-2 text-slate-300">
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Expected output */}
+          <div>
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Expected Result</span>
+            <div className="mt-1 bg-slate-900 rounded p-2">
+              {renderOutput(expectedOutput)}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Non-SQL test case
+  return (
+    <div className="bg-slate-900/80 rounded-lg p-3 text-xs font-mono border border-slate-700">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-slate-400 font-sans text-[11px]">Example {index + 1}</span>
+        <Badge variant="outline" className="text-[9px] border-slate-600">{testCase.points} pts</Badge>
+      </div>
+      <div className="space-y-1.5">
+        <div>
+          <span className="text-slate-500">Input: </span>
+          <span className="text-cyan-400">{input}</span>
+        </div>
+        <div>
+          <span className="text-slate-500">Expected: </span>
+          {renderOutput(expectedOutput)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Parse CREATE TABLE and INSERT statements into visual tables
+function parseCreateStatements(sql: string): { name: string; columns: string[]; rows: string[][] }[] {
+  const tables: { name: string; columns: string[]; rows: string[][] }[] = [];
+
+  // Find CREATE TABLE statements
+  const createRegex = /CREATE\s+TABLE\s+(\w+)\s*\((.*?)\)/gi;
+  let createMatch;
+  while ((createMatch = createRegex.exec(sql)) !== null) {
+    const tableName = createMatch[1];
+    const columnDefs = createMatch[2];
+
+    // Extract column names (ignore types)
+    const columns = columnDefs
+      .split(",")
+      .map((col) => col.trim().split(/\s+/)[0])
+      .filter((col) => col && !col.toUpperCase().startsWith("PRIMARY") && !col.toUpperCase().startsWith("FOREIGN"));
+
+    tables.push({ name: tableName, columns, rows: [] });
+  }
+
+  // Find INSERT statements
+  const insertRegex = /INSERT\s+INTO\s+(\w+)\s+VALUES\s+(.*?)(?=;|INSERT|CREATE|$)/gi;
+  let insertMatch;
+  while ((insertMatch = insertRegex.exec(sql)) !== null) {
+    const tableName = insertMatch[1];
+    const valuesStr = insertMatch[2];
+
+    const table = tables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
+    if (!table) continue;
+
+    // Parse value groups: (1, 'Alice', 100), (2, 'Bob', 200)
+    const valueGroups = valuesStr.match(/\(([^)]+)\)/g);
+    if (valueGroups) {
+      for (const group of valueGroups) {
+        const values = group
+          .slice(1, -1) // Remove parentheses
+          .split(",")
+          .map((v) => v.trim().replace(/^'|'$/g, "")); // Remove quotes
+        table.rows.push(values);
+      }
+    }
+  }
+
+  return tables;
 }

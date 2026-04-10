@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     let result;
 
-    switch (language) {
+        switch (language) {
       case "javascript":
         result = await executeJavaScript(code, input || "");
         break;
@@ -43,8 +43,12 @@ export async function POST(req: NextRequest) {
       case "typescript":
         result = await executeTypeScript(code, input || "");
         break;
+      case "sql":
+      case "mysql":
+      case "postgresql":
+        result = await executeSQL(code, input || "", language);
+        break;
       default:
-        // Try Docker for other languages
         result = await executeWithDocker(code, language, input || "");
         break;
     }
@@ -64,6 +68,221 @@ export async function POST(req: NextRequest) {
       exitCode: 1,
       executionTime: 0,
     });
+  }
+}
+
+// ==========================================
+// SQL — Execute against a temporary in-memory database
+// ==========================================
+async function executeSQL(
+  code: string,
+  input: string,
+  dialect: string
+): Promise<ExecutionResult> {
+  const execId = `sql_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const workDir = join(TEMP_DIR, execId);
+
+  try {
+    mkdirSync(workDir, { recursive: true });
+
+    // Input contains the setup SQL (CREATE TABLE, INSERT) and expected format
+    // Code is the candidate's query
+    let setupSQL = "";
+    let candidateQuery = code.trim();
+
+    // Parse input — it contains table setup
+    if (input) {
+      try {
+        const parsed = typeof input === "string" && input.startsWith("{")
+          ? JSON.parse(input)
+          : { setup: input };
+        setupSQL = parsed.setup || parsed.schema || input;
+      } catch {
+        setupSQL = input;
+      }
+    }
+
+    // Use Node.js with better-sqlite3 for in-memory execution
+    // This is fast, safe, and requires no external DB
+    const sqlScript = `
+const Database = require('better-sqlite3');
+const db = new Database(':memory:');
+
+try {
+  // Setup tables
+  const setupStatements = ${JSON.stringify(setupSQL)}.split(';').filter(s => s.trim());
+  for (const stmt of setupStatements) {
+    if (stmt.trim()) {
+      db.exec(stmt.trim());
+    }
+  }
+
+  // Run candidate's query
+  const query = ${JSON.stringify(candidateQuery)}.trim().replace(/;$/, '');
+
+  // Detect if it's a SELECT or modification
+  const isSelect = query.toUpperCase().trimStart().startsWith('SELECT');
+  const isShow = query.toUpperCase().trimStart().startsWith('SHOW');
+
+  if (isSelect || isShow) {
+    const rows = db.prepare(query).all();
+    if (rows.length === 0) {
+      console.log('(empty result set)');
+    } else {
+      // Print as table
+      const cols = Object.keys(rows[0]);
+      console.log(cols.join('|'));
+      for (const row of rows) {
+        console.log(cols.map(c => {
+          const val = row[c];
+          return val === null ? 'NULL' : String(val);
+        }).join('|'));
+      }
+    }
+  } else {
+    const result = db.prepare(query).run();
+    console.log('Rows affected: ' + result.changes);
+  }
+} catch (e) {
+  console.error(e.message);
+  process.exit(1);
+} finally {
+  db.close();
+}
+`;
+
+    writeFileSync(join(workDir, "solution.js"), sqlScript);
+
+    const startTime = Date.now();
+
+    // Check if better-sqlite3 is available
+    const { stdout, stderr } = await execAsync(
+      `node "${join(workDir, "solution.js")}"`,
+      {
+        timeout: TIMEOUT,
+        maxBuffer: 1024 * 1024,
+        env: { ...process.env, NODE_PATH: join(process.cwd(), "node_modules") },
+      }
+    );
+
+    return {
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+      exitCode: 0,
+      executionTime: Date.now() - startTime,
+      version: `SQL (${dialect})`,
+    };
+  } catch (error: any) {
+    // If better-sqlite3 is not available, fall back to pg
+    if (error.message?.includes("better-sqlite3") || error.message?.includes("Cannot find module")) {
+      return await executeSQLWithPg(code, input, dialect, workDir);
+    }
+
+    const isTimeout = error.killed || error.signal === "SIGTERM";
+    return {
+      stdout: error.stdout?.trim() || "",
+      stderr: isTimeout
+        ? "⏰ Time Limit Exceeded"
+        : formatError(error.stderr || error.message || "SQL execution failed"),
+      exitCode: error.code || 1,
+      executionTime: 0,
+      version: `SQL (${dialect})`,
+    };
+  } finally {
+    try { rmSync(workDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+// Fallback: Use the existing PostgreSQL connection
+async function executeSQLWithPg(
+  code: string,
+  input: string,
+  dialect: string,
+  workDir: string
+): Promise<ExecutionResult> {
+  try {
+    const { Pool } = require("pg");
+
+    // Create a temporary schema for isolation
+    const schemaName = `test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const pool = new Pool({
+      host: "localhost",
+      port: 5432,
+      user: "hirasys",
+      password: "hirasys123",
+      database: "hirasys",
+      max: 1,
+    });
+
+    try {
+      // Create isolated schema
+      await pool.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+      await pool.query(`SET search_path TO "${schemaName}"`);
+
+      // Run setup SQL
+      if (input) {
+        let setupSQL = input;
+        try {
+          const parsed = JSON.parse(input);
+          setupSQL = parsed.setup || parsed.schema || input;
+        } catch {}
+
+        const statements = setupSQL.split(";").filter((s: string) => s.trim());
+        for (const stmt of statements) {
+          if (stmt.trim()) {
+            await pool.query(`SET search_path TO "${schemaName}"; ${stmt.trim()}`);
+          }
+        }
+      }
+
+      // Run candidate query
+      const startTime = Date.now();
+      const result = await pool.query(`SET search_path TO "${schemaName}"; ${code.trim().replace(/;$/, "")}`);
+
+      let output = "";
+      if (result.rows && result.rows.length > 0) {
+        const cols = result.fields.map((f: any) => f.name);
+        output = cols.join("|") + "\n";
+        output += result.rows.map((row: any) =>
+          cols.map((c: string) => {
+            const val = row[c];
+            return val === null ? "NULL" : String(val);
+          }).join("|")
+        ).join("\n");
+      } else if (result.rowCount !== null) {
+        output = `Rows affected: ${result.rowCount}`;
+      } else {
+        output = "(empty result set)";
+      }
+
+      // Cleanup
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await pool.end();
+
+      return {
+        stdout: output,
+        stderr: "",
+        exitCode: 0,
+        executionTime: Date.now() - startTime,
+        version: "PostgreSQL (live)",
+      };
+    } catch (err: any) {
+      // Cleanup on error
+      try {
+        await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        await pool.end();
+      } catch {}
+      throw err;
+    }
+  } catch (error: any) {
+    return {
+      stdout: "",
+      stderr: formatError(error.message || "SQL execution failed"),
+      exitCode: 1,
+      executionTime: 0,
+      version: `SQL (${dialect})`,
+    };
   }
 }
 

@@ -6,25 +6,20 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { NotificationBell } from "@/components/shared/NotificationBell";
+import { EditF2FDialog } from "@/components/shared/EditF2FDialog";
+import { ScheduleF2FDialog } from "@/components/shared/ScheduleF2FDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   ArrowLeft, Loader2, Users, Mail, Briefcase,
-  ChevronDown, Eye, Pencil, FileSearch, Code, Bot,
-  Video, Award, XCircle, Clock, MoreVertical,
-  CheckCircle, ArrowRight,
+  ChevronDown, Pencil, FileSearch, Code, Bot,
+  Video, Award, XCircle, Clock,
+  CheckCircle, ArrowRight, Calendar,
 } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
@@ -32,7 +27,7 @@ import toast from "react-hot-toast";
 
 const ALL_STATUSES = [
   { value: "APPLIED", label: "Applied", color: "bg-blue-100 text-blue-700", icon: Briefcase },
-  { value: "SCREENING", label: "Screening", color: "bg-indigo-100 text-indigo-700", icon: FileSearch },
+  { value: "SCREENING", label: "Screening", color: "bg-[#D1DEFF] text-[#0237BF]", icon: FileSearch },
   { value: "ASSESSMENT", label: "Assessment", color: "bg-purple-100 text-purple-700", icon: Code },
   { value: "AI_INTERVIEW", label: "AI Interview", color: "bg-violet-100 text-violet-700", icon: Bot },
   { value: "F2F_INTERVIEW", label: "F2F Interview", color: "bg-pink-100 text-pink-700", icon: Video },
@@ -42,7 +37,6 @@ const ALL_STATUSES = [
   { value: "REJECTED", label: "Rejected", color: "bg-red-100 text-red-700", icon: XCircle },
 ];
 
-// Stage ordering for "next stage" logic
 const STAGE_ORDER = [
   "APPLIED", "SCREENING", "ASSESSMENT", "AI_INTERVIEW",
   "F2F_INTERVIEW", "UNDER_REVIEW", "OFFERED", "HIRED",
@@ -53,9 +47,11 @@ export default function HRJobDetailPage() {
   const { isHR, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [job, setJob] = useState<any>(null);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [scheduleApp, setScheduleApp] = useState<any>(null);
   const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,7 +62,7 @@ export default function HRJobDetailPage() {
     if (isHR) fetchData();
   }, [isHR, id]);
 
-  const fetchData = async () => {
+    const fetchData = async () => {
     try {
       const [jobRes, appsRes] = await Promise.all([
         fetch(`/api/jobs/${id}`),
@@ -76,6 +72,18 @@ export default function HRJobDetailPage() {
       const appsData = await appsRes.json();
       setJob(jobData.job);
       setApplications(appsData.applications || []);
+
+      // Fetch pipeline stages
+      if (jobData.job?.pipeline_id) {
+        try {
+          const pRes = await fetch(`/api/pipeline?id=${jobData.job.pipeline_id}`);
+          const pData = await pRes.json();
+          if (pData.pipeline) {
+            const stages = extractPipelineStages(pData.pipeline);
+            setPipelineStages(stages);
+          }
+        } catch {}
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -101,10 +109,18 @@ export default function HRJobDetailPage() {
     }
   };
 
-  const getNextStage = (currentStatus: string): string | null => {
-    const currentIndex = STAGE_ORDER.indexOf(currentStatus);
-    if (currentIndex === -1 || currentIndex >= STAGE_ORDER.length - 1) return null;
-    return STAGE_ORDER[currentIndex + 1];
+    const getNextStage = (currentStatus: string): string | null => {
+    if (pipelineStages.length === 0) {
+      // Fallback to default order
+      const defaultOrder = ["APPLIED", "SCREENING", "ASSESSMENT", "AI_INTERVIEW", "F2F_INTERVIEW", "UNDER_REVIEW", "OFFERED", "HIRED"];
+      const idx = defaultOrder.indexOf(currentStatus);
+      if (idx === -1 || idx >= defaultOrder.length - 1) return null;
+      return defaultOrder[idx + 1];
+    }
+
+    const currentIndex = pipelineStages.findIndex((s) => s.status === currentStatus);
+    if (currentIndex === -1 || currentIndex >= pipelineStages.length - 1) return null;
+    return pipelineStages[currentIndex + 1].status;
   };
 
   const getStatusInfo = (status: string) => {
@@ -114,7 +130,7 @@ export default function HRJobDetailPage() {
   if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
       </div>
     );
   }
@@ -127,7 +143,6 @@ export default function HRJobDetailPage() {
     );
   }
 
-  // Sort by score, then filter
   const sorted = [...applications].sort(
     (a, b) => (b.resumeScore || 0) - (a.resumeScore || 0)
   );
@@ -135,7 +150,6 @@ export default function HRJobDetailPage() {
     ? sorted
     : sorted.filter((a) => a.status === filterStatus);
 
-  // Count per status
   const statusCounts: Record<string, number> = {};
   applications.forEach((a) => {
     statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
@@ -144,68 +158,52 @@ export default function HRJobDetailPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/hr/dashboard">
-              <Button variant="ghost" size="icon" className="h-9 w-9">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="font-semibold text-sm text-slate-800">{job.title}</h1>
-              <p className="text-[11px] text-slate-400">
-                {job.department} • {applications.length} applicant{applications.length !== 1 ? "s" : ""}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={
-                job.status === "PUBLISHED"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-slate-50 text-slate-500"
-              }
-            >
-              {job.status}
-            </Badge>
-            <Link href={`/hr/jobs/${id}/edit`}>
-              <Button variant="outline" size="sm">
-                <Pencil className="w-4 h-4 mr-1" /> Edit
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+      
 
       <div className="max-w-6xl mx-auto px-4 py-6">
         {/* Status filter tabs */}
+                {/* Status filter tabs — based on pipeline */}
         <div className="flex items-center gap-2 mb-6 flex-wrap">
           <Button
             variant={filterStatus === "all" ? "default" : "outline"}
             size="sm"
             onClick={() => setFilterStatus("all")}
-            className={filterStatus === "all" ? "bg-indigo-600" : ""}
+            className={filterStatus === "all" ? "bg-[#0245EF]" : ""}
           >
             All ({applications.length})
           </Button>
-          {ALL_STATUSES.filter((s) => statusCounts[s.value]).map((status) => {
-            const StatusIcon = status.icon;
-            return (
-              <Button
-                key={status.value}
-                variant={filterStatus === status.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilterStatus(status.value)}
-                className={filterStatus === status.value ? "bg-indigo-600" : ""}
-              >
-                <StatusIcon className="w-3 h-3 mr-1" />
-                {status.label} ({statusCounts[status.value]})
-              </Button>
-            );
-          })}
+
+          {/* Pipeline stages */}
+          {(pipelineStages.length > 0 ? pipelineStages : ALL_STATUSES)
+            .filter((s) => statusCounts[s.status])
+            .map((stage) => {
+              const StageIcon = stage.icon;
+              return (
+                <Button
+                  key={stage.status}
+                  variant={filterStatus === stage.status ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterStatus(stage.status)}
+                  className={filterStatus === stage.status ? "bg-[#0245EF]" : ""}
+                >
+                  <StageIcon className="w-3 h-3 mr-1" />
+                  {stage.label} ({statusCounts[stage.status]})
+                </Button>
+              );
+            })}
+
+          {/* Always show Rejected tab if there are rejected candidates */}
+          {statusCounts["REJECTED"] && !pipelineStages.some((s) => s.status === "REJECTED") && (
+            <Button
+              variant={filterStatus === "REJECTED" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterStatus("REJECTED")}
+              className={filterStatus === "REJECTED" ? "bg-red-600" : "text-red-600"}
+            >
+              <XCircle className="w-3 h-3 mr-1" />
+              Rejected ({statusCounts["REJECTED"]})
+            </Button>
+          )}
         </div>
 
         {/* Applications */}
@@ -213,7 +211,9 @@ export default function HRJobDetailPage() {
           <div className="text-center py-16">
             <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-slate-600">
-              {filterStatus === "all" ? "No applications yet" : `No ${getStatusInfo(filterStatus).label.toLowerCase()} candidates`}
+              {filterStatus === "all"
+                ? "No applications yet"
+                : `No ${getStatusInfo(filterStatus).label.toLowerCase()} candidates`}
             </h3>
           </div>
         ) : (
@@ -230,15 +230,14 @@ export default function HRJobDetailPage() {
                   key={app.id}
                   className={`hover:shadow-md transition-all ${
                     index === 0 && filterStatus === "all"
-                      ? "border-indigo-200 bg-indigo-50/20"
+                      ? "border-[#A3BDFF] bg-[#EBF0FF]/20"
                       : ""
                   }`}
                 >
                   <CardContent className="p-5">
+                    {/* Candidate Info Row */}
                     <div className="flex items-start justify-between">
-                      {/* Left: Candidate Info */}
                       <div className="flex items-start gap-4">
-                        {/* Rank badge */}
                         <div
                           className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
                             index === 0 ? "bg-amber-100 text-amber-700" :
@@ -266,9 +265,7 @@ export default function HRJobDetailPage() {
                         </div>
                       </div>
 
-                      {/* Right: Score + Status */}
                       <div className="flex items-center gap-4">
-                        {/* Resume Score */}
                         {app.resumeScore > 0 && (
                           <div className="text-center">
                             <div
@@ -280,30 +277,30 @@ export default function HRJobDetailPage() {
                             >
                               {Math.round(app.resumeScore)}
                             </div>
-                            <div className="text-[10px] text-slate-400">
-                              Match %
-                            </div>
+                            <div className="text-[10px] text-slate-400">Match %</div>
                           </div>
                         )}
 
-                        {/* Status Badge */}
                         <Badge className={statusInfo.color}>
                           <StatusIcon className="w-3 h-3 mr-1" />
                           {statusInfo.label}
                         </Badge>
                       </div>
                     </div>
-                                            {/* Interview/Assessment Scores if available */}
+
+                    {/* Interview Scores */}
                     <InterviewScores applicationId={app.id} status={app.status} />
+                    {/* Scheduled F2F Interviews */}
+                    <F2FScheduledInfo applicationId={app.id} />
+
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100">
-                      {/* Quick advance to next stage */}
                       {nextStageInfo && app.status !== "REJECTED" && app.status !== "HIRED" && (
                         <Button
                           size="sm"
                           onClick={() => updateStatus(app.id, nextStage!)}
                           disabled={isUpdating}
-                          className="bg-indigo-600 hover:bg-indigo-700"
+                          className="bg-[#0245EF] hover:bg-[#0237BF]"
                         >
                           {isUpdating ? (
                             <Loader2 className="w-3 h-3 animate-spin mr-1" />
@@ -314,7 +311,7 @@ export default function HRJobDetailPage() {
                         </Button>
                       )}
 
-                      {/* Jump to any stage */}
+                                            {/* Jump to any stage — only show pipeline stages */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm" className="text-xs">
@@ -322,33 +319,68 @@ export default function HRJobDetailPage() {
                             Change Stage
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-48">
-                          {ALL_STATUSES.map((status) => {
-                            const Icon = status.icon;
-                            const isCurrent = app.status === status.value;
+                        <DropdownMenuContent align="start" className="w-52">
+                          {/* Pipeline stages in order */}
+                          {(pipelineStages.length > 0 ? pipelineStages : ALL_STATUSES).map((stage) => {
+                            const Icon = stage.icon;
+                            const isCurrent = app.status === stage.status;
+                            const currentIdx = pipelineStages.findIndex((s) => s.status === app.status);
+                            const stageIdx = pipelineStages.findIndex((s) => s.status === stage.status);
+                            const isPast = stageIdx < currentIdx;
+
                             return (
                               <DropdownMenuItem
-                                key={status.value}
+                                key={stage.status}
                                 onClick={() => {
-                                  if (!isCurrent) updateStatus(app.id, status.value);
+                                  if (!isCurrent) updateStatus(app.id, stage.status);
                                 }}
                                 disabled={isCurrent}
-                                className={isCurrent ? "opacity-50" : ""}
+                                className={`${isCurrent ? "opacity-50 bg-[#EBF0FF]" : ""} ${isPast ? "text-slate-400" : ""}`}
                               >
-                                <Icon className="w-4 h-4 mr-2" />
-                                {status.label}
-                                {isCurrent && (
-                                  <span className="ml-auto text-xs text-slate-400">
-                                    Current
-                                  </span>
-                                )}
+                                <div className="flex items-center gap-2 w-full">
+                                  <Icon className="w-4 h-4 shrink-0" />
+                                  <span className="flex-1">{stage.label}</span>
+                                  {isCurrent && (
+                                    <Badge variant="outline" className="text-[9px] h-4 px-1">Current</Badge>
+                                  )}
+                                  {isPast && (
+                                    <span className="text-[9px] text-slate-400">←</span>
+                                  )}
+                                </div>
                               </DropdownMenuItem>
                             );
                           })}
+
+                          {/* Always show Reject option */}
+                          {app.status !== "REJECTED" && (
+                            <>
+                              <DropdownMenuItem className="border-t border-slate-100 mt-1 pt-1">
+                                <div
+                                  className="flex items-center gap-2 w-full text-red-600"
+                                  onClick={() => updateStatus(app.id, "REJECTED")}
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                  <span>Reject</span>
+                                </div>
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
 
-                      {/* Reject shortcut */}
+                      {/* Schedule F2F */}
+                      {!["REJECTED", "HIRED", "APPLIED", "WITHDRAWN"].includes(app.status) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => setScheduleApp(app)}
+                        >
+                          <Calendar className="w-3 h-3 mr-1" />
+                          Schedule F2F
+                        </Button>
+                      )}
+
                       {app.status !== "REJECTED" && app.status !== "HIRED" && (
                         <Button
                           variant="outline"
@@ -362,7 +394,6 @@ export default function HRJobDetailPage() {
                         </Button>
                       )}
 
-                      {/* Hire shortcut */}
                       {app.status === "OFFERED" && (
                         <Button
                           size="sm"
@@ -382,9 +413,24 @@ export default function HRJobDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Schedule F2F Dialog */}
+      {scheduleApp && (
+        <ScheduleF2FDialog
+          open={!!scheduleApp}
+          onOpenChange={(open) => { if (!open) setScheduleApp(null); }}
+          applicationId={scheduleApp.id}
+          candidateName={`${scheduleApp.candidate?.firstName || ""} ${scheduleApp.candidate?.lastName || ""}`}
+          onScheduled={fetchData}
+        />
+      )}
     </div>
   );
 }
+
+// ==========================================
+// Interview Scores Component
+// ==========================================
 function InterviewScores({ applicationId, status }: { applicationId: string; status: string }) {
   const [scores, setScores] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -405,10 +451,7 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
         const interview = data.interviews[0];
         let breakdown = interview.score_breakdown;
         if (typeof breakdown === "string") breakdown = JSON.parse(breakdown);
-        setScores({
-          ...interview,
-          score_breakdown: breakdown,
-        });
+        setScores({ ...interview, score_breakdown: breakdown });
       }
     } catch {} finally {
       setLoading(false);
@@ -420,13 +463,13 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
   const breakdown = scores.score_breakdown || {};
 
   return (
-    <div className="mt-3 border border-indigo-100 bg-indigo-50/50 rounded-lg overflow-hidden">
+    <div className="mt-3 border border-[#D1DEFF] bg-[#EBF0FF]/50 rounded-lg overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-3 text-left hover:bg-indigo-50 transition-colors"
+        className="w-full flex items-center justify-between p-3 text-left hover:bg-[#EBF0FF] transition-colors"
       >
         <div className="flex items-center gap-3">
-          <Bot className="w-4 h-4 text-indigo-500" />
+          <Bot className="w-4 h-4 text-[#0245EF]" />
           <span className="text-sm font-medium text-slate-700">AI Interview Results</span>
           <Badge
             className={`text-xs ${
@@ -438,9 +481,7 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
             {scores.overall_score || 0}/100
           </Badge>
           {breakdown.recommendation && (
-            <Badge variant="outline" className="text-xs">
-              {breakdown.recommendation}
-            </Badge>
+            <Badge variant="outline" className="text-xs">{breakdown.recommendation}</Badge>
           )}
         </div>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
@@ -515,13 +556,12 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
             )}
           </div>
 
-          {/* View transcript link */}
+          {/* Transcript Button */}
           <Button
             variant="outline"
             size="sm"
             className="w-full text-xs"
             onClick={() => {
-              // Open transcript in new window
               const msgs = typeof scores.messages === "string"
                 ? JSON.parse(scores.messages) : scores.messages || [];
               const transcript = msgs.map((m: any) =>
@@ -544,23 +584,22 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
                   </style>
                   </head>
                   <body>
-                    <h1>🤖 AI Interview Transcript</h1>
-                    <p><strong>Overall Score:</strong>
-                      <span class="score ${(scores.overall_score || 0) >= 70 ? 'high' : (scores.overall_score || 0) >= 40 ? 'mid' : 'low'}">
+                    <h1>AI Interview Transcript</h1>
+                    <p><strong>Overall:</strong>
+                      <span class="score ${(scores.overall_score || 0) >= 70 ? "high" : (scores.overall_score || 0) >= 40 ? "mid" : "low"}">
                         ${scores.overall_score || 0}/100
                       </span>
-                      <span class="score ${(breakdown.technicalScore || 0) >= 70 ? 'high' : (breakdown.technicalScore || 0) >= 40 ? 'mid' : 'low'}">
-                        Tech: ${breakdown.technicalScore || 0}/100
+                      <span class="score ${(breakdown.technicalScore || 0) >= 70 ? "high" : (breakdown.technicalScore || 0) >= 40 ? "mid" : "low"}">
+                        Tech: ${breakdown.technicalScore || 0}
                       </span>
-                      <span class="score ${(breakdown.communicationScore || 0) >= 70 ? 'high' : (breakdown.communicationScore || 0) >= 40 ? 'mid' : 'low'}">
-                        Comm: ${breakdown.communicationScore || 0}/100
+                      <span class="score ${(breakdown.communicationScore || 0) >= 70 ? "high" : (breakdown.communicationScore || 0) >= 40 ? "mid" : "low"}">
+                        Comm: ${breakdown.communicationScore || 0}
                       </span>
                     </p>
                     ${scores.analysis ? `<p><strong>Analysis:</strong> ${scores.analysis}</p>` : ""}
                     <hr/>
                     <pre>${transcript}</pre>
-                  </body>
-                  </html>
+                  </body></html>
                 `);
               }
             }}
@@ -571,4 +610,230 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
       )}
     </div>
   );
+}
+
+// ==========================================
+// F2F Scheduled Info for HR
+// ==========================================
+function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
+  const [interviews, setInterviews] = useState<any[]>([]);
+  const [editingInterview, setEditingInterview] = useState<any>(null);
+
+  useEffect(() => {
+    fetchInterviews();
+  }, [applicationId]);
+
+  const fetchInterviews = async () => {
+    try {
+      const res = await fetch(`/api/f2f?applicationId=${applicationId}`);
+      const data = await res.json();
+      setInterviews(data.interviews || []);
+    } catch {}
+  };
+
+  if (interviews.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      {interviews.map((interview) => {
+        const date = new Date(interview.scheduled_at);
+        const isPast = date < new Date();
+        const isToday = date.toDateString() === new Date().toDateString();
+        const isCancelled = interview.status === "CANCELLED";
+
+        let metadata = interview.metadata || {};
+        try {
+          if (typeof metadata === "string") metadata = JSON.parse(metadata);
+        } catch { metadata = {}; }
+
+        const interviewerList = metadata.interviewers || [];
+
+        return (
+          <div
+            key={interview.id}
+            className={`border rounded-lg p-3 ${
+              isCancelled
+                ? "bg-red-50 border-red-200 opacity-60"
+                : isToday
+                  ? "bg-[#EBF0FF] border-[#A3BDFF]"
+                  : isPast
+                    ? interview.status === "COMPLETED"
+                      ? "bg-emerald-50 border-emerald-200"
+                      : "bg-slate-50 border-slate-200"
+                    : "bg-blue-50 border-blue-200"
+            }`}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-2">
+                <Calendar className={`w-4 h-4 mt-0.5 shrink-0 ${
+                  isCancelled ? "text-red-400" :
+                  isToday ? "text-[#0245EF]" :
+                  isPast ? "text-slate-400" : "text-blue-500"
+                }`} />
+
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-semibold ${
+                      isCancelled ? "text-red-600 line-through" :
+                      isToday ? "text-[#0237BF]" :
+                      isPast ? "text-slate-600" : "text-blue-700"
+                    }`}>
+                      {isCancelled ? "Cancelled" :
+                       isToday ? "🔴 Today" :
+                       isPast ? (interview.status === "COMPLETED" ? "✅ Completed" : "Past") :
+                       "Scheduled"}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 capitalize">
+                      {interview.interview_type}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500 mt-1">
+                    {date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    {" at "}
+                    {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    {interview.duration && ` • ${interview.duration} min`}
+                  </p>
+
+                  {interviewerList.length > 0 && (
+                    <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                      <span className="text-[10px] text-slate-400">Panel:</span>
+                      {interviewerList.map((person: any, i: number) => (
+                        <span key={i} className="text-[10px] bg-white border border-slate-200 rounded-full px-2 py-0.5 text-slate-600">
+                          {person.name}
+                          {person.role && <span className="text-slate-400 ml-0.5">• {person.role}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {interview.meeting_link && (
+                    <a href={interview.meeting_link} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] text-[#0245EF] hover:underline mt-1 inline-flex items-center gap-1">
+                      <Video className="w-3 h-3" /> Meeting link
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Edit button — only for non-cancelled, non-completed */}
+              {!isCancelled && interview.status !== "COMPLETED" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs h-7 text-[#0245EF] hover:bg-[#EBF0FF]"
+                  onClick={() => setEditingInterview(interview)}
+                >
+                  <Pencil className="w-3 h-3 mr-1" /> Edit
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Edit Dialog */}
+      {editingInterview && (
+        <EditF2FDialog
+          open={!!editingInterview}
+          onOpenChange={(open) => { if (!open) setEditingInterview(null); }}
+          interview={editingInterview}
+          onUpdated={() => {
+            setEditingInterview(null);
+            fetchInterviews();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function extractPipelineStages(pipeline: any) {
+  let nodes: any[] = [];
+  let edges: any[] = [];
+
+  try {
+    nodes = typeof pipeline.nodes === "string" ? JSON.parse(pipeline.nodes) : pipeline.nodes || [];
+    edges = typeof pipeline.edges === "string" ? JSON.parse(pipeline.edges) : pipeline.edges || [];
+  } catch {
+    return [];
+  }
+
+  // Build adjacency for ordering (follow pass paths only)
+  const adjMap = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+
+  for (const node of nodes) {
+    adjMap.set(node.id, []);
+    inDegree.set(node.id, 0);
+  }
+
+  for (const edge of edges) {
+    if (!edge.sourceHandle || edge.sourceHandle === "pass") {
+      const targets = adjMap.get(edge.source) || [];
+      targets.push(edge.target);
+      adjMap.set(edge.source, targets);
+      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+    }
+  }
+
+  // Topological sort
+  const queue: string[] = [];
+  for (const [nodeId, degree] of inDegree.entries()) {
+    if (degree === 0) queue.push(nodeId);
+  }
+
+  const ordered: any[] = [];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const node = nodes.find((n: any) => n.id === current);
+    if (node) ordered.push(node);
+    for (const next of (adjMap.get(current) || [])) {
+      const newDeg = (inDegree.get(next) || 1) - 1;
+      inDegree.set(next, newDeg);
+      if (newDeg === 0) queue.push(next);
+    }
+  }
+
+  // Convert to stage list — map node subtypes to application statuses
+  const subtypeToStatus: Record<string, { status: string; label: string; icon: any }> = {
+    job_posting: { status: "APPLIED", label: "Applied", icon: Briefcase },
+    ai_resume_screen: { status: "SCREENING", label: "Screening", icon: FileSearch },
+    coding_assessment: { status: "ASSESSMENT", label: "Assessment", icon: Code },
+    mcq_assessment: { status: "ASSESSMENT", label: "Assessment", icon: Code },
+    ai_technical_interview: { status: "AI_INTERVIEW", label: "AI Interview", icon: Bot },
+    ai_behavioral_interview: { status: "AI_INTERVIEW", label: "AI Interview", icon: Bot },
+    f2f_interview: { status: "F2F_INTERVIEW", label: "F2F Interview", icon: Video },
+    panel_interview: { status: "F2F_INTERVIEW", label: "Panel Interview", icon: Video },
+    offer: { status: "OFFERED", label: "Offered", icon: Award },
+    onboarding: { status: "HIRED", label: "Hired", icon: CheckCircle },
+  };
+
+  // Build unique ordered stages
+  const stages: { status: string; label: string; icon: any }[] = [];
+  const seenStatuses = new Set<string>();
+
+  for (const node of ordered) {
+    const subtype = node.data?.subtype;
+    if (!subtype) continue;
+
+    // Skip filter, logic, action nodes
+    if (["filter", "logic", "action"].includes(node.data?.type)) continue;
+
+    const mapping = subtypeToStatus[subtype];
+    if (mapping && !seenStatuses.has(mapping.status)) {
+      seenStatuses.add(mapping.status);
+      stages.push(mapping);
+    }
+  }
+
+  // Always add these at the end if not present
+  if (!seenStatuses.has("UNDER_REVIEW")) {
+    stages.push({ status: "UNDER_REVIEW", label: "Under Review", icon: Clock });
+  }
+  if (!seenStatuses.has("OFFERED") && !seenStatuses.has("HIRED")) {
+    stages.push({ status: "OFFERED", label: "Offered", icon: Award });
+  }
+
+  return stages;
 }

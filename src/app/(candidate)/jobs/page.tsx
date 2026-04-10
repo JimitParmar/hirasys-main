@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import {
   Select,
   SelectContent,
@@ -95,65 +96,15 @@ export default function JobsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/jobs" className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Briefcase className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-lg text-slate-800">Hirasys</span>
-          </Link>
-
-          <nav className="flex items-center gap-1">
-            <Link href="/jobs">
-              <Button variant="ghost" size="sm" className="text-indigo-600 bg-indigo-50">
-                Jobs
-              </Button>
-            </Link>
-            {isAuthenticated && (
-              <>
-                <Link href="/applications">
-                  <Button variant="ghost" size="sm">My Applications</Button>
-                </Link>
-                <Link href="/profile">
-                  <Button variant="ghost" size="sm">Profile</Button>
-                </Link>
-              </>
-            )}
-
-            <div className="h-6 w-px bg-slate-200 mx-2" />
-
-            {isAuthenticated ? (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                  <span className="text-xs font-semibold text-indigo-600">
-                    {user?.firstName?.[0]}{user?.lastName?.[0]}
-                  </span>
-                </div>
-                <span className="text-sm text-slate-600 hidden sm:block">{user?.firstName}</span>
-                <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8">
-                  <LogOut className="w-4 h-4" />
-                </Button>
-              </div>
-            ) : (
-              <Link href="/login">
-                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700">
-                  Sign In
-                </Button>
-              </Link>
-            )}
-          </nav>
-        </div>
-      </header>
+      
 
       {/* Hero + Search */}
-      <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 text-white">
+      <div className="bg-gradient-to-br from-[#0245EF] via-[#02298F] to-purple-800 text-white">
         <div className="max-w-6xl mx-auto px-4 py-16 text-center">
           <h1 className="text-4xl font-bold mb-3">
             Find Your Next Opportunity
           </h1>
-          <p className="text-indigo-200 mb-8 text-lg max-w-2xl mx-auto">
+          <p className="text-[#A3BDFF] mb-8 text-lg max-w-2xl mx-auto">
             {total} open positions • AI-powered matching • Personalized feedback on every application
           </p>
 
@@ -171,7 +122,7 @@ export default function JobsPage() {
               <Button
                 type="submit"
                 size="lg"
-                className="h-12 px-8 bg-white text-indigo-600 hover:bg-indigo-50 shadow-lg font-semibold"
+                className="h-12 px-8 bg-white text-[#0245EF] hover:bg-[#EBF0FF] shadow-lg font-semibold"
               >
                 Search
               </Button>
@@ -189,7 +140,7 @@ export default function JobsPage() {
                 className={`rounded-full text-xs ${
                   typeFilter === t
                     ? "bg-white/20 text-white"
-                    : "text-indigo-200 hover:bg-white/10 hover:text-white"
+                    : "text-[#A3BDFF] hover:bg-white/10 hover:text-white"
                 }`}
               >
                 {t === "all" ? "All Jobs" : typeLabels[t]}
@@ -203,7 +154,7 @@ export default function JobsPage() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+            <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
           </div>
         ) : filteredJobs.length === 0 ? (
           <div className="text-center py-20">
@@ -235,7 +186,7 @@ export default function JobsPage() {
                     <Badge
                       key={dept}
                       variant="outline"
-                      className="cursor-pointer hover:bg-indigo-50"
+                      className="cursor-pointer hover:bg-[#EBF0FF]"
                       onClick={() => fetchJobs(dept)}
                     >
                       {dept}
@@ -248,13 +199,13 @@ export default function JobsPage() {
             <div className="space-y-4">
               {filteredJobs.map((job) => (
                 <Link key={job.id} href={`/jobs/${job.id}`}>
-                  <Card className="hover:shadow-lg transition-all duration-300 hover:border-indigo-200 cursor-pointer group mb-4">
+                  <Card className="hover:shadow-lg transition-all duration-300 hover:border-[#A3BDFF] cursor-pointer group mb-4">
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           {/* Title row */}
                           <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <h2 className="text-lg font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                            <h2 className="text-lg font-semibold text-slate-800 group-hover:text-[#0245EF] transition-colors">
                               {job.title}
                             </h2>
                             <Badge className={`shrink-0 ${typeColors[job.type] || "bg-slate-100 text-slate-700"}`}>
@@ -297,7 +248,7 @@ export default function JobsPage() {
                                 <Badge
                                   key={skill}
                                   variant="outline"
-                                  className="text-xs bg-indigo-50 text-indigo-600 border-indigo-200"
+                                  className="text-xs bg-[#EBF0FF] text-[#0245EF] border-[#A3BDFF]"
                                 >
                                   {skill}
                                 </Badge>
@@ -320,7 +271,7 @@ export default function JobsPage() {
                           <div className="text-xs text-slate-400">
                             {formatDate(job.createdAt)}
                           </div>
-                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 transition-colors mt-4" />
+                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#0245EF] transition-colors mt-4" />
                         </div>
                       </div>
                     </CardContent>

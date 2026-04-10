@@ -56,6 +56,11 @@ export async function POST(req: NextRequest) {
 
     if (body.id) {
       // Update existing pipeline
+      // If it has nodes and a linked job, mark as ACTIVE
+      const nodes = body.nodes || [];
+      const hasNodes = Array.isArray(nodes) && nodes.length > 0;
+      const status = hasNodes ? "ACTIVE" : "DRAFT";
+
       const pipeline = await queryOne(
         `UPDATE pipelines
          SET name = COALESCE($2, name),
@@ -63,8 +68,9 @@ export async function POST(req: NextRequest) {
              edges = $4,
              estimated_cost = COALESCE($5, estimated_cost),
              linked_job_id = $6,
+             status = $7,
              updated_at = NOW()
-         WHERE id = $1 AND created_by = $7
+         WHERE id = $1 AND created_by = $8
          RETURNING *`,
         [
           body.id,
@@ -73,41 +79,35 @@ export async function POST(req: NextRequest) {
           JSON.stringify(body.edges || []),
           body.estimatedCost || 0,
           linkedJobId,
+          status,
           (session.user as any).id,
         ]
       );
 
-      // Also update the job's pipeline_id
+      // Update job linkage
       if (linkedJobId) {
-        // First, unlink any job previously linked to this pipeline
-        await query(
-          `UPDATE jobs SET pipeline_id = NULL WHERE pipeline_id = $1`,
-          [body.id]
-        );
-        // Then link the new job
-        await query(
-          `UPDATE jobs SET pipeline_id = $1 WHERE id = $2`,
-          [body.id, linkedJobId]
-        );
+        await query("UPDATE jobs SET pipeline_id = NULL WHERE pipeline_id = $1", [body.id]);
+        await query("UPDATE jobs SET pipeline_id = $1 WHERE id = $2", [body.id, linkedJobId]);
       } else {
-        // Unlink all jobs from this pipeline
-        await query(
-          `UPDATE jobs SET pipeline_id = NULL WHERE pipeline_id = $1`,
-          [body.id]
-        );
+        await query("UPDATE jobs SET pipeline_id = NULL WHERE pipeline_id = $1", [body.id]);
       }
 
       return NextResponse.json({ success: true, pipeline });
     }
 
     // Create new pipeline
+    const nodes = body.nodes || [];
+    const hasNodes = Array.isArray(nodes) && nodes.length > 0;
+    const status = hasNodes ? "ACTIVE" : "DRAFT";
+
     const pipeline = await queryOne(
       `INSERT INTO pipelines (name, status, nodes, edges, estimated_cost, linked_job_id, created_by)
-       VALUES ($1, 'DRAFT', $2, $3, $4, $5, $6)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
         body.name || "Untitled Pipeline",
-        JSON.stringify(body.nodes || []),
+        status,
+        JSON.stringify(nodes),
         JSON.stringify(body.edges || []),
         body.estimatedCost || 0,
         linkedJobId,
@@ -115,12 +115,9 @@ export async function POST(req: NextRequest) {
       ]
     );
 
-    // Link job to pipeline
+    // Link job
     if (linkedJobId && pipeline) {
-      await query(
-        `UPDATE jobs SET pipeline_id = $1 WHERE id = $2`,
-        [pipeline.id, linkedJobId]
-      );
+      await query("UPDATE jobs SET pipeline_id = $1 WHERE id = $2", [pipeline.id, linkedJobId]);
     }
 
     return NextResponse.json({ success: true, pipeline }, { status: 201 });

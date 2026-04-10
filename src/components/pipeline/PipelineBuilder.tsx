@@ -248,7 +248,7 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
         />
 
         <Panel position="top-left" className="flex gap-2 items-center">
-          <Button variant="default" size="sm" onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700">
+          <Button variant="default" size="sm" onClick={handleSave} className="bg-[#0245EF] hover:bg-[#0237BF]">
             <Save className="w-4 h-4 mr-2" /> Save
           </Button>
           <Button

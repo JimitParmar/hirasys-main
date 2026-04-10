@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -80,7 +81,7 @@ export default function HRDashboard() {
   if (isLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
       </div>
     );
   }
@@ -88,39 +89,6 @@ export default function HRDashboard() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Briefcase className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-lg text-slate-800">Hirasys</span>
-            <Badge variant="secondary" className="text-xs">HR</Badge>
-          </div>
-
-          <nav className="flex items-center gap-1">
-            <Link href="/hr/dashboard">
-              <Button variant="ghost" size="sm" className="text-indigo-600 bg-indigo-50">
-                Dashboard
-              </Button>
-            </Link>
-            <Link href="/hr/jobs/new">
-              <Button variant="ghost" size="sm">Post Job</Button>
-            </Link>
-            <Link href="/pipeline">
-              <Button variant="ghost" size="sm">Pipeline Builder</Button>
-            </Link>
-            <Link href="/hr/assessments/new">
-            <Button variant="ghost" size="sm">Assessments</Button>
-            </Link>
-            <div className="h-6 w-px bg-slate-200 mx-2" />
-            <span className="text-sm text-slate-500">{user?.firstName}</span>
-            <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8">
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </nav>
-        </div>
-      </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Welcome */}
@@ -140,7 +108,7 @@ export default function HRDashboard() {
               </Button>
             </Link>
             <Link href="/hr/jobs/new">
-              <Button className="bg-indigo-600 hover:bg-indigo-700">
+              <Button className="bg-[#0245EF] hover:bg-[#0237BF]">
                 <Plus className="w-4 h-4 mr-2" /> Post Job
               </Button>
             </Link>
@@ -151,8 +119,8 @@ export default function HRDashboard() {
         <div className="grid grid-cols-3 gap-6 mb-8">
           <Card>
             <CardContent className="p-6 flex items-center gap-4">
-              <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                <Briefcase className="w-6 h-6 text-indigo-600" />
+              <div className="w-12 h-12 bg-[#D1DEFF] rounded-xl flex items-center justify-center">
+                <Briefcase className="w-6 h-6 text-[#0245EF]" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-800">{jobs.length}</p>
@@ -201,7 +169,7 @@ export default function HRDashboard() {
                   <Briefcase className="w-10 h-10 text-slate-200 mx-auto mb-3" />
                   <p className="text-sm text-slate-500">No jobs yet</p>
                   <Link href="/hr/jobs/new">
-                    <Button size="sm" className="mt-3 bg-indigo-600 hover:bg-indigo-700">
+                    <Button size="sm" className="mt-3 bg-[#0245EF] hover:bg-[#0237BF]">
                       Post First Job
                     </Button>
                   </Link>
@@ -219,7 +187,7 @@ export default function HRDashboard() {
                         </h3>
                         <p className="text-xs text-slate-500 mt-0.5">
                           {job.department} • {job.location} •{" "}
-                          <span className="font-medium text-indigo-600">
+                          <span className="font-medium text-[#0245EF]">
                             {job._count?.applications || 0} applicants
                           </span>
                         </p>
@@ -290,7 +258,7 @@ export default function HRDashboard() {
                     Create a visual hiring pipeline
                   </p>
                   <Link href="/pipeline">
-                    <Button size="sm" className="mt-3 bg-indigo-600 hover:bg-indigo-700">
+                    <Button size="sm" className="mt-3 bg-[#0245EF] hover:bg-[#0237BF]">
                       Build Pipeline
                     </Button>
                   </Link>

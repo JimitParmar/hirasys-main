@@ -42,7 +42,7 @@ export default function FeedbackPage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
       </div>
     );
   }
@@ -74,7 +74,7 @@ export default function FeedbackPage() {
 
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* Greeting */}
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-[#0245EF] to-purple-600 text-white">
           <CardContent className="p-6">
             <Heart className="w-8 h-8 mb-3 opacity-80" />
             <p className="text-lg font-medium">{feedback.greeting}</p>
@@ -113,7 +113,7 @@ export default function FeedbackPage() {
           <Card>
             <CardContent className="p-6">
               <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-indigo-500" />
+                <TrendingUp className="w-5 h-5 text-[#0245EF]" />
                 Skill Profile
               </h3>
               <div className="space-y-3">
@@ -201,7 +201,7 @@ export default function FeedbackPage() {
 
         <div className="text-center pt-4">
           <Link href="/jobs">
-            <Button className="bg-indigo-600 hover:bg-indigo-700">
+            <Button className="bg-[#0245EF] hover:bg-[#0237BF]">
               Browse More Jobs →
             </Button>
           </Link>

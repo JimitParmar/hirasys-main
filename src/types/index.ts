@@ -182,7 +182,7 @@ export const NODE_CATALOG: NodeCatalogItem[] = [
     icon: "Code",
     color: "#3B82F6",
     costPerUnit: 2.50,
-    defaultConfig: { duration: 90, languages: ["javascript", "python"], difficulty: "medium" },
+    defaultConfig: { duration: 90, languages: ["javascript", "python","sql","typescript"], difficulty: "medium" },
   },
   {
     subtype: "mcq_assessment",

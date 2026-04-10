@@ -42,7 +42,7 @@ export function CostEstimatorPanel({
   return (
     <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden w-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#0245EF] to-purple-600 text-white">
         <div>
           <h3 className="font-semibold text-sm">💰 Cost Estimator</h3>
           <p className="text-xs opacity-80">Real-time pipeline cost preview</p>
@@ -95,12 +95,12 @@ export function CostEstimatorPanel({
 
           {/* Summary Cards */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-indigo-50 rounded-lg p-3 text-center">
-              <DollarSign className="w-4 h-4 text-indigo-500 mx-auto mb-1" />
-              <div className="text-xl font-bold text-indigo-700">
+            <div className="bg-[#EBF0FF] rounded-lg p-3 text-center">
+              <DollarSign className="w-4 h-4 text-[#0245EF] mx-auto mb-1" />
+              <div className="text-xl font-bold text-[#0237BF]">
                 ${estimate.totalCost}
               </div>
-              <div className="text-[10px] text-indigo-500">
+              <div className="text-[10px] text-[#0245EF]">
                 Total Pipeline Cost
               </div>
             </div>
@@ -208,7 +208,7 @@ export function CostEstimatorPanel({
                       </div>
                       <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full transition-all duration-500 ease-out"
+                          className="h-full bg-gradient-to-r from-[#4775FF] to-purple-400 rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${widthPercent}%` }}
                         />
                       </div>
@@ -227,8 +227,8 @@ export function CostEstimatorPanel({
           <Separator />
 
           {/* Comparison with competitors */}
-          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-lg p-3 space-y-2">
-            <p className="text-xs font-semibold text-indigo-700">
+          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-[#D1DEFF] rounded-lg p-3 space-y-2">
+            <p className="text-xs font-semibold text-[#0237BF]">
               💡 How this compares
             </p>
             <div className="space-y-1 text-[11px]">
@@ -238,7 +238,7 @@ export function CostEstimatorPanel({
                   ~${Math.round(hires * 600)}
                 </span>
               </div>
-              <div className="flex justify-between text-indigo-700 font-semibold">
+              <div className="flex justify-between text-[#0237BF] font-semibold">
                 <span>Hirasys (this pipeline)</span>
                 <span className="font-mono">${estimate.totalCost}</span>
               </div>

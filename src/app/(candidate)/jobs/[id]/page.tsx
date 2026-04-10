@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ResumeUpload } from "@/components/shared/ResumeUpload";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -114,7 +115,7 @@ export default function JobDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
       </div>
     );
   }
@@ -147,7 +148,7 @@ export default function JobDetailPage() {
             </Button>
           </Link>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-indigo-500 to-purple-600 rounded flex items-center justify-center">
+            <div className="w-6 h-6 bg-gradient-to-br from-[#0245EF] to-purple-600 rounded flex items-center justify-center">
               <Briefcase className="w-3 h-3 text-white" />
             </div>
             <span className="font-semibold text-slate-800 text-sm">Hirasys</span>
@@ -168,7 +169,7 @@ export default function JobDetailPage() {
             {/* Job Header */}
             <div>
               <div className="flex items-center gap-3 mb-3 flex-wrap">
-                <Badge className="bg-indigo-100 text-indigo-700">
+                <Badge className="bg-[#D1DEFF] text-[#0237BF]">
                   {typeLabels[job.type] || job.type}
                 </Badge>
                 <span className="text-sm text-slate-400">
@@ -208,7 +209,7 @@ export default function JobDetailPage() {
             {/* Description */}
             <div>
               <h2 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-500" />
+                <FileText className="w-5 h-5 text-[#0245EF]" />
                 About the Role
               </h2>
               <div className="prose prose-slate prose-sm max-w-none whitespace-pre-line text-slate-600 leading-relaxed">
@@ -220,7 +221,7 @@ export default function JobDetailPage() {
             {job.requirements?.length > 0 && (
               <div>
                 <h2 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-indigo-500" />
+                  <Target className="w-5 h-5 text-[#0245EF]" />
                   Requirements
                 </h2>
                 <ul className="space-y-2.5">
@@ -238,7 +239,7 @@ export default function JobDetailPage() {
             {job.skills?.length > 0 && (
               <div>
                 <h2 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-indigo-500" />
+                  <Sparkles className="w-5 h-5 text-[#0245EF]" />
                   Skills Required
                 </h2>
                 <div className="flex flex-wrap gap-2">
@@ -246,7 +247,7 @@ export default function JobDetailPage() {
                     <Badge
                       key={skill}
                       variant="outline"
-                      className="px-3 py-1 bg-indigo-50 text-indigo-700 border-indigo-200 text-sm"
+                      className="px-3 py-1 bg-[#EBF0FF] text-[#0237BF] border-[#A3BDFF] text-sm"
                     >
                       {skill}
                     </Badge>
@@ -304,21 +305,10 @@ export default function JobDetailPage() {
                   <div className="space-y-4">
                     <h3 className="font-semibold text-slate-800 text-lg">Apply Now</h3>
 
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">
-                        Resume / Experience *
-                      </Label>
-                      <p className="text-xs text-slate-400 mb-1">
-                        Paste your resume or describe your experience. Our AI will match it against this role.
-                      </p>
-                      <Textarea
-                        value={resumeText}
-                        onChange={(e) => setResumeText(e.target.value)}
-                        placeholder={`Example:\n\nJohn Doe — Senior React Developer\n5 years experience in React, TypeScript, Node.js\n\nExperience:\n- Built e-commerce platform serving 1M users at XYZ Corp\n- Led frontend team of 4 developers\n- Implemented CI/CD pipeline reducing deploy time by 60%\n\nSkills: React, TypeScript, Next.js, Node.js, PostgreSQL, AWS`}
-                        rows={10}
-                        className="text-sm"
-                      />
-                    </div>
+                    <ResumeUpload
+  value={resumeText}
+  onChange={(text) => setResumeText(text)}
+/>
 
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">
@@ -334,8 +324,8 @@ export default function JobDetailPage() {
                       />
                     </div>
 
-                    <div className="bg-indigo-50 rounded-lg p-3">
-                      <p className="text-xs text-indigo-600 flex items-start gap-2">
+                    <div className="bg-[#EBF0FF] rounded-lg p-3">
+                      <p className="text-xs text-[#0245EF] flex items-start gap-2">
                         <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
                         <span>
                           Your resume will be AI-analyzed against this job&apos;s requirements.
@@ -353,7 +343,7 @@ export default function JobDetailPage() {
                         Cancel
                       </Button>
                       <Button
-                        className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                        className="flex-1 bg-[#0245EF] hover:bg-[#0237BF]"
                         onClick={handleApply}
                         disabled={applying || !resumeText.trim()}
                       >
@@ -374,7 +364,7 @@ export default function JobDetailPage() {
                 ) : (
                   <div className="space-y-4">
                     <Button
-                      className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-base font-semibold shadow-md"
+                      className="w-full h-12 bg-[#0245EF] hover:bg-[#0237BF] text-base font-semibold shadow-md"
                       onClick={() => {
                         if (!isAuthenticated) {
                           toast("Please sign in to apply", { icon: "👤" });

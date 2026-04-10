@@ -223,3 +223,48 @@ export async function initializeDatabase() {
     EXCEPTION WHEN OTHERS THEN NULL;
     END $$;
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS f2f_interviews (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      application_id TEXT NOT NULL,
+      candidate_id TEXT NOT NULL,
+      interviewer_id TEXT NOT NULL,
+      scheduled_at TIMESTAMP NOT NULL,
+      duration INTEGER DEFAULT 60,
+      meeting_link TEXT,
+      status TEXT DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+      interview_type TEXT DEFAULT 'technical',
+      notes TEXT,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS interview_feedback (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      interview_id TEXT NOT NULL,
+      interviewer_id TEXT NOT NULL,
+      technical_score INTEGER DEFAULT 0,
+      communication_score INTEGER DEFAULT 0,
+      problem_solving_score INTEGER DEFAULT 0,
+      culture_fit_score INTEGER DEFAULT 0,
+      overall_score INTEGER DEFAULT 0,
+      recommendation TEXT DEFAULT 'maybe',
+      strengths TEXT,
+      concerns TEXT,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_f2f_application ON f2f_interviews(application_id);
+    CREATE INDEX IF NOT EXISTS idx_f2f_scheduled ON f2f_interviews(scheduled_at);
+    CREATE INDEX IF NOT EXISTS idx_feedback_interview ON interview_feedback(interview_id);
+  `);
+
+    await query(`
+    DO $$ BEGIN
+      ALTER TABLE f2f_interviews ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END $$;
+  `);
