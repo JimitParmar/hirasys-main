@@ -157,9 +157,13 @@ function convertToReactFlow(aiResult: any) {
   const nodes: any[] = [];
   const edges: any[] = [];
 
-  const X_START = 100;
-  const X_GAP = 280;
+  // Increased spacing for better readability
+  const X_START = 80;
+  const X_GAP_STAGE = 350;    // Gap between stage nodes
+  const X_GAP_FILTER = 320;   // Gap for filter nodes (slightly less)
   const Y_CENTER = 250;
+  const Y_REJECT = 450;       // Y position for reject path
+
   let currentX = X_START;
   let nodeIndex = 0;
 
@@ -169,7 +173,7 @@ function convertToReactFlow(aiResult: any) {
     catalogMap[n.subtype] = n;
   });
 
-  // 1. Add source node
+  // 1. Source node
   const sourceId = `source_${Date.now()}`;
   nodes.push({
     id: sourceId,
@@ -188,41 +192,29 @@ function convertToReactFlow(aiResult: any) {
   });
 
   let lastNodeId = sourceId;
-  currentX += X_GAP;
+  currentX += X_GAP_STAGE;
 
-  // 2. Add stage nodes with filters between them
+  // 2. Process stage nodes with filters
   const stageNodes = aiResult.nodes || [];
   const filters = aiResult.filters || [];
 
-  for (const stage of stageNodes) {
+  for (let i = 0; i < stageNodes.length; i++) {
+    const stage = stageNodes[i];
     const catalog = catalogMap[stage.subtype];
     if (!catalog) continue;
 
-    // Check if there's a filter before this stage
-    const filterBefore = filters.find(
-      (f: any) => {
-        // Find filter that goes after the PREVIOUS stage
-        const prevStage = stageNodes[stageNodes.indexOf(stage) - 1];
-        return prevStage && f.afterNode === prevStage.subtype;
-      }
-    );
+    // Check if there's a filter after the PREVIOUS stage
+    if (i > 0) {
+      const prevStage = stageNodes[i - 1];
+      const filterForPrev = filters.find(
+        (f: any) => f.afterNode === prevStage.subtype
+      );
 
-    // Also check filter after resume screen
-    const filterAfterScreen = filters.find(
-      (f: any) => f.afterNode === stage.subtype || f.afterNode === "ai_resume_screen"
-    );
-
-    // Add filter node if one exists after the previous stage
-    if (nodeIndex > 0) {
-      const relevantFilter = filters.find((f: any) => {
-        const prevStage = stageNodes[nodeIndex - 1];
-        return prevStage && f.afterNode === prevStage.subtype;
-      });
-
-      if (relevantFilter) {
-        const filterCatalog = catalogMap[relevantFilter.type];
+      if (filterForPrev) {
+        const filterCatalog = catalogMap[filterForPrev.type];
         if (filterCatalog) {
-          const filterId = `filter_${Date.now()}_${nodeIndex}`;
+          const filterId = `filter_${Date.now()}_${i}`;
+
           nodes.push({
             id: filterId,
             type: "filter",
@@ -230,11 +222,11 @@ function convertToReactFlow(aiResult: any) {
             data: {
               id: filterId,
               type: "filter",
-              subtype: relevantFilter.type,
-              label: filterCatalog.label,
+              subtype: filterForPrev.type,
+              label: filterForPrev.label || filterCatalog.label,
               config: {
                 ...filterCatalog.defaultConfig,
-                ...relevantFilter.config,
+                ...filterForPrev.config,
               },
               costPerUnit: 0,
               icon: filterCatalog.icon,
@@ -242,7 +234,6 @@ function convertToReactFlow(aiResult: any) {
             },
           });
 
-          // Edge from last node to filter
           edges.push({
             id: `e_${lastNodeId}_${filterId}`,
             source: lastNodeId,
@@ -251,9 +242,83 @@ function convertToReactFlow(aiResult: any) {
           });
 
           lastNodeId = filterId;
-          currentX += X_GAP;
+          currentX += X_GAP_FILTER;
         }
       }
+    }
+
+    // Check for filter right after resume screen (first stage)
+    if (i === 0) {
+      const filterAfterFirst = filters.find(
+        (f: any) => f.afterNode === stage.subtype
+      );
+
+      // Add stage first
+      const stageId = `${stage.subtype}_${Date.now()}_${nodeIndex}`;
+      nodes.push({
+        id: stageId,
+        type: "stage",
+        position: { x: currentX, y: Y_CENTER },
+        data: {
+          id: stageId,
+          type: "stage",
+          subtype: stage.subtype,
+          label: stage.label || catalog.label,
+          config: { ...catalog.defaultConfig, ...stage.config },
+          costPerUnit: catalog.costPerUnit,
+          icon: catalog.icon,
+          color: catalog.color,
+        },
+      });
+
+      edges.push({
+        id: `e_${lastNodeId}_${stageId}`,
+        source: lastNodeId,
+        target: stageId,
+        sourceHandle: lastNodeId.startsWith("filter_") ? "pass" : undefined,
+      });
+
+      lastNodeId = stageId;
+      currentX += X_GAP_STAGE;
+      nodeIndex++;
+
+      // Now add filter after first stage if exists
+      if (filterAfterFirst) {
+        const filterCatalog = catalogMap[filterAfterFirst.type];
+        if (filterCatalog) {
+          const filterId = `filter_${Date.now()}_first`;
+
+          nodes.push({
+            id: filterId,
+            type: "filter",
+            position: { x: currentX, y: Y_CENTER },
+            data: {
+              id: filterId,
+              type: "filter",
+              subtype: filterAfterFirst.type,
+              label: filterAfterFirst.label || filterCatalog.label,
+              config: {
+                ...filterCatalog.defaultConfig,
+                ...filterAfterFirst.config,
+              },
+              costPerUnit: 0,
+              icon: filterCatalog.icon,
+              color: filterCatalog.color,
+            },
+          });
+
+          edges.push({
+            id: `e_${lastNodeId}_${filterId}`,
+            source: lastNodeId,
+            target: filterId,
+          });
+
+          lastNodeId = filterId;
+          currentX += X_GAP_FILTER;
+        }
+      }
+
+      continue; // Already added, skip to next
     }
 
     // Add stage node
@@ -267,17 +332,13 @@ function convertToReactFlow(aiResult: any) {
         type: "stage",
         subtype: stage.subtype,
         label: stage.label || catalog.label,
-        config: {
-          ...catalog.defaultConfig,
-          ...stage.config,
-        },
+        config: { ...catalog.defaultConfig, ...stage.config },
         costPerUnit: catalog.costPerUnit,
         icon: catalog.icon,
         color: catalog.color,
       },
     });
 
-    // Edge from last node to stage
     edges.push({
       id: `e_${lastNodeId}_${stageId}`,
       source: lastNodeId,
@@ -286,7 +347,7 @@ function convertToReactFlow(aiResult: any) {
     });
 
     lastNodeId = stageId;
-    currentX += X_GAP;
+    currentX += X_GAP_STAGE;
     nodeIndex++;
   }
 
@@ -306,11 +367,8 @@ function convertToReactFlow(aiResult: any) {
             id: filterId,
             type: "filter",
             subtype: finalFilter.type,
-            label: filterCatalog.label,
-            config: {
-              ...filterCatalog.defaultConfig,
-              ...finalFilter.config,
-            },
+            label: finalFilter.label || filterCatalog.label,
+            config: { ...filterCatalog.defaultConfig, ...finalFilter.config },
             costPerUnit: 0,
             icon: filterCatalog.icon,
             color: filterCatalog.color,
@@ -323,12 +381,12 @@ function convertToReactFlow(aiResult: any) {
           sourceHandle: lastNodeId.startsWith("filter_") ? "pass" : undefined,
         });
         lastNodeId = filterId;
-        currentX += X_GAP;
+        currentX += X_GAP_FILTER;
       }
     }
   }
 
-  // 3. Add offer exit node
+  // 3. Offer exit node
   const offerId = `offer_${Date.now()}`;
   nodes.push({
     id: offerId,
