@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryOne } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { logAudit, getAuditUser } from "@/lib/audit";
 
 export async function GET(
   req: NextRequest,
@@ -51,14 +52,22 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+
   try {
     const session = await getSession();
     if (!session || !["HR", "ADMIN"].includes((session.user as any).role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
+    
     const { id } = await params;
     const body = await req.json();
+      await logAudit({
+  ...getAuditUser(session),
+  action: "JOB_UPDATED",
+  resourceType: "job",
+  resourceId: id,
+  details: body,
+});
 
     // Build dynamic update query
     const fields: string[] = [];

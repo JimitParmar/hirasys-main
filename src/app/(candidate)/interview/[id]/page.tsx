@@ -38,7 +38,7 @@ export default function InterviewPage() {
   const [isComplete, setIsComplete] = useState(false);
   const [questionsAsked, setQuestionsAsked] = useState(0);
   const [maxQuestions, setMaxQuestions] = useState(10);
-  const [startTime] = useState(Date.now());
+  const [startTime, setStartTime] = useState(Date.now());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -86,9 +86,12 @@ export default function InterviewPage() {
         setMessages(msgs);
         setMaxQuestions(data.interview.max_questions || 10);
         setQuestionsAsked(data.interview.questions_asked || 1);
-
+        
         if (data.interview.status === "COMPLETED") {
           setIsComplete(true);
+        }
+        if (data.interview.started_at) {
+          setStartTime(new Date(data.interview.started_at).getTime());
         }
       }
     } catch (err) {

@@ -28,6 +28,7 @@ import { SourceNode } from "./nodes/SourceNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { ExitNode } from "./nodes/ExitNode";
 import { NodePalette } from "./NodePalette";
+
 import { NodeConfigPanel } from "./panels/NodeConfigPanel";
 import { CostEstimatorPanel } from "./panels/CostEstimatorPanel";
 import { AIGenerateDialog } from "./AIGenerateDialog";
@@ -216,7 +217,7 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
   );
 
   // Cost estimation
-  const getCost = () => {
+    const getCost = () => {
     if (nodes.length === 0)
       return {
         totalCost: 0, perHireCost: 0, estimatedHires,
@@ -227,7 +228,8 @@ function PipelineBuilderInner({ initialNodes, initialEdges, onSave }: PipelineBu
       return estimatePipelineCost(
         nodes.map((n) => n.data as PipelineNodeData),
         edges.map((e) => ({ source: e.source, target: e.target })),
-        estimatedApplicants
+        estimatedApplicants,
+        estimatedHires  // Pass the planned hires count
       );
     } catch {
       return {

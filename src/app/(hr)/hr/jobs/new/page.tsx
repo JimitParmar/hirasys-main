@@ -15,10 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft, Plus, X, Loader2, Send, Eye, GitBranch,
-  AlertCircle, CheckCircle2, ExternalLink,
+  AlertCircle, CheckCircle2, ExternalLink, Share2
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -41,6 +42,7 @@ export default function NewJobPage() {
   const [salaryMax, setSalaryMax] = useState("");
   const [salaryCurrency, setSalaryCurrency] = useState("USD");
   const [selectedPipelineId, setSelectedPipelineId] = useState("none");
+  const [selectedPortals, setSelectedPortals] = useState<string[]>([]);
 
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState("");
@@ -267,6 +269,31 @@ export default function NewJobPage() {
                 </Link>
               </div>
             )}
+          </CardContent>
+        </Card>
+                {/* External Portals */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Share2 className="w-5 h-5 text-[#0245EF]" />
+              Publish to Job Portals
+            </CardTitle>
+            <CardDescription>
+              Auto-publish to connected platforms when job goes live.{" "}
+              <Link href="/hr/integrations" className="text-[#0245EF] hover:underline">
+                Manage integrations →
+              </Link>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PortalToggles
+              selectedPortals={selectedPortals}
+              onToggle={(portal) => {
+                setSelectedPortals((prev) =>
+                  prev.includes(portal) ? prev.filter((p) => p !== portal) : [...prev, portal]
+                );
+              }}
+            />
           </CardContent>
         </Card>
 
@@ -513,6 +540,113 @@ function PipelinePreview({ pipeline }: { pipeline: any }) {
           </React.Fragment>
         );
       })}
+    </div>
+  );
+}
+function PortalToggles({
+  selectedPortals,
+  onToggle,
+}: {
+  selectedPortals: string[];
+  onToggle: (portal: string) => void;
+}) {
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/integrations")
+      .then((r) => r.json())
+      .then((d) => setIntegrations(d.integrations || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const portals = [
+    { id: "linkedin", name: "LinkedIn", icon: "🔗", desc: "Post to LinkedIn Jobs" },
+    { id: "indeed", name: "Indeed", icon: "📋", desc: "Post to Indeed" },
+    { id: "naukri", name: "Naukri", icon: "🇮🇳", desc: "Post to Naukri.com" },
+    { id: "custom_webhook", name: "Webhook", icon: "🔌", desc: "Send to custom URL" },
+  ];
+
+  if (loading) {
+    return <p className="text-xs text-slate-400">Loading integrations...</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {portals.map((portal) => {
+        const isConnected = integrations.some((i: any) => i.platform === portal.id);
+        const isSelected = selectedPortals.includes(portal.id);
+
+        return (
+          <div
+            key={portal.id}
+            className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+              !isConnected
+                ? "bg-slate-50 border-slate-100 opacity-50"
+                : isSelected
+                  ? "bg-[#EBF0FF] border-[#A3BDFF]"
+                  : "bg-slate-50 border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-lg">{portal.icon}</span>
+              <div>
+                <p className="text-sm font-medium text-slate-700">{portal.name}</p>
+                <p className="text-[10px] text-slate-400">
+                  {isConnected ? (
+                    <span className="text-emerald-600">✓ Connected — {portal.desc}</span>
+                  ) : (
+                    <span>
+                      Not connected —{" "}
+                      <Link href="/hr/integrations" className="text-[#0245EF] hover:underline">
+                        Set up →
+                      </Link>
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {isConnected ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToggle(portal.id);
+                }}
+                className={`
+                  relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-200
+                  ${isSelected ? "bg-[#0245EF]" : "bg-slate-300"}
+                `}
+              >
+                <span
+                  className={`
+                    pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200
+                    ${isSelected ? "translate-x-5" : "translate-x-0"}
+                  `}
+                />
+              </button>
+            ) : (
+              <span className="text-[10px] text-slate-400 px-2 py-1 bg-slate-100 rounded">
+                Setup required
+              </span>
+            )}
+          </div>
+        );
+      })}
+
+      {integrations.length === 0 && (
+        <div className="text-center py-4 bg-slate-50 rounded-lg">
+          <p className="text-sm text-slate-500">No integrations configured</p>
+          <Link href="/hr/integrations">
+            <Button variant="outline" size="sm" className="mt-2 text-xs">
+              Set Up Integrations →
+            </Button>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

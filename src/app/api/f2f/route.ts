@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { getAuditUser, logAudit } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   try {
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
       applicationId, scheduledAt, duration, meetingLink,
       interviewType, notes, interviewers,
     } = body;
-
+    
     if (!applicationId || !scheduledAt) {
       return NextResponse.json({ error: "applicationId and scheduledAt required" }, { status: 400 });
     }
@@ -109,7 +110,13 @@ export async function POST(req: NextRequest) {
       "UPDATE applications SET status = 'F2F_INTERVIEW', updated_at = NOW() WHERE id = $1",
       [applicationId]
     );
-
+    await logAudit({
+  ...getAuditUser(session),
+  action: "F2F_SCHEDULED",
+  resourceType: "f2f_interview",
+  resourceId: interview.id,
+  details: { applicationId, scheduledAt, interviewers: interviewers?.length },
+});
     // Build interviewer names list
     const interviewerNames = interviewers.map((i: any) => i.name).join(", ");
 

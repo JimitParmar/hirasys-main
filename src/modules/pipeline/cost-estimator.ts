@@ -1,4 +1,4 @@
-import { PipelineNodeData, NODE_CATALOG } from "@/types";
+import { PipelineNodeData } from "@/types";
 import { PipelineEngine } from "./engine";
 
 export interface DetailedCostEstimate {
@@ -9,7 +9,7 @@ export interface DetailedCostEstimate {
   funnelStages: FunnelStage[];
   savingsVsNoFilters: number;
   savingsPercentage: number;
-  monthlyEstimate: number; // If posting this job monthly
+  monthlyEstimate: number;
 }
 
 export interface StageEstimate {
@@ -17,7 +17,7 @@ export interface StageEstimate {
   label: string;
   type: string;
   estimatedReaching: number;
-  estimatedCompleting: number; // accounting for drop-offs
+  estimatedCompleting: number;
   costPerUnit: number;
   estimatedCost: number;
   isFree: boolean;
@@ -29,25 +29,26 @@ export interface FunnelStage {
   entering: number;
   passing: number;
   filtered: number;
-  dropoff: number; // candidates who don't show up
+  dropoff: number;
 }
 
 // Average completion rates by stage type
 const COMPLETION_RATES: Record<string, number> = {
-  ai_resume_screen: 1.0,    // Automatic, 100% processed
-  coding_assessment: 0.85,   // ~15% don't start/complete
-  mcq_assessment: 0.90,      // ~10% don't complete
+  ai_resume_screen: 1.0,
+  coding_assessment: 0.85,
+  mcq_assessment: 0.90,
   subjective_assessment: 0.80,
   ai_technical_interview: 0.90,
   ai_behavioral_interview: 0.92,
-  f2f_interview: 0.95,       // High completion (already invested)
+  f2f_interview: 0.95,
   panel_interview: 0.95,
 };
 
 export function estimatePipelineCost(
   nodes: PipelineNodeData[],
   edges: { source: string; target: string }[],
-  totalApplicants: number
+  totalApplicants: number,
+  plannedHires?: number
 ): DetailedCostEstimate {
   const engine = new PipelineEngine("estimate", nodes, edges);
   const executionOrder = engine.getExecutionOrder();
@@ -134,7 +135,16 @@ export function estimatePipelineCost(
     }
 
     if (node.type === "action" || node.type === "exit") {
-      const cost = currentVolume * node.costPerUnit;
+      // For EXIT nodes (offer) — use planned hires count, not funnel output
+      let volume = currentVolume;
+
+      if (node.type === "exit" && node.subtype === "offer" && plannedHires) {
+        // The actual cost is only for the number they plan to hire
+        // not everyone who reaches the offer stage
+        volume = Math.min(plannedHires, currentVolume);
+      }
+
+      const cost = volume * node.costPerUnit;
       totalCostWithFilters += cost;
       totalCostWithout += totalApplicants * node.costPerUnit;
 
@@ -143,15 +153,27 @@ export function estimatePipelineCost(
         label: node.label,
         type: node.subtype,
         estimatedReaching: Math.round(currentVolume),
-        estimatedCompleting: Math.round(currentVolume),
+        estimatedCompleting: Math.round(volume),
         costPerUnit: node.costPerUnit,
         estimatedCost: Math.round(cost * 100) / 100,
         isFree: node.costPerUnit === 0,
       });
+
+      if (node.type === "exit") {
+        funnelStages.push({
+          nodeId: node.id,
+          label: node.label,
+          entering: Math.round(currentVolume),
+          passing: plannedHires ? Math.min(plannedHires, currentVolume) : Math.round(currentVolume),
+          filtered: 0,
+          dropoff: 0,
+        });
+      }
     }
   }
 
-  const estimatedHires = Math.max(1, Math.round(totalApplicants * 0.004));
+  // Use planned hires or estimate
+  const estimatedHires = plannedHires || Math.max(1, Math.round(totalApplicants * 0.004));
   const savings = totalCostWithout - totalCostWithFilters;
 
   return {
@@ -171,20 +193,20 @@ function estimateFilterOutput(node: PipelineNodeData, currentVolume: number): nu
 
   switch (node.subtype) {
     case "top_n":
-      return Math.min(config.n || 50, currentVolume);
+      return Math.min(config?.n || 50, currentVolume);
     case "score_gate":
-      return Math.round(currentVolume * 0.5); // ~50% pass a gate
+      return Math.round(currentVolume * 0.5);
     case "percentage":
       return Math.min(
         Math.max(
-          Math.round(currentVolume * ((config.percentage || 25) / 100)),
-          config.minPass || 1
+          Math.round(currentVolume * ((config?.percentage || 25) / 100)),
+          config?.minPass || 1
         ),
-        config.maxPass || currentVolume
+        config?.maxPass || currentVolume
       );
     case "hybrid": {
       const fastTracked = Math.round(currentVolume * 0.15);
-      const batchN = config.batchN || 40;
+      const batchN = config?.batchN || 40;
       return Math.min(fastTracked + batchN, currentVolume);
     }
     case "human_approval":
@@ -192,7 +214,7 @@ function estimateFilterOutput(node: PipelineNodeData, currentVolume: number): nu
     case "multi_criteria":
       return Math.round(currentVolume * 0.4);
     case "waitlist":
-      return Math.min(config.capacity || 20, currentVolume);
+      return Math.min(config?.capacity || 20, currentVolume);
     case "time_gate":
       return Math.round(currentVolume * 0.5);
     default:

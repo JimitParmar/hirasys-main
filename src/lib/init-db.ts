@@ -268,3 +268,98 @@ export async function initializeDatabase() {
     EXCEPTION WHEN OTHERS THEN NULL;
     END $$;
   `);
+
+    await query(`
+    CREATE TABLE IF NOT EXISTS integrations (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      user_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      api_key TEXT,
+      api_secret TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      config JSONB DEFAULT '{}',
+      is_active BOOLEAN DEFAULT true,
+      last_synced_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, platform)
+    );
+
+    CREATE TABLE IF NOT EXISTS job_postings_external (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      job_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      external_id TEXT,
+      external_url TEXT,
+      status TEXT DEFAULT 'PENDING',
+      response JSONB,
+      posted_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_integrations_user ON integrations(user_id);
+    CREATE INDEX IF NOT EXISTS idx_external_postings_job ON job_postings_external(job_id);
+  `);
+
+    // Companies table
+  await query(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      name TEXT NOT NULL,
+      domain TEXT,
+      logo_url TEXT,
+      plan TEXT DEFAULT 'FREE',
+      settings JSONB DEFAULT '{}',
+      created_by TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    -- Add company_id to users
+    DO $$ BEGIN
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_by TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'UTC';
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END $$;
+
+    -- Team invitations
+    CREATE TABLE IF NOT EXISTS invitations (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      company_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'HR',
+      invited_by TEXT NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      status TEXT DEFAULT 'PENDING',
+      accepted_at TIMESTAMP,
+      expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '7 days',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    -- Audit log
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      company_id TEXT,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      user_email TEXT,
+      action TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT,
+      resource_name TEXT,
+      details JSONB DEFAULT '{}',
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_companies_created_by ON companies(created_by);
+    CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id);
+    CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
+    CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
+    CREATE INDEX IF NOT EXISTS idx_audit_company ON audit_logs(company_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id);
+  `);

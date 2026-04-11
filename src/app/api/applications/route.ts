@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { getCompanyUserIds } from "@/lib/company";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,28 +13,38 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const jobId = searchParams.get("jobId");
 
+    const userId = (session.user as any).id;
+    const role = (session.user as any).role;
+
     let whereClause = "WHERE 1=1";
     const params: any[] = [];
     let idx = 1;
 
-    if ((session.user as any).role === "CANDIDATE") {
+    if (role === "CANDIDATE") {
+      // Candidates see only their own
       whereClause += ` AND a.candidate_id = $${idx}`;
-      params.push((session.user as any).id);
+      params.push(userId);
       idx++;
-    }
-
-    if (jobId) {
-      whereClause += ` AND a.job_id = $${idx}`;
-      params.push(jobId);
-      idx++;
+    } else if (["HR", "ADMIN"].includes(role)) {
+      // HR/Admin see applications for ALL company jobs
+      if (jobId) {
+        whereClause += ` AND a.job_id = $${idx}`;
+        params.push(jobId);
+        idx++;
+      } else {
+        // All applications for jobs posted by anyone in the company
+        const companyUserIds = await getCompanyUserIds(userId);
+        const placeholders = companyUserIds.map((_, i) => `$${idx + i}`).join(", ");
+        whereClause += ` AND a.job_id IN (SELECT id FROM jobs WHERE posted_by IN (${placeholders}))`;
+        params.push(...companyUserIds);
+        idx += companyUserIds.length;
+      }
     }
 
     const applications = await queryMany(
       `SELECT a.*,
-        j.title as job_title,
-        j.department as job_department,
-        j.location as job_location,
-        j.type as job_type,
+        j.title as job_title, j.department as job_department,
+        j.location as job_location, j.type as job_type,
         ju.company as job_company,
         u.first_name as candidate_first_name,
         u.last_name as candidate_last_name,
@@ -55,18 +66,13 @@ export async function GET(req: NextRequest) {
       resumeScore: a.resume_score,
       appliedAt: a.applied_at,
       job: {
-        id: a.job_id,
-        title: a.job_title,
-        department: a.job_department,
-        location: a.job_location,
-        type: a.job_type,
+        id: a.job_id, title: a.job_title, department: a.job_department,
+        location: a.job_location, type: a.job_type,
         poster: { company: a.job_company },
       },
       candidate: {
-        id: a.candidate_id,
-        firstName: a.candidate_first_name,
-        lastName: a.candidate_last_name,
-        email: a.candidate_email,
+        id: a.candidate_id, firstName: a.candidate_first_name,
+        lastName: a.candidate_last_name, email: a.candidate_email,
       },
     }));
 

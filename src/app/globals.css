@@ -65,6 +65,10 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+/* Debug: show raw timestamps */
+[data-timestamp]::after {
+  content: attr(data-timestamp);
+}
 
 /* React Flow overrides */
 .react-flow__panel { margin: 12px !important; }

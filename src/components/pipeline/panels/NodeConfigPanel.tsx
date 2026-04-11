@@ -738,19 +738,16 @@ function CodingAssessmentConfig({
   const [generating, setGenerating] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const questions = config.questions || [];
+  const questionMode = config.questionMode || "auto";
 
   const generateQuestions = async () => {
     setGenerating(true);
     try {
-      // First fetch the linked job to get context
       let jobContext = null;
       try {
         const pipelineRes = await fetch("/api/pipeline");
         const pipelineData = await pipelineRes.json();
-        const pipelines = pipelineData.pipelines || [];
-
-        // Find a pipeline with a linked job
-        for (const pipeline of pipelines) {
+        for (const pipeline of pipelineData.pipelines || []) {
           if (pipeline.linked_job_id) {
             const jobRes = await fetch(`/api/jobs/${pipeline.linked_job_id}`);
             const jobData = await jobRes.json();
@@ -765,9 +762,7 @@ function CodingAssessmentConfig({
             }
           }
         }
-      } catch (err) {
-        console.log("Could not fetch job context:", err);
-      }
+      } catch {}
 
       const res = await fetch("/api/assessments/generate-for-node", {
         method: "POST",
@@ -783,7 +778,7 @@ function CodingAssessmentConfig({
       const data = await res.json();
       if (data.questions) {
         updateConfig("questions", data.questions);
-        toast.success(`Generated ${data.questions.length} questions based on job description!`);
+        toast.success(`Generated ${data.questions.length} questions!`);
       }
     } catch {
       toast.error("Failed to generate");
@@ -828,10 +823,9 @@ function CodingAssessmentConfig({
       <div className="space-y-1.5">
         {[
           { id: "javascript", label: "JavaScript", desc: "Node.js runtime" },
-          { id: "python", label: "Python", desc: "Python 3.x runtime" },
-          { id: "typescript", label: "TypeScript", desc: "Compiled to JavaScript" },
+          { id: "python", label: "Python", desc: "Python 3.x" },
+          { id: "typescript", label: "TypeScript", desc: "Compiled to JS" },
           { id: "sql", label: "SQL / MySQL", desc: "Database queries" },
-          { id: "postgresql", label: "PostgreSQL", desc: "Advanced SQL" },
           { id: "java", label: "Java", desc: "Requires Docker" },
           { id: "cpp", label: "C++", desc: "Requires Docker" },
         ].map((lang) => (
@@ -851,45 +845,128 @@ function CodingAssessmentConfig({
       </div>
 
       <Separator />
-      <SectionTitle>Questions</SectionTitle>
+      <SectionTitle>Question Mode</SectionTitle>
 
-      {questions.length > 0 ? (
-        <div className="space-y-2">
+      {/* MODE SELECTOR */}
+      <div className="space-y-2">
+        <div
+          onClick={() => updateConfig("questionMode", "auto")}
+          className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+            questionMode === "auto"
+              ? "border-[#0245EF] bg-[#EBF0FF]"
+              : "border-slate-200 hover:border-slate-300"
+          }`}
+        >
           <div className="flex items-center justify-between">
-            <span className="text-sm text-emerald-600 font-medium">✅ {questions.length} questions ready</span>
-            <button onClick={() => setPreviewOpen(!previewOpen)} className="text-xs text-[#0245EF] hover:underline">
-              {previewOpen ? "Hide" : "Preview"}
-            </button>
-          </div>
-          {previewOpen && (
-            <div className="space-y-2 max-h-[250px] overflow-y-auto">
-              {questions.map((q: any, i: number) => (
-                <div key={i} className="bg-slate-50 rounded-lg p-2 text-xs border border-slate-100">
-                  <p className="font-medium text-slate-700">Q{i + 1}: {q.title}</p>
-                  <p className="text-slate-400 mt-0.5">{q.difficulty} • {q.points} pts • {q.testCases?.length || 0} tests</p>
-                </div>
-              ))}
+            <div>
+              <p className={`text-sm font-medium ${questionMode === "auto" ? "text-[#0245EF]" : "text-slate-700"}`}>
+                🤖 Auto-generate from Job Description
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Questions generated when candidate starts. Different questions for each job using this pipeline.
+              </p>
             </div>
-          )}
-          <Button variant="outline" size="sm" className="w-full text-xs" onClick={generateQuestions} disabled={generating}>
-            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null} Regenerate
-          </Button>
+            <div className={`w-4 h-4 rounded-full border-2 ${
+              questionMode === "auto" ? "border-[#0245EF] bg-[#0245EF]" : "border-slate-300"
+            }`}>
+              {questionMode === "auto" && (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      ) : (
+
+        <div
+          onClick={() => updateConfig("questionMode", "preset")}
+          className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+            questionMode === "preset"
+              ? "border-[#0245EF] bg-[#EBF0FF]"
+              : "border-slate-200 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm font-medium ${questionMode === "preset" ? "text-[#0245EF]" : "text-slate-700"}`}>
+                📝 Pre-set Questions
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Same questions for every candidate. You generate and review them now.
+              </p>
+            </div>
+            <div className={`w-4 h-4 rounded-full border-2 ${
+              questionMode === "preset" ? "border-[#0245EF] bg-[#0245EF]" : "border-slate-300"
+            }`}>
+              {questionMode === "preset" && (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* AUTO MODE — show info */}
+      {questionMode === "auto" && (
+        <div className="bg-[#EBF0FF] border border-[#A3BDFF] rounded-lg p-3 text-xs text-[#02298F] space-y-1">
+          <p className="font-semibold">✨ How Auto-Generate Works</p>
+          <p>When a candidate starts the assessment, Hirasys reads the job description and generates {config.questionCount || 3} unique coding questions relevant to THAT specific role.</p>
+          <p>• React Developer job → React + JS questions</p>
+          <p>• Python Backend job → Python + SQL questions</p>
+          <p>• Same pipeline works for ALL your engineering roles!</p>
+        </div>
+      )}
+
+      {/* PRESET MODE — show generate/preview */}
+      {questionMode === "preset" && (
         <div className="space-y-2">
-          <Button className="w-full bg-purple-600 hover:bg-purple-700" size="sm" onClick={generateQuestions} disabled={generating}>
-            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            AI Generate Questions
-          </Button>
-          <p className="text-[10px] text-slate-400 text-center">
-            Questions will be based on the linked job description
-          </p>
+          {questions.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-emerald-600 font-medium">✅ {questions.length} questions ready</span>
+                <button onClick={() => setPreviewOpen(!previewOpen)} className="text-xs text-[#0245EF] hover:underline">
+                  {previewOpen ? "Hide" : "Preview"}
+                </button>
+              </div>
+              {previewOpen && (
+                <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                  {questions.map((q: any, i: number) => (
+                    <div key={i} className="bg-slate-50 rounded-lg p-2 text-xs border border-slate-100">
+                      <p className="font-medium text-slate-700">Q{i + 1}: {q.title}</p>
+                      <p className="text-slate-400 mt-0.5">{q.difficulty} • {q.points} pts • {q.testCases?.length || 0} tests</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button variant="outline" size="sm" className="w-full text-xs" onClick={generateQuestions} disabled={generating}>
+                {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null} Regenerate
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+                ⚠️ No questions generated yet. Generate questions to use preset mode.
+              </div>
+              <Button className="w-full bg-purple-600 hover:bg-purple-700" size="sm" onClick={generateQuestions} disabled={generating}>
+                {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                AI Generate Questions
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Warning for preset mode without questions */}
+      {questionMode === "preset" && questions.length === 0 && (
+        <div className="text-[10px] text-amber-600">
+          ⚠️ Switch to Auto mode or generate questions before publishing
         </div>
       )}
     </div>
   );
 }
-
 function MCQConfig({
   config,
   updateConfig,

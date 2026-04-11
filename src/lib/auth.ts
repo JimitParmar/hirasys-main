@@ -12,55 +12,49 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (
-  typeof credentials?.email !== "string" ||
-  typeof credentials?.password !== "string"
-) {
-  return null;
-}
+  const email = credentials?.email as string | undefined;
+  const password = credentials?.password as string | undefined;
 
-        const user = await queryOne(
-          "SELECT * FROM users WHERE email = $1 AND is_active = true",
-          [credentials.email]
-        );
+  if (!email || !password) return null;
 
-        if (!user) return null;
+  const user = await queryOne(
+    "SELECT * FROM users WHERE email = $1 AND is_active = true",
+    [email]
+  );
 
-        const isValid = await bcrypt.compare(
-          credentials.password,
-          user.password_hash
-        );
-        if (!isValid) return null;
+  if (!user) return null;
 
-        await query(
-          "UPDATE users SET last_login_at = NOW() WHERE id = $1",
-          [user.id]
-        );
+  const isValid = await bcrypt.compare(password, user.password_hash);
+  if (!isValid) return null;
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: `${user.first_name} ${user.last_name}`,
-          role: user.role,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          company: user.company,
-        } as any;
-      },
+  await query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: `${user.first_name} ${user.last_name}`,
+    role: user.role,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    company: user.company,
+    companyId: user.company_id,
+  } as any;
+},
     }),
   ],
 
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.id = (user as any).id;
-        token.role = (user as any).role;
-        token.firstName = (user as any).firstName;
-        token.lastName = (user as any).lastName;
-        token.company = (user as any).company;
-      }
-      return token;
-    },
+  if (user) {
+    token.id = (user as any).id;
+    token.role = (user as any).role;
+    token.firstName = (user as any).firstName;
+    token.lastName = (user as any).lastName;
+    token.company = (user as any).company;
+    token.companyId = (user as any).companyId;
+  }
+  return token;
+},
 
     async session({ session, token }) {
       if (session.user) {
@@ -69,6 +63,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).firstName = token.firstName;
         (session.user as any).lastName = token.lastName;
         (session.user as any).company = token.company;
+        (session.user as any).companyId = token.companyId;
       }
       return session;
     },

@@ -23,7 +23,7 @@ export function useAuth() {
     return result;
   };
 
-  const register = async (data: {
+    const register = async (data: {
     email: string;
     password: string;
     firstName: string;
@@ -36,12 +36,18 @@ export function useAuth() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+
     const json = await res.json();
-    if (!res.ok) throw new Error(json.error);
+
+    if (!res.ok) {
+      const error: any = new Error(json.error);
+      if (json.suggestion) error.suggestion = json.suggestion;
+      throw error;
+    }
+
     await login(data.email, data.password);
     return json;
   };
-
   const logout = async () => {
     await signOut({ redirect: false });
     router.push("/login");

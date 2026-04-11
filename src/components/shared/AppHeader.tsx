@@ -5,9 +5,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "./NotificationBell";
+import { Logo } from "./Logo";
 import {
   Briefcase, LogOut, LayoutDashboard, GitBranch,
-  PlusCircle, Search, User, FileText,
+  PlusCircle, Search, User, FileText, Globe, Users
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -33,12 +34,7 @@ export function AppHeader() {
         <div className="h-14 flex items-center justify-between">
           {/* Logo + Nav */}
           <div className="flex items-center gap-6">
-            <Link href={isHR ? "/hr/dashboard" : "/jobs"} className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] rounded-lg flex items-center justify-center shadow-sm">
-                <Briefcase className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-bold text-lg text-slate-800 hidden sm:block">Hirasys</span>
-            </Link>
+            <Logo size="md" showText={true} linkTo={isHR ? "/hr/dashboard" : "/jobs"} />
 
             <nav className="flex items-center gap-1">
               {isHR ? (
@@ -46,6 +42,8 @@ export function AppHeader() {
                   <NavLink href="/hr/dashboard" icon={LayoutDashboard} label="Dashboard" active={isActive("/hr/dashboard")} />
                   <NavLink href="/hr/jobs/new" icon={PlusCircle} label="Post Job" active={isActive("/hr/jobs/new")} />
                   <NavLink href="/pipeline" icon={GitBranch} label="Pipelines" active={isActive("/pipeline")} />
+                  <NavLink href="/hr/integrations" icon={Globe} label="Integrations" active={isActive("/hr/integrations")} />
+                  <NavLink href="/hr/team" icon={Users} label="Team" active={isActive("/hr/team")} />
                 </>
               ) : (
                 <>

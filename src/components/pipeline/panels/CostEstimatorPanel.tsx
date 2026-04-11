@@ -40,7 +40,7 @@ export function CostEstimatorPanel({
       : estimate.totalCost;
 
   return (
-    <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden w-full">
+    <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-y-scroll w-full">
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#0245EF] to-[#5B3FE6] text-white">
         <div>
@@ -62,8 +62,8 @@ export function CostEstimatorPanel({
           {/* Inputs */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-                <Users className="w-3 h-3" />
+              <Label className="text-xs font-semibold text-slate-500 flex items-center gap-1 text-nowrap">
+                <Users className="w-3 h-3 " />
                 Expected Applicants
               </Label>
               <Input
@@ -145,37 +145,35 @@ export function CostEstimatorPanel({
             )}
 
             {estimate.stageBreakdown.map((stage) => (
-              <div
-                key={stage.nodeId}
-                className={`flex items-center justify-between p-2.5 rounded-lg text-xs ${
-                  stage.isFree ? "bg-amber-50 border border-amber-100" : "bg-slate-50"
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-700 truncate">
-                    {stage.label}
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    {stage.estimatedReaching} reach
-                    {stage.estimatedReaching !== stage.estimatedCompleting &&
-                      ` → ${stage.estimatedCompleting} complete`}
-                    {!stage.isFree &&
-                      ` × $${stage.costPerUnit}`}
-                  </div>
-                </div>
-                <div className="text-right shrink-0 ml-3">
-                  {stage.isFree ? (
-                    <Badge className="bg-green-100 text-green-700 text-[10px] hover:bg-green-100">
-                      FREE
-                    </Badge>
-                  ) : (
-                    <span className="font-bold text-slate-700 font-mono">
-                      ${stage.estimatedCost}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+  <div
+    key={stage.nodeId}
+    className={`flex items-center justify-between p-2.5 rounded-lg text-xs ${
+      stage.isFree ? "bg-amber-50 border border-amber-100" : "bg-slate-50"
+    }`}
+  >
+    <div className="flex-1 min-w-0">
+      <div className="font-medium text-slate-700 truncate">{stage.label}</div>
+      <div className="text-[11px] text-slate-400">
+        {stage.estimatedReaching} reach
+        {stage.estimatedReaching !== stage.estimatedCompleting && (
+          <span> → {stage.estimatedCompleting} {stage.type === "offer" ? "hired" : "complete"}</span>
+        )}
+        {!stage.isFree && ` × $${stage.costPerUnit}`}
+      </div>
+    </div>
+    <div className="text-right shrink-0 ml-3">
+      {stage.isFree ? (
+        <Badge className="bg-green-100 text-green-700 text-[10px] hover:bg-green-100">
+          FREE
+        </Badge>
+      ) : (
+        <span className="font-bold text-slate-700 font-mono">
+          ${stage.estimatedCost}
+        </span>
+      )}
+    </div>
+  </div>
+))}
           </div>
 
           {estimate.funnelStages.length > 0 && (

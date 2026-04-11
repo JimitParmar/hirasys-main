@@ -186,11 +186,16 @@ export default function HRDashboard() {
                           {job.title}
                         </h3>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          {job.department} • {job.location} •{" "}
-                          <span className="font-medium text-[#0245EF]">
-                            {job._count?.applications || 0} applicants
-                          </span>
-                        </p>
+  {job.department} • {job.location} •{" "}
+  <span className="font-medium text-[#0245EF]">
+    {job._count?.applications || 0} applicants
+  </span>
+  {job.poster?.firstName && (
+    <span className="text-slate-400">
+      {" "}• by {job.poster.firstName} {job.poster.lastName}
+    </span>
+  )}
+</p>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0 ml-3">
@@ -283,10 +288,10 @@ export default function HRDashboard() {
                           </h3>
                           <p className="text-xs text-slate-500 mt-0.5">
                             {nodeCount} nodes •{" "}
-                            {pipeline.linked_job_title
-                              ? `Linked to: ${pipeline.linked_job_title}`
-                              : "Not linked to a job"
-                            }
+                            {parseInt(pipeline.job_count) > 0
+  ? `${pipeline.job_count} job${parseInt(pipeline.job_count) > 1 ? "s" : ""} linked${pipeline.linked_job_titles ? `: ${pipeline.linked_job_titles}` : ""}`
+  : "Not linked to any job"
+}
                             {" • "}
                             {formatRelativeTime(pipeline.updated_at || pipeline.created_at)}
                           </p>

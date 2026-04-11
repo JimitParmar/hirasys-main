@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { NotificationBell } from "@/components/shared/NotificationBell";
-import { EditF2FDialog } from "@/components/shared/EditF2FDialog";
 import { ScheduleF2FDialog } from "@/components/shared/ScheduleF2FDialog";
+import { EditF2FDialog } from "@/components/shared/EditF2FDialog";
+import { ShareJobDialog } from "@/components/shared/ShareJobDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +20,7 @@ import {
   ArrowLeft, Loader2, Users, Mail, Briefcase,
   ChevronDown, Pencil, FileSearch, Code, Bot,
   Video, Award, XCircle, Clock,
-  CheckCircle, ArrowRight, Calendar,
+  CheckCircle, ArrowRight, Calendar, Share2,
 } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
@@ -27,7 +28,7 @@ import toast from "react-hot-toast";
 
 const ALL_STATUSES = [
   { value: "APPLIED", label: "Applied", color: "bg-blue-100 text-blue-700", icon: Briefcase },
-  { value: "SCREENING", label: "Screening", color: "bg-[#D1DEFF] text-[#0237BF]", icon: FileSearch },
+  { value: "SCREENING", label: "Screening", color: "bg-[#EBF0FF] text-[#0245EF]", icon: FileSearch },
   { value: "ASSESSMENT", label: "Assessment", color: "bg-purple-100 text-purple-700", icon: Code },
   { value: "AI_INTERVIEW", label: "AI Interview", color: "bg-violet-100 text-violet-700", icon: Bot },
   { value: "F2F_INTERVIEW", label: "F2F Interview", color: "bg-pink-100 text-pink-700", icon: Video },
@@ -37,22 +38,18 @@ const ALL_STATUSES = [
   { value: "REJECTED", label: "Rejected", color: "bg-red-100 text-red-700", icon: XCircle },
 ];
 
-const STAGE_ORDER = [
-  "APPLIED", "SCREENING", "ASSESSMENT", "AI_INTERVIEW",
-  "F2F_INTERVIEW", "UNDER_REVIEW", "OFFERED", "HIRED",
-];
-
 export default function HRJobDetailPage() {
   const { id } = useParams();
   const { isHR, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [job, setJob] = useState<any>(null);
-  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("all");
   const [scheduleApp, setScheduleApp] = useState<any>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [showShare, setShowShare] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isHR) router.push("/login");
@@ -62,7 +59,7 @@ export default function HRJobDetailPage() {
     if (isHR) fetchData();
   }, [isHR, id]);
 
-    const fetchData = async () => {
+  const fetchData = async () => {
     try {
       const [jobRes, appsRes] = await Promise.all([
         fetch(`/api/jobs/${id}`),
@@ -100,7 +97,19 @@ export default function HRJobDetailPage() {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error("Failed to update");
-      toast.success(`Moved to ${ALL_STATUSES.find((s) => s.value === newStatus)?.label || newStatus}`);
+
+      const label = ALL_STATUSES.find((s) => s.value === newStatus)?.label || newStatus;
+      toast.success(`Moved to ${label}`);
+
+      // Trigger pipeline execution
+      try {
+        await fetch("/api/pipeline/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ applicationId: appId, trigger: "manual_stage_change" }),
+        });
+      } catch {}
+
       fetchData();
     } catch {
       toast.error("Failed to update status");
@@ -109,18 +118,16 @@ export default function HRJobDetailPage() {
     }
   };
 
-    const getNextStage = (currentStatus: string): string | null => {
-    if (pipelineStages.length === 0) {
-      // Fallback to default order
-      const defaultOrder = ["APPLIED", "SCREENING", "ASSESSMENT", "AI_INTERVIEW", "F2F_INTERVIEW", "UNDER_REVIEW", "OFFERED", "HIRED"];
-      const idx = defaultOrder.indexOf(currentStatus);
-      if (idx === -1 || idx >= defaultOrder.length - 1) return null;
-      return defaultOrder[idx + 1];
+  const getNextStage = (currentStatus: string): string | null => {
+    if (pipelineStages.length > 0) {
+      const idx = pipelineStages.findIndex((s) => s.status === currentStatus);
+      if (idx === -1 || idx >= pipelineStages.length - 1) return null;
+      return pipelineStages[idx + 1].status;
     }
-
-    const currentIndex = pipelineStages.findIndex((s) => s.status === currentStatus);
-    if (currentIndex === -1 || currentIndex >= pipelineStages.length - 1) return null;
-    return pipelineStages[currentIndex + 1].status;
+    const defaultOrder = ["APPLIED", "SCREENING", "ASSESSMENT", "AI_INTERVIEW", "F2F_INTERVIEW", "UNDER_REVIEW", "OFFERED", "HIRED"];
+    const idx = defaultOrder.indexOf(currentStatus);
+    if (idx === -1 || idx >= defaultOrder.length - 1) return null;
+    return defaultOrder[idx + 1];
   };
 
   const getStatusInfo = (status: string) => {
@@ -155,14 +162,52 @@ export default function HRJobDetailPage() {
     statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
   });
 
+  const stagesForDropdown = pipelineStages.length > 0 ? pipelineStages : ALL_STATUSES;
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      
+      {/* Sub-header */}
+      <div className="bg-white border-b border-slate-200 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto h-12 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/hr/dashboard">
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="font-semibold text-sm text-slate-800">{job.title}</h1>
+              <p className="text-[11px] text-slate-400">
+                {job.department} • {applications.length} applicant{applications.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+          </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Status filter tabs */}
-                {/* Status filter tabs — based on pipeline */}
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className={
+                job.status === "PUBLISHED"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-slate-50 text-slate-500"
+              }
+            >
+              {job.status}
+            </Badge>
+            <Button variant="outline" size="sm" onClick={() => setShowShare(true)}>
+              <Share2 className="w-4 h-4 mr-1" /> Share
+            </Button>
+            <Link href={`/hr/jobs/${id}/edit`}>
+              <Button variant="outline" size="sm">
+                <Pencil className="w-4 h-4 mr-1" /> Edit
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        {/* Filter tabs */}
         <div className="flex items-center gap-2 mb-6 flex-wrap">
           <Button
             variant={filterStatus === "all" ? "default" : "outline"}
@@ -173,27 +218,27 @@ export default function HRJobDetailPage() {
             All ({applications.length})
           </Button>
 
-          {/* Pipeline stages */}
-          {(pipelineStages.length > 0 ? pipelineStages : ALL_STATUSES)
-            .filter((s) => statusCounts[s.status])
+          {stagesForDropdown
+            .filter((s) => statusCounts[s.status || s.value])
             .map((stage) => {
+              const status = stage.status || stage.value;
+              const label = stage.label;
               const StageIcon = stage.icon;
               return (
                 <Button
-                  key={stage.status}
-                  variant={filterStatus === stage.status ? "default" : "outline"}
+                  key={status}
+                  variant={filterStatus === status ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setFilterStatus(stage.status)}
-                  className={filterStatus === stage.status ? "bg-[#0245EF]" : ""}
+                  onClick={() => setFilterStatus(status)}
+                  className={filterStatus === status ? "bg-[#0245EF]" : ""}
                 >
                   <StageIcon className="w-3 h-3 mr-1" />
-                  {stage.label} ({statusCounts[stage.status]})
+                  {label} ({statusCounts[status]})
                 </Button>
               );
             })}
 
-          {/* Always show Rejected tab if there are rejected candidates */}
-          {statusCounts["REJECTED"] && !pipelineStages.some((s) => s.status === "REJECTED") && (
+          {statusCounts["REJECTED"] && !stagesForDropdown.some((s) => (s.status || s.value) === "REJECTED") && (
             <Button
               variant={filterStatus === "REJECTED" ? "default" : "outline"}
               size="sm"
@@ -229,13 +274,11 @@ export default function HRJobDetailPage() {
                 <Card
                   key={app.id}
                   className={`hover:shadow-md transition-all ${
-                    index === 0 && filterStatus === "all"
-                      ? "border-[#A3BDFF] bg-[#EBF0FF]/20"
-                      : ""
+                    index === 0 && filterStatus === "all" ? "border-[#A3BDFF] bg-[#EBF0FF]/20" : ""
                   }`}
                 >
                   <CardContent className="p-5">
-                    {/* Candidate Info Row */}
+                    {/* Candidate row */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
                         <div
@@ -250,7 +293,6 @@ export default function HRJobDetailPage() {
                             ? ["🥇", "🥈", "🥉"][index]
                             : `#${index + 1}`}
                         </div>
-
                         <div>
                           <h3 className="font-semibold text-slate-800">
                             {app.candidate?.firstName} {app.candidate?.lastName}
@@ -268,19 +310,15 @@ export default function HRJobDetailPage() {
                       <div className="flex items-center gap-4">
                         {app.resumeScore > 0 && (
                           <div className="text-center">
-                            <div
-                              className={`text-2xl font-bold ${
-                                app.resumeScore >= 70 ? "text-emerald-600" :
-                                app.resumeScore >= 40 ? "text-amber-600" :
-                                "text-red-500"
-                              }`}
-                            >
+                            <div className={`text-2xl font-bold ${
+                              app.resumeScore >= 70 ? "text-emerald-600" :
+                              app.resumeScore >= 40 ? "text-amber-600" : "text-red-500"
+                            }`}>
                               {Math.round(app.resumeScore)}
                             </div>
                             <div className="text-[10px] text-slate-400">Match %</div>
                           </div>
                         )}
-
                         <Badge className={statusInfo.color}>
                           <StatusIcon className="w-3 h-3 mr-1" />
                           {statusInfo.label}
@@ -290,11 +328,13 @@ export default function HRJobDetailPage() {
 
                     {/* Interview Scores */}
                     <InterviewScores applicationId={app.id} status={app.status} />
-                    {/* Scheduled F2F Interviews */}
+
+                    {/* Scheduled F2F */}
                     <F2FScheduledInfo applicationId={app.id} />
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100">
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 flex-wrap">
+                      {/* Next stage */}
                       {nextStageInfo && app.status !== "REJECTED" && app.status !== "HIRED" && (
                         <Button
                           size="sm"
@@ -302,107 +342,71 @@ export default function HRJobDetailPage() {
                           disabled={isUpdating}
                           className="bg-[#0245EF] hover:bg-[#0237BF]"
                         >
-                          {isUpdating ? (
-                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                          ) : (
-                            <ArrowRight className="w-3 h-3 mr-1" />
-                          )}
+                          {isUpdating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ArrowRight className="w-3 h-3 mr-1" />}
                           Move to {nextStageInfo.label}
                         </Button>
                       )}
 
-                                            {/* Jump to any stage — only show pipeline stages */}
+                      {/* Change stage dropdown */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm" className="text-xs">
-                            <ChevronDown className="w-3 h-3 mr-1" />
-                            Change Stage
+                            <ChevronDown className="w-3 h-3 mr-1" /> Change Stage
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-52">
-                          {/* Pipeline stages in order */}
-                          {(pipelineStages.length > 0 ? pipelineStages : ALL_STATUSES).map((stage) => {
+                          {stagesForDropdown.map((stage) => {
+                            const status = stage.status || stage.value;
                             const Icon = stage.icon;
-                            const isCurrent = app.status === stage.status;
-                            const currentIdx = pipelineStages.findIndex((s) => s.status === app.status);
-                            const stageIdx = pipelineStages.findIndex((s) => s.status === stage.status);
-                            const isPast = stageIdx < currentIdx;
-
+                            const isCurrent = app.status === status;
                             return (
                               <DropdownMenuItem
-                                key={stage.status}
-                                onClick={() => {
-                                  if (!isCurrent) updateStatus(app.id, stage.status);
-                                }}
+                                key={status}
+                                onClick={() => { if (!isCurrent) updateStatus(app.id, status); }}
                                 disabled={isCurrent}
-                                className={`${isCurrent ? "opacity-50 bg-[#EBF0FF]" : ""} ${isPast ? "text-slate-400" : ""}`}
+                                className={isCurrent ? "opacity-50 bg-[#EBF0FF]" : ""}
                               >
-                                <div className="flex items-center gap-2 w-full">
-                                  <Icon className="w-4 h-4 shrink-0" />
-                                  <span className="flex-1">{stage.label}</span>
-                                  {isCurrent && (
-                                    <Badge variant="outline" className="text-[9px] h-4 px-1">Current</Badge>
-                                  )}
-                                  {isPast && (
-                                    <span className="text-[9px] text-slate-400">←</span>
-                                  )}
-                                </div>
+                                <Icon className="w-4 h-4 mr-2" />
+                                <span className="flex-1">{stage.label}</span>
+                                {isCurrent && <Badge variant="outline" className="text-[9px] h-4 px-1">Current</Badge>}
                               </DropdownMenuItem>
                             );
                           })}
-
-                          {/* Always show Reject option */}
                           {app.status !== "REJECTED" && (
-                            <>
-                              <DropdownMenuItem className="border-t border-slate-100 mt-1 pt-1">
-                                <div
-                                  className="flex items-center gap-2 w-full text-red-600"
-                                  onClick={() => updateStatus(app.id, "REJECTED")}
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                  <span>Reject</span>
-                                </div>
-                              </DropdownMenuItem>
-                            </>
+                            <DropdownMenuItem
+                              className="border-t border-slate-100 mt-1 pt-1 text-red-600"
+                              onClick={() => updateStatus(app.id, "REJECTED")}
+                            >
+                              <XCircle className="w-4 h-4 mr-2" /> Reject
+                            </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
 
                       {/* Schedule F2F */}
-                      {!["REJECTED", "HIRED", "APPLIED", "WITHDRAWN"].includes(app.status) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs"
-                          onClick={() => setScheduleApp(app)}
-                        >
-                          <Calendar className="w-3 h-3 mr-1" />
-                          Schedule F2F
+                      {!["REJECTED", "HIRED", "APPLIED"].includes(app.status) && (
+                        <Button variant="outline" size="sm" className="text-xs" onClick={() => setScheduleApp(app)}>
+                          <Calendar className="w-3 h-3 mr-1" /> Schedule F2F
                         </Button>
                       )}
 
+                      {/* Reject */}
                       {app.status !== "REJECTED" && app.status !== "HIRED" && (
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="outline" size="sm"
                           onClick={() => updateStatus(app.id, "REJECTED")}
                           disabled={isUpdating}
                           className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 ml-auto"
                         >
-                          <XCircle className="w-3 h-3 mr-1" />
-                          Reject
+                          <XCircle className="w-3 h-3 mr-1" /> Reject
                         </Button>
                       )}
 
+                      {/* Hire */}
                       {app.status === "OFFERED" && (
-                        <Button
-                          size="sm"
-                          onClick={() => updateStatus(app.id, "HIRED")}
-                          disabled={isUpdating}
-                          className="bg-emerald-600 hover:bg-emerald-700 ml-auto"
-                        >
-                          <Award className="w-3 h-3 mr-1" />
-                          Mark as Hired
+                        <Button size="sm" onClick={() => updateStatus(app.id, "HIRED")} disabled={isUpdating}
+                          className="bg-emerald-600 hover:bg-emerald-700 ml-auto">
+                          <Award className="w-3 h-3 mr-1" /> Mark as Hired
                         </Button>
                       )}
                     </div>
@@ -424,12 +428,22 @@ export default function HRJobDetailPage() {
           onScheduled={fetchData}
         />
       )}
+
+      {/* Share Job Dialog */}
+      {showShare && (
+        <ShareJobDialog
+          open={showShare}
+          onOpenChange={setShowShare}
+          jobId={id as string}
+          jobTitle={job.title}
+        />
+      )}
     </div>
   );
 }
 
 // ==========================================
-// Interview Scores Component
+// Interview Scores
 // ==========================================
 function InterviewScores({ applicationId, status }: { applicationId: string; status: string }) {
   const [scores, setScores] = useState<any>(null);
@@ -453,43 +467,32 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
         if (typeof breakdown === "string") breakdown = JSON.parse(breakdown);
         setScores({ ...interview, score_breakdown: breakdown });
       }
-    } catch {} finally {
-      setLoading(false);
-    }
+    } catch {} finally { setLoading(false); }
   };
 
   if (!scores || loading) return null;
-
   const breakdown = scores.score_breakdown || {};
 
   return (
     <div className="mt-3 border border-[#D1DEFF] bg-[#EBF0FF]/50 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-3 text-left hover:bg-[#EBF0FF] transition-colors"
-      >
+      <button onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-3 text-left hover:bg-[#EBF0FF] transition-colors">
         <div className="flex items-center gap-3">
           <Bot className="w-4 h-4 text-[#0245EF]" />
           <span className="text-sm font-medium text-slate-700">AI Interview Results</span>
-          <Badge
-            className={`text-xs ${
-              (scores.overall_score || 0) >= 70 ? "bg-emerald-100 text-emerald-700" :
-              (scores.overall_score || 0) >= 40 ? "bg-amber-100 text-amber-700" :
-              "bg-red-100 text-red-700"
-            }`}
-          >
+          <Badge className={`text-xs ${
+            (scores.overall_score || 0) >= 70 ? "bg-emerald-100 text-emerald-700" :
+            (scores.overall_score || 0) >= 40 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
+          }`}>
             {scores.overall_score || 0}/100
           </Badge>
-          {breakdown.recommendation && (
-            <Badge variant="outline" className="text-xs">{breakdown.recommendation}</Badge>
-          )}
+          {breakdown.recommendation && <Badge variant="outline" className="text-xs">{breakdown.recommendation}</Badge>}
         </div>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
 
       {expanded && (
         <div className="px-3 pb-3 space-y-3">
-          {/* Score bars */}
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: "Overall", score: scores.overall_score },
@@ -508,19 +511,15 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
                   </span>
                 </div>
                 <div className="h-1.5 bg-slate-100 rounded-full">
-                  <div
-                    className={`h-full rounded-full ${
-                      (item.score || 0) >= 70 ? "bg-emerald-500" :
-                      (item.score || 0) >= 40 ? "bg-amber-500" : "bg-red-500"
-                    }`}
-                    style={{ width: `${Math.min(item.score || 0, 100)}%` }}
-                  />
+                  <div className={`h-full rounded-full ${
+                    (item.score || 0) >= 70 ? "bg-emerald-500" :
+                    (item.score || 0) >= 40 ? "bg-amber-500" : "bg-red-500"
+                  }`} style={{ width: `${Math.min(item.score || 0, 100)}%` }} />
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Analysis */}
           {scores.analysis && (
             <div className="bg-white rounded-lg p-3">
               <p className="text-xs font-semibold text-slate-600 mb-1">AI Analysis</p>
@@ -528,7 +527,6 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
             </div>
           )}
 
-          {/* Strengths & Weaknesses */}
           <div className="grid grid-cols-2 gap-2">
             {scores.strengths?.length > 0 && (
               <div className="bg-white rounded-lg p-3">
@@ -556,54 +554,22 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
             )}
           </div>
 
-          {/* Transcript Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full text-xs"
+          <Button variant="outline" size="sm" className="w-full text-xs"
             onClick={() => {
-              const msgs = typeof scores.messages === "string"
-                ? JSON.parse(scores.messages) : scores.messages || [];
+              const msgs = typeof scores.messages === "string" ? JSON.parse(scores.messages) : scores.messages || [];
               const transcript = msgs.map((m: any) =>
                 `${m.role === "user" ? "📝 Candidate" : "🤖 Interviewer"}:\n${m.content}`
               ).join("\n\n---\n\n");
-
               const win = window.open("", "_blank");
               if (win) {
-                win.document.write(`
-                  <html>
-                  <head><title>Interview Transcript</title>
-                  <style>
-                    body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #334155; }
-                    h1 { color: #4F46E5; }
-                    pre { white-space: pre-wrap; background: #F8FAFC; padding: 20px; border-radius: 12px; border: 1px solid #E2E8F0; }
-                    .score { display: inline-block; padding: 4px 12px; border-radius: 8px; font-weight: bold; margin-right: 8px; }
-                    .high { background: #D1FAE5; color: #065F46; }
-                    .mid { background: #FEF3C7; color: #92400E; }
-                    .low { background: #FEE2E2; color: #991B1B; }
-                  </style>
-                  </head>
-                  <body>
-                    <h1>AI Interview Transcript</h1>
-                    <p><strong>Overall:</strong>
-                      <span class="score ${(scores.overall_score || 0) >= 70 ? "high" : (scores.overall_score || 0) >= 40 ? "mid" : "low"}">
-                        ${scores.overall_score || 0}/100
-                      </span>
-                      <span class="score ${(breakdown.technicalScore || 0) >= 70 ? "high" : (breakdown.technicalScore || 0) >= 40 ? "mid" : "low"}">
-                        Tech: ${breakdown.technicalScore || 0}
-                      </span>
-                      <span class="score ${(breakdown.communicationScore || 0) >= 70 ? "high" : (breakdown.communicationScore || 0) >= 40 ? "mid" : "low"}">
-                        Comm: ${breakdown.communicationScore || 0}
-                      </span>
-                    </p>
-                    ${scores.analysis ? `<p><strong>Analysis:</strong> ${scores.analysis}</p>` : ""}
-                    <hr/>
-                    <pre>${transcript}</pre>
-                  </body></html>
-                `);
+                win.document.write(`<html><head><title>Transcript</title>
+                  <style>body{font-family:-apple-system,sans-serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#334155}
+                  h1{color:#0245EF}pre{white-space:pre-wrap;background:#F8FAFC;padding:20px;border-radius:12px;border:1px solid #E2E8F0}</style>
+                  </head><body><h1>AI Interview Transcript</h1>
+                  <p><strong>Score:</strong> ${scores.overall_score || 0}/100</p>
+                  ${scores.analysis ? `<p>${scores.analysis}</p>` : ""}<hr/><pre>${transcript}</pre></body></html>`);
               }
-            }}
-          >
+            }}>
             📄 View Full Transcript
           </Button>
         </div>
@@ -613,15 +579,13 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
 }
 
 // ==========================================
-// F2F Scheduled Info for HR
+// F2F Scheduled Info
 // ==========================================
 function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
   const [interviews, setInterviews] = useState<any[]>([]);
   const [editingInterview, setEditingInterview] = useState<any>(null);
 
-  useEffect(() => {
-    fetchInterviews();
-  }, [applicationId]);
+  useEffect(() => { fetchInterviews(); }, [applicationId]);
 
   const fetchInterviews = async () => {
     try {
@@ -642,46 +606,30 @@ function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
         const isCancelled = interview.status === "CANCELLED";
 
         let metadata = interview.metadata || {};
-        try {
-          if (typeof metadata === "string") metadata = JSON.parse(metadata);
-        } catch { metadata = {}; }
-
+        try { if (typeof metadata === "string") metadata = JSON.parse(metadata); } catch { metadata = {}; }
         const interviewerList = metadata.interviewers || [];
 
         return (
-          <div
-            key={interview.id}
+          <div key={interview.id}
             className={`border rounded-lg p-3 ${
-              isCancelled
-                ? "bg-red-50 border-red-200 opacity-60"
-                : isToday
-                  ? "bg-[#EBF0FF] border-[#A3BDFF]"
-                  : isPast
-                    ? interview.status === "COMPLETED"
-                      ? "bg-emerald-50 border-emerald-200"
-                      : "bg-slate-50 border-slate-200"
-                    : "bg-blue-50 border-blue-200"
-            }`}
-          >
+              isCancelled ? "bg-red-50 border-red-200 opacity-60" :
+              isToday ? "bg-[#EBF0FF] border-[#A3BDFF]" :
+              isPast ? interview.status === "COMPLETED" ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200" :
+              "bg-blue-50 border-blue-200"
+            }`}>
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-2">
                 <Calendar className={`w-4 h-4 mt-0.5 shrink-0 ${
-                  isCancelled ? "text-red-400" :
-                  isToday ? "text-[#0245EF]" :
-                  isPast ? "text-slate-400" : "text-blue-500"
+                  isCancelled ? "text-red-400" : isToday ? "text-[#0245EF]" : isPast ? "text-slate-400" : "text-blue-500"
                 }`} />
-
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-xs font-semibold ${
-                      isCancelled ? "text-red-600 line-through" :
-                      isToday ? "text-[#0237BF]" :
+                      isCancelled ? "text-red-600 line-through" : isToday ? "text-[#0245EF]" :
                       isPast ? "text-slate-600" : "text-blue-700"
                     }`}>
-                      {isCancelled ? "Cancelled" :
-                       isToday ? "🔴 Today" :
-                       isPast ? (interview.status === "COMPLETED" ? "✅ Completed" : "Past") :
-                       "Scheduled"}
+                      {isCancelled ? "Cancelled" : isToday ? "🔴 Today" :
+                       isPast ? (interview.status === "COMPLETED" ? "✅ Completed" : "Past") : "Scheduled"}
                     </span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 capitalize">
                       {interview.interview_type}
@@ -690,8 +638,7 @@ function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
 
                   <p className="text-xs text-slate-500 mt-1">
                     {date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                    {" at "}
-                    {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    {" at "}{date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     {interview.duration && ` • ${interview.duration} min`}
                   </p>
 
@@ -700,8 +647,7 @@ function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
                       <span className="text-[10px] text-slate-400">Panel:</span>
                       {interviewerList.map((person: any, i: number) => (
                         <span key={i} className="text-[10px] bg-white border border-slate-200 rounded-full px-2 py-0.5 text-slate-600">
-                          {person.name}
-                          {person.role && <span className="text-slate-400 ml-0.5">• {person.role}</span>}
+                          {person.name}{person.role && <span className="text-slate-400 ml-0.5">• {person.role}</span>}
                         </span>
                       ))}
                     </div>
@@ -716,14 +662,9 @@ function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
                 </div>
               </div>
 
-              {/* Edit button — only for non-cancelled, non-completed */}
               {!isCancelled && interview.status !== "COMPLETED" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs h-7 text-[#0245EF] hover:bg-[#EBF0FF]"
-                  onClick={() => setEditingInterview(interview)}
-                >
+                <Button variant="ghost" size="sm" className="text-xs h-7 text-[#0245EF] hover:bg-[#EBF0FF]"
+                  onClick={() => setEditingInterview(interview)}>
                   <Pencil className="w-3 h-3 mr-1" /> Edit
                 </Button>
               )}
@@ -732,42 +673,32 @@ function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
         );
       })}
 
-      {/* Edit Dialog */}
       {editingInterview && (
         <EditF2FDialog
           open={!!editingInterview}
           onOpenChange={(open) => { if (!open) setEditingInterview(null); }}
           interview={editingInterview}
-          onUpdated={() => {
-            setEditingInterview(null);
-            fetchInterviews();
-          }}
+          onUpdated={() => { setEditingInterview(null); fetchInterviews(); }}
         />
       )}
     </div>
   );
 }
 
+// ==========================================
+// Extract Pipeline Stages
+// ==========================================
 function extractPipelineStages(pipeline: any) {
   let nodes: any[] = [];
   let edges: any[] = [];
-
   try {
     nodes = typeof pipeline.nodes === "string" ? JSON.parse(pipeline.nodes) : pipeline.nodes || [];
     edges = typeof pipeline.edges === "string" ? JSON.parse(pipeline.edges) : pipeline.edges || [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 
-  // Build adjacency for ordering (follow pass paths only)
   const adjMap = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
-
-  for (const node of nodes) {
-    adjMap.set(node.id, []);
-    inDegree.set(node.id, 0);
-  }
-
+  for (const node of nodes) { adjMap.set(node.id, []); inDegree.set(node.id, 0); }
   for (const edge of edges) {
     if (!edge.sourceHandle || edge.sourceHandle === "pass") {
       const targets = adjMap.get(edge.source) || [];
@@ -777,25 +708,20 @@ function extractPipelineStages(pipeline: any) {
     }
   }
 
-  // Topological sort
   const queue: string[] = [];
-  for (const [nodeId, degree] of inDegree.entries()) {
-    if (degree === 0) queue.push(nodeId);
-  }
-
+  for (const [id, degree] of inDegree.entries()) { if (degree === 0) queue.push(id); }
   const ordered: any[] = [];
   while (queue.length > 0) {
     const current = queue.shift()!;
     const node = nodes.find((n: any) => n.id === current);
     if (node) ordered.push(node);
     for (const next of (adjMap.get(current) || [])) {
-      const newDeg = (inDegree.get(next) || 1) - 1;
-      inDegree.set(next, newDeg);
-      if (newDeg === 0) queue.push(next);
+      const nd = (inDegree.get(next) || 1) - 1;
+      inDegree.set(next, nd);
+      if (nd === 0) queue.push(next);
     }
   }
 
-  // Convert to stage list — map node subtypes to application statuses
   const subtypeToStatus: Record<string, { status: string; label: string; icon: any }> = {
     job_posting: { status: "APPLIED", label: "Applied", icon: Briefcase },
     ai_resume_screen: { status: "SCREENING", label: "Screening", icon: FileSearch },
@@ -809,31 +735,20 @@ function extractPipelineStages(pipeline: any) {
     onboarding: { status: "HIRED", label: "Hired", icon: CheckCircle },
   };
 
-  // Build unique ordered stages
-  const stages: { status: string; label: string; icon: any }[] = [];
-  const seenStatuses = new Set<string>();
-
+  const stages: any[] = [];
+  const seen = new Set<string>();
   for (const node of ordered) {
     const subtype = node.data?.subtype;
-    if (!subtype) continue;
-
-    // Skip filter, logic, action nodes
-    if (["filter", "logic", "action"].includes(node.data?.type)) continue;
-
+    if (!subtype || ["filter", "logic", "action"].includes(node.data?.type)) continue;
     const mapping = subtypeToStatus[subtype];
-    if (mapping && !seenStatuses.has(mapping.status)) {
-      seenStatuses.add(mapping.status);
+    if (mapping && !seen.has(mapping.status)) {
+      seen.add(mapping.status);
       stages.push(mapping);
     }
   }
 
-  // Always add these at the end if not present
-  if (!seenStatuses.has("UNDER_REVIEW")) {
-    stages.push({ status: "UNDER_REVIEW", label: "Under Review", icon: Clock });
-  }
-  if (!seenStatuses.has("OFFERED") && !seenStatuses.has("HIRED")) {
-    stages.push({ status: "OFFERED", label: "Offered", icon: Award });
-  }
+  if (!seen.has("UNDER_REVIEW")) stages.push({ status: "UNDER_REVIEW", label: "Under Review", icon: Clock });
+  if (!seen.has("OFFERED") && !seen.has("HIRED")) stages.push({ status: "OFFERED", label: "Offered", icon: Award });
 
   return stages;
 }

@@ -135,10 +135,22 @@ export default function AssessmentPage() {
         saveSubmission(sData.submission || null);
       } else if (sData.submission) {
         saveSubmission(sData.submission);
-        setTimeLeft((aData.assessment?.duration || 60) * 60);
-      } else {
-        console.error("No submission returned:", sData);
-        toast.error("Failed to start assessment");
+
+        // SERVER-SIDE TIMER: Calculate remaining time from server data
+        const startedAt = new Date(sData.submission.started_at).getTime();
+        const durationMs = (aData.assessment?.duration || 60) * 60 * 1000;
+        const endTime = startedAt + durationMs;
+        const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+
+        if (remaining <= 0) {
+          // Time already expired — auto-submit
+          toast.error("Time expired! Auto-submitting...");
+          setTimeLeft(0);
+          // Wait for submission to be set, then submit
+          setTimeout(() => handleSubmit(), 500);
+        } else {
+          setTimeLeft(remaining);
+        }
       }
 
       // Initialize answers with starter code

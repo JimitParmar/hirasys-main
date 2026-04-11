@@ -7,13 +7,7 @@ import { PipelineBuilder } from "@/components/pipeline/PipelineBuilder";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +15,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Save, Loader2, GitBranch } from "lucide-react";
 import { Node, Edge } from "@xyflow/react";
 import toast from "react-hot-toast";
@@ -30,13 +23,13 @@ import Link from "next/link";
 function PipelinePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isHR, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isHR, isLoading: authLoading } = useAuth();
 
   const [pipelineId, setPipelineId] = useState<string | null>(
     searchParams.get("id")
   );
   const [pipelineName, setPipelineName] = useState("Untitled Pipeline");
-  const [linkedJobId, setLinkedJobId] = useState<string>("none");
+  const [linkedJobIds, setLinkedJobIds] = useState<string[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -49,18 +42,21 @@ function PipelinePageInner() {
   const [initialEdges, setInitialEdges] = useState<Edge[] | undefined>();
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && isHR) {
       fetchJobs();
       if (pipelineId) {
         fetchPipeline(pipelineId);
       } else {
         setLoading(false);
       }
+    } else if (!authLoading && (!isAuthenticated || !isHR)) {
+      router.push("/login");
     }
-  }, [authLoading, isAuthenticated, pipelineId]);
+  }, [authLoading, isAuthenticated, isHR, pipelineId]);
 
   const fetchJobs = async () => {
     try {
+      // This now returns ALL company jobs (not just current user's)
       const res = await fetch("/api/jobs");
       const data = await res.json();
       setJobs(data.jobs || []);
@@ -73,18 +69,56 @@ function PipelinePageInner() {
     try {
       const res = await fetch(`/api/pipeline?id=${id}`);
       const data = await res.json();
+
       if (data.pipeline) {
         setPipelineName(data.pipeline.name || "Untitled Pipeline");
 
-        // LOAD the linked job ID
-        setLinkedJobId(data.pipeline.linked_job_id || "none");
+        // Load linked job IDs
+        let linkedIds: string[] = [];
 
+        // From linked_job_id field
+        const linked = data.pipeline.linked_job_id;
+        if (linked) {
+          try {
+            const parsed = typeof linked === "string" && linked.startsWith("[")
+              ? JSON.parse(linked) : linked;
+            linkedIds = Array.isArray(parsed) ? parsed : [parsed];
+          } catch {
+            linkedIds = [linked];
+          }
+        }
+
+        // From linked_jobs array
+        if (data.pipeline.linked_jobs) {
+          let linkedJobs = data.pipeline.linked_jobs;
+          try {
+            if (typeof linkedJobs === "string") linkedJobs = JSON.parse(linkedJobs);
+          } catch {}
+          if (Array.isArray(linkedJobs)) {
+            const jobIdsFromArray = linkedJobs
+              .filter((j: any) => j && j.id)
+              .map((j: any) => j.id);
+            linkedIds = [...new Set([...linkedIds, ...jobIdsFromArray])];
+          }
+        }
+
+        // Also check jobs that reference this pipeline
+        try {
+          const jobsRes = await fetch("/api/jobs");
+          const jobsData = await jobsRes.json();
+          const pipelineJobIds = (jobsData.jobs || [])
+            .filter((j: any) => j.pipeline_id === id)
+            .map((j: any) => j.id);
+          linkedIds = [...new Set([...linkedIds, ...pipelineJobIds])];
+        } catch {}
+
+        setLinkedJobIds(linkedIds.filter(Boolean));
+
+        // Load nodes and edges
         const nodes = typeof data.pipeline.nodes === "string"
-          ? JSON.parse(data.pipeline.nodes)
-          : data.pipeline.nodes;
+          ? JSON.parse(data.pipeline.nodes) : data.pipeline.nodes;
         const edges = typeof data.pipeline.edges === "string"
-          ? JSON.parse(data.pipeline.edges)
-          : data.pipeline.edges;
+          ? JSON.parse(data.pipeline.edges) : data.pipeline.edges;
 
         if (Array.isArray(nodes) && nodes.length > 0) {
           setInitialNodes(nodes);
@@ -109,7 +143,7 @@ function PipelinePageInner() {
     try {
       const body: any = {
         name: pipelineName,
-        linkedJobId: linkedJobId !== "none" ? linkedJobId : null,
+        linkedJobIds: linkedJobIds.filter((id) => id && id !== "none"),
         nodes: currentNodes.map((n) => ({
           id: n.id,
           type: n.type,
@@ -126,9 +160,7 @@ function PipelinePageInner() {
         estimatedCost: 0,
       };
 
-      if (pipelineId) {
-        body.id = pipelineId;
-      }
+      if (pipelineId) body.id = pipelineId;
 
       const res = await fetch("/api/pipeline", {
         method: "POST",
@@ -139,9 +171,7 @@ function PipelinePageInner() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      if (data.pipeline?.id) {
-        setPipelineId(data.pipeline.id);
-      }
+      if (data.pipeline?.id) setPipelineId(data.pipeline.id);
 
       setShowSaveDialog(false);
       toast.success("Pipeline saved! 🎉");
@@ -152,6 +182,14 @@ function PipelinePageInner() {
     }
   };
 
+  const toggleJob = (jobId: string) => {
+    setLinkedJobIds((prev) =>
+      prev.includes(jobId)
+        ? prev.filter((id) => id !== jobId)
+        : [...prev, jobId]
+    );
+  };
+
   if (authLoading || loading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -160,8 +198,14 @@ function PipelinePageInner() {
     );
   }
 
+  // Get linked job names for header
+  const linkedJobNames = linkedJobIds
+    .map((id) => jobs.find((j) => j.id === id)?.title)
+    .filter(Boolean);
+
   return (
     <div className="h-screen flex flex-col">
+      {/* Header */}
       <header className="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-4 shrink-0 z-50">
         <div className="flex items-center gap-3">
           <Link href="/hr/dashboard">
@@ -175,35 +219,22 @@ function PipelinePageInner() {
           <div>
             <h1 className="font-semibold text-sm text-slate-800">{pipelineName}</h1>
             <p className="text-[11px] text-slate-400">
-              {linkedJobId !== "none"
-                ? `Linked to: ${jobs.find((j) => j.id === linkedJobId)?.title || "Job"}`
-                : "Not linked to a job"
+              {linkedJobIds.length > 0
+                ? `${linkedJobIds.length} job${linkedJobIds.length > 1 ? "s" : ""}: ${linkedJobNames.slice(0, 2).join(", ")}${linkedJobNames.length > 2 ? ` +${linkedJobNames.length - 2} more` : ""}`
+                : "Not linked to any job"
               }
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <Select value={linkedJobId} onValueChange={setLinkedJobId}>
-            <SelectTrigger className="h-8 w-[200px] text-xs">
-              <SelectValue placeholder="Link to job..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No job linked</SelectItem>
-              {jobs.map((job) => (
-                <SelectItem key={job.id} value={job.id}>
-                  {job.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <Link href="/hr/dashboard">
             <Button variant="outline" size="sm">Dashboard</Button>
           </Link>
         </div>
       </header>
 
+      {/* Pipeline Builder */}
       <div className="flex-1">
         <PipelineBuilder
           pipelineId={pipelineId || undefined}
@@ -213,12 +244,18 @@ function PipelinePageInner() {
         />
       </div>
 
+      {/* Save Dialog */}
       <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Save Pipeline</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Save className="w-5 h-5 text-[#0245EF]" />
+              Save Pipeline
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+
+          <div className="space-y-4 py-2">
+            {/* Name */}
             <div className="space-y-2">
               <Label>Pipeline Name</Label>
               <Input
@@ -227,35 +264,150 @@ function PipelinePageInner() {
                 placeholder="e.g. Engineering Hiring Pipeline"
               />
             </div>
+
+            {/* Job Multi-Select */}
             <div className="space-y-2">
-              <Label>Link to Job</Label>
-              <Select value={linkedJobId} onValueChange={setLinkedJobId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a job..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No job linked</SelectItem>
-                  {jobs.map((job) => (
-                    <SelectItem key={job.id} value={job.id}>
-                      {job.title} — {job.department}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="flex items-center justify-between">
+                <span>Link to Jobs</span>
+                <span className="text-xs text-slate-400 font-normal">
+                  {linkedJobIds.length} selected
+                </span>
+              </Label>
+              <p className="text-xs text-slate-400">
+                Select jobs that will use this pipeline. Assessment questions auto-generate based on each job&apos;s description.
+              </p>
+
+              <div className="border rounded-lg divide-y max-h-[300px] overflow-y-auto">
+                {jobs.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <p className="text-sm text-slate-500">No jobs created yet</p>
+                    <Link href="/hr/jobs/new" className="text-xs text-[#0245EF] hover:underline mt-1 inline-block">
+                      Create a job →
+                    </Link>
+                  </div>
+                ) : (
+                  jobs.map((job) => {
+                    const isSelected = linkedJobIds.includes(job.id);
+                    return (
+                      <button
+                        key={job.id}
+                        type="button"
+                        onClick={() => toggleJob(job.id)}
+                        className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
+                          isSelected ? "bg-[#EBF0FF]" : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${
+                              isSelected
+                                ? "bg-[#0245EF] border-[#0245EF]"
+                                : "border-slate-300"
+                            }`}
+                          >
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                          <div>
+                            <p className={`text-sm font-medium ${isSelected ? "text-[#0245EF]" : "text-slate-700"}`}>
+                              {job.title}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {job.department} • {job.location}
+                              {(job._count?.applications || 0) > 0 && ` • ${job._count.applications} applicants`}
+                              {job.poster?.firstName && (
+                                <span className="text-slate-300"> • by {job.poster.firstName}</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] shrink-0 ${
+                            job.status === "PUBLISHED"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : job.status === "DRAFT"
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : "text-slate-400"
+                          }`}
+                        >
+                          {job.status}
+                        </Badge>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Select all / Deselect all */}
+              {jobs.length > 0 && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLinkedJobIds(jobs.map((j) => j.id))}
+                    className="text-[10px] text-[#0245EF] hover:underline"
+                  >
+                    Select all
+                  </button>
+                  <span className="text-[10px] text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setLinkedJobIds([])}
+                    className="text-[10px] text-slate-400 hover:underline"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              )}
+
+              {/* Reusable pipeline info */}
+              {linkedJobIds.length > 1 && (
+                <div className="bg-[#EBF0FF] border border-[#A3BDFF] rounded-lg p-3 text-xs text-[#02298F] space-y-1">
+                  <p className="font-semibold">✨ Reusable Pipeline</p>
+                  <p>
+                    Same pipeline structure for {linkedJobIds.length} jobs.
+                    Coding questions will auto-generate based on each job&apos;s
+                    unique description and required skills.
+                  </p>
+                </div>
+              )}
+
+              {linkedJobIds.length === 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+                  ⚠️ No jobs linked. You can link jobs later from the job creation page.
+                </div>
+              )}
             </div>
-            <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-500">
-              {currentNodes.length} nodes • {currentEdges.length} connections
+
+            {/* Stats */}
+            <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-500 flex items-center justify-between">
+              <span>{currentNodes.length} nodes • {currentEdges.length} connections</span>
+              {linkedJobIds.length > 0 && (
+                <span className="text-[#0245EF] font-medium">
+                  {linkedJobIds.length} job{linkedJobIds.length > 1 ? "s" : ""} linked
+                </span>
+              )}
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSaveDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowSaveDialog(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={confirmSave}
               disabled={saving || !pipelineName.trim()}
               className="bg-[#0245EF] hover:bg-[#0237BF]"
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-              Save
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              Save Pipeline
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -266,11 +418,13 @@ function PipelinePageInner() {
 
 export default function PipelinePage() {
   return (
-    <Suspense fallback={
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="h-screen flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
+        </div>
+      }
+    >
       <PipelinePageInner />
     </Suspense>
   );

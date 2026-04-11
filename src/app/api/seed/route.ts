@@ -19,7 +19,22 @@ export async function GET() {
        RETURNING *`,
       ["hr@hirasys.com", passwordHash, "Sarah", "Johnson", "HR", "TechCorp"]
     );
+        // Create company
+    const company = await queryOne(
+      `INSERT INTO companies (name, created_by)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING
+       RETURNING *`,
+      ["TechCorp", hr.id]
+    );
 
+    // Link HR user to company as ADMIN
+    if (company) {
+      await query(
+        "UPDATE users SET company_id = $1, role = 'ADMIN' WHERE id = $2",
+        [company.id, hr.id]
+      );
+    }
     // Candidates
     const candidates = [];
     const candidateData = [
@@ -43,6 +58,7 @@ export async function GET() {
       );
       candidates.push({ ...user, resumeText: c.resume.text });
     }
+
 
     // ==========================================
     // 2. CREATE PIPELINE

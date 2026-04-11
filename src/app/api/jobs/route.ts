@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { getCompanyUserIds } from "@/lib/company";
+import { logAudit, getAuditUser } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,30 +14,38 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
 
     const session = await getSession();
-    const isHR = session && ["HR", "ADMIN"].includes((session.user as any)?.role);
+    const userId = (session?.user as any)?.id;
+    const role = (session?.user as any)?.role;
+    const isHR = session && ["HR", "ADMIN"].includes(role);
 
     let whereClause = "WHERE 1=1";
     const params: any[] = [];
     let paramIndex = 1;
 
     if (!isHR) {
+      // Candidates only see published jobs
       whereClause += ` AND j.status = 'PUBLISHED'`;
-    } else if (status) {
-      whereClause += ` AND j.status = $${paramIndex}`;
-      params.push(status);
-      paramIndex++;
+    } else if (isHR && userId) {
+      // HR sees ALL jobs from their company
+      const companyUserIds = await getCompanyUserIds(userId);
+
+      if (companyUserIds.length > 0) {
+        const placeholders = companyUserIds.map((_, i) => `$${paramIndex + i}`).join(", ");
+        whereClause += ` AND j.posted_by IN (${placeholders})`;
+        params.push(...companyUserIds);
+        paramIndex += companyUserIds.length;
+      }
+
+      if (status) {
+        whereClause += ` AND j.status = $${paramIndex}`;
+        params.push(status);
+        paramIndex++;
+      }
     }
 
     if (search) {
       whereClause += ` AND (j.title ILIKE $${paramIndex} OR j.description ILIKE $${paramIndex} OR j.department ILIKE $${paramIndex})`;
       params.push(`%${search}%`);
-      paramIndex++;
-    }
-
-    // If HR, only show their own jobs
-    if (isHR && session) {
-      whereClause += ` AND j.posted_by = $${paramIndex}`;
-      params.push((session.user as any).id);
       paramIndex++;
     }
 
@@ -58,7 +68,6 @@ export async function GET(req: NextRequest) {
       [...params, limit, offset]
     );
 
-    // Format response
     const formattedJobs = jobs.map((j) => ({
       id: j.id,
       title: j.title,
@@ -74,7 +83,9 @@ export async function GET(req: NextRequest) {
       salaryMax: j.salary_max ? parseFloat(j.salary_max) : null,
       salaryCurrency: j.salary_currency,
       status: j.status,
+      pipeline_id: j.pipeline_id,
       createdAt: j.created_at,
+      postedBy: j.posted_by,
       poster: {
         firstName: j.poster_first_name,
         lastName: j.poster_last_name,
@@ -110,12 +121,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // If publishing, require pipeline
     if (body.status === "PUBLISHED" && !body.pipelineId) {
-      return NextResponse.json(
-        { error: "A pipeline must be linked before publishing a job" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "A pipeline must be linked before publishing" }, { status: 400 });
     }
 
     const job = await queryOne(
@@ -126,24 +133,24 @@ export async function POST(req: NextRequest) {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING *`,
       [
-        body.title,
-        body.description,
-        body.requirements || [],
-        body.skills || [],
-        body.department,
-        body.location,
-        body.type || "full_time",
-        body.experienceMin || 0,
-        body.experienceMax || 99,
-        body.salaryMin || null,
-        body.salaryMax || null,
-        body.salaryCurrency || "USD",
-        body.status || "DRAFT",
-        body.pipelineId || null,
-        (session.user as any).id,
+        body.title, body.description, body.requirements || [], body.skills || [],
+        body.department, body.location, body.type || "full_time",
+        body.experienceMin || 0, body.experienceMax || 99,
+        body.salaryMin || null, body.salaryMax || null,
+        body.salaryCurrency || "USD", body.status || "DRAFT",
+        body.pipelineId || null, (session.user as any).id,
         body.closingDate ? new Date(body.closingDate) : null,
       ]
     );
+
+    await logAudit({
+      ...getAuditUser(session),
+      action: "JOB_CREATED",
+      resourceType: "job",
+      resourceId: job.id,
+      resourceName: body.title,
+      details: { status: body.status, department: body.department },
+    });
 
     return NextResponse.json({ success: true, job }, { status: 201 });
   } catch (error: any) {
