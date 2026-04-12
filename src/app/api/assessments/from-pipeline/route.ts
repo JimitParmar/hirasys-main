@@ -15,10 +15,7 @@ export async function GET(req: NextRequest) {
     const nodeSubtype = searchParams.get("nodeSubtype");
 
     if (!applicationId)
-      return NextResponse.json(
-        { error: "applicationId required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "applicationId required" }, { status: 400 });
 
     console.log("=== ASSESSMENT FROM PIPELINE ===");
     console.log("Application:", applicationId, "Node:", nodeSubtype);
@@ -34,43 +31,45 @@ export async function GET(req: NextRequest) {
     );
 
     if (!application || !application.pipeline_id) {
-      return NextResponse.json(
-        { error: "No pipeline linked" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "No pipeline linked" }, { status: 404 });
     }
 
-    const pipeline = await queryOne(
-      "SELECT * FROM pipelines WHERE id = $1",
-      [application.pipeline_id]
-    );
+    const pipeline = await queryOne("SELECT * FROM pipelines WHERE id = $1", [application.pipeline_id]);
     if (!pipeline)
-      return NextResponse.json(
-        { error: "Pipeline not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Pipeline not found" }, { status: 404 });
 
     let nodes: any[] = [];
     try {
-      nodes =
-        typeof pipeline.nodes === "string"
-          ? JSON.parse(pipeline.nodes)
-          : pipeline.nodes || [];
+      nodes = typeof pipeline.nodes === "string" ? JSON.parse(pipeline.nodes) : pipeline.nodes || [];
     } catch {
       nodes = [];
     }
 
     const targetSubtype = nodeSubtype || "coding_assessment";
-    const assessmentNode = nodes.find(
-      (n: any) => n.data?.subtype === targetSubtype
-    );
+
+    // Find the assessment node - try by subtype first, then by id
+    let assessmentNode = nodes.find((n: any) => n.data?.subtype === targetSubtype);
+    if (!assessmentNode) {
+      assessmentNode = nodes.find((n: any) => n.id === targetSubtype);
+    }
 
     if (!assessmentNode) {
+      console.log("❌ No node found. Available nodes:", nodes.map((n: any) => ({
+        id: n.id,
+        subtype: n.data?.subtype,
+        label: n.data?.label,
+      })));
       return NextResponse.json(
         { error: `No ${targetSubtype} node found in pipeline` },
         { status: 404 }
       );
     }
+
+    console.log("✅ Found assessment node:", {
+      id: assessmentNode.id,
+      subtype: assessmentNode.data?.subtype,
+      label: assessmentNode.data?.label,
+    });
 
     const nodeConfig = assessmentNode.data?.config || {};
     let questions = nodeConfig.questions || [];
@@ -94,15 +93,13 @@ export async function GET(req: NextRequest) {
 
       try {
         questions = await generateQuestionsDirectly(
-          targetSubtype === "mcq_assessment" ? "mcq" : "coding",
+          targetSubtype === "mcq_assessment" || targetSubtype.includes("mcq") ? "mcq" : "coding",
           nodeConfig.difficulty || "medium",
           nodeConfig.questionCount || 3,
           nodeConfig.languages || ["javascript", "python"],
           jobContext
         );
-        console.log(
-          `Generated ${questions.length} questions for "${application.job_title}"`
-        );
+        console.log(`Generated ${questions.length} questions for "${application.job_title}"`);
       } catch (err) {
         console.error("Auto-generation failed:", err);
       }
@@ -110,7 +107,7 @@ export async function GET(req: NextRequest) {
       if (questions.length === 0) {
         console.log("Using mock questions as fallback");
         questions = getMockQuestions(
-          targetSubtype === "mcq_assessment" ? "mcq" : "coding",
+          targetSubtype === "mcq_assessment" || targetSubtype.includes("mcq") ? "mcq" : "coding",
           nodeConfig.difficulty || "medium",
           nodeConfig.questionCount || 3,
           nodeConfig.languages || ["javascript", "python"]
@@ -119,53 +116,74 @@ export async function GET(req: NextRequest) {
 
       if (questions.length === 0) {
         return NextResponse.json(
-          {
-            error:
-              "Could not generate questions. HR needs to configure them in the pipeline builder.",
-          },
+          { error: "Could not generate questions. HR needs to configure them in the pipeline builder." },
           { status: 404 }
         );
       }
     }
 
+    // Ensure all questions have IDs
+    questions = questions.map((q: any) => ({
+      ...q,
+      id: q.id || crypto.randomUUID(),
+    }));
+
     // ==========================================
-    // ✅ Cache questions for grading
+    // ✅ Cache questions for grading — use BOTH node.id AND subtype as keys
     // ==========================================
     try {
       if (questions.length > 0) {
-        const appId = applicationId;
-        const nodeId = assessmentNode.id;
+        const questionsJson = JSON.stringify(questions);
 
+        // Primary cache: by node.id (what the submission will use as assessment_id)
+        const primaryKey = `assessment_questions:v1:${applicationId}:${assessmentNode.id}`;
         await query(
           `INSERT INTO ai_cache (cache_key, value, expires_at)
            VALUES ($1, $2, NOW() + INTERVAL '24 hours')
            ON CONFLICT (cache_key)
            DO UPDATE SET value = $2, expires_at = NOW() + INTERVAL '24 hours'`,
-          [
-            `assessment_questions:v1:${appId}:${nodeId}`,
-            JSON.stringify(questions),
-          ]
+          [primaryKey, questionsJson]
         );
+        console.log("✅ Cached with primary key:", primaryKey);
 
-        console.log("Cached", questions.length, "questions for grading");
+        // Secondary cache: by subtype (in case assessment_id stores the subtype)
+        if (assessmentNode.data?.subtype && assessmentNode.data.subtype !== assessmentNode.id) {
+          const secondaryKey = `assessment_questions:v1:${applicationId}:${assessmentNode.data.subtype}`;
+          await query(
+            `INSERT INTO ai_cache (cache_key, value, expires_at)
+             VALUES ($1, $2, NOW() + INTERVAL '24 hours')
+             ON CONFLICT (cache_key)
+             DO UPDATE SET value = $2, expires_at = NOW() + INTERVAL '24 hours'`,
+            [secondaryKey, questionsJson]
+          );
+          console.log("✅ Cached with secondary key:", secondaryKey);
+        }
       }
     } catch (cacheErr) {
       console.error("Question caching failed:", cacheErr);
     }
 
+    // ==========================================
+    // IMPORTANT: Use the subtype as the assessment ID
+    // because the client URL param is the subtype, and
+    // that's what gets stored as assessment_id in submissions
+    // ==========================================
+    const assessmentIdToReturn = assessmentNode.data?.subtype || assessmentNode.id;
+
+    console.log("📤 Returning assessment with id:", assessmentIdToReturn);
+    console.log("📤 Questions count:", questions.length);
+
     return NextResponse.json({
       assessment: {
-        id: assessmentNode.id,
+        id: assessmentIdToReturn,
+        nodeId: assessmentNode.id,
         title: assessmentNode.data?.label || "Assessment",
-        type: targetSubtype === "mcq_assessment" ? "MCQ" : "CODING",
+        type: targetSubtype === "mcq_assessment" || targetSubtype.includes("mcq") ? "MCQ" : "CODING",
         duration: nodeConfig.duration || 60,
         questions,
         difficulty: nodeConfig.difficulty || "medium",
         languages: nodeConfig.languages || ["javascript", "python"],
-        totalPoints: questions.reduce(
-          (sum: number, q: any) => sum + (q.points || 10),
-          0
-        ),
+        totalPoints: questions.reduce((sum: number, q: any) => sum + (q.points || 10), 0),
         questionMode,
       },
       application: {
@@ -175,29 +193,20 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Pipeline assessment fetch error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch assessment" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch assessment" }, { status: 500 });
   }
 }
 
 // ==========================================
-// Generate questions directly (no HTTP call needed)
+// Generate questions directly
 // ==========================================
 async function generateQuestionsDirectly(
   type: string,
   difficulty: string,
   questionCount: number,
   languages: string[],
-  jobContext: {
-    title: string;
-    description: string;
-    skills: string[];
-    requirements: string[];
-  }
+  jobContext: { title: string; description: string; skills: string[]; requirements: string[] }
 ): Promise<any[]> {
-  // Check if Gemini is available
   if (!process.env.GEMINI_API_KEY) {
     console.log("No Gemini key — using mock questions");
     return getMockQuestions(type, difficulty, questionCount, languages);
@@ -205,9 +214,7 @@ async function generateQuestionsDirectly(
 
   try {
     const { aiJSON } = await import("@/lib/ai");
-    const hasSQL = languages.some((l) =>
-      ["sql", "mysql", "postgresql"].includes(l)
-    );
+    const hasSQL = languages.some((l) => ["sql", "mysql", "postgresql"].includes(l));
 
     if (type === "coding") {
       const result = await aiJSON<{ questions: any[] }>(
@@ -236,12 +243,9 @@ Return JSON:
       "starterCode": {
 ${languages
   .map((l) => {
-    if (l === "javascript")
-      return '"javascript": "function solve(input) {\\n  // Your code here\\n}"';
-    if (l === "python")
-      return '"python": "def solve(input):\\n    # Your code here\\n    pass"';
-    if (l === "typescript")
-      return '"typescript": "function solve(input: any): any {\\n  // Your code here\\n}"';
+    if (l === "javascript") return '"javascript": "function solve(input) {\\n  // Your code here\\n}"';
+    if (l === "python") return '"python": "def solve(input):\\n    # Your code here\\n    pass"';
+    if (l === "typescript") return '"typescript": "function solve(input: any): any {\\n  // Your code here\\n}"';
     if (l === "sql") return '"sql": "-- Write your query here\\nSELECT "';
     return `"${l}": "// Your code here"`;
   })
@@ -261,7 +265,7 @@ ${languages
 
       return (result.questions || []).map((q: any) => ({
         ...q,
-        id: crypto.randomUUID(),
+        id: q.id || crypto.randomUUID(),
       }));
     }
 
@@ -300,7 +304,7 @@ Return JSON:
 
       return (result.questions || []).map((q: any) => ({
         ...q,
-        id: crypto.randomUUID(),
+        id: q.id || crypto.randomUUID(),
       }));
     }
 
@@ -329,33 +333,13 @@ function getMockQuestions(
         type: "coding",
         points: 30,
         starterCode: {
-          javascript:
-            "function solve(input) {\n  const parts = input.split(',').map(Number);\n  const target = parts.pop();\n  const nums = parts;\n  // Your code here\n}",
-          python:
-            "def solve(input):\n    parts = list(map(int, input.split(',')))\n    target = parts.pop()\n    nums = parts\n    # Your code here\n    pass",
+          javascript: "function solve(input) {\n  const parts = input.split(',').map(Number);\n  const target = parts.pop();\n  const nums = parts;\n  // Your code here\n}",
+          python: "def solve(input):\n    parts = list(map(int, input.split(',')))\n    target = parts.pop()\n    nums = parts\n    # Your code here\n    pass",
         },
         testCases: [
-          {
-            id: "t1",
-            input: "2,7,11,15,9",
-            expectedOutput: "0,1",
-            isHidden: false,
-            points: 10,
-          },
-          {
-            id: "t2",
-            input: "3,2,4,6",
-            expectedOutput: "1,2",
-            isHidden: false,
-            points: 10,
-          },
-          {
-            id: "t3",
-            input: "3,3,6",
-            expectedOutput: "0,1",
-            isHidden: true,
-            points: 10,
-          },
+          { id: "t1", input: "2,7,11,15,9", expectedOutput: "0,1", isHidden: false, points: 10 },
+          { id: "t2", input: "3,2,4,6", expectedOutput: "1,2", isHidden: false, points: 10 },
+          { id: "t3", input: "3,3,6", expectedOutput: "0,1", isHidden: true, points: 10 },
         ],
       },
       {
@@ -369,20 +353,8 @@ function getMockQuestions(
           python: "def solve(input):\n    # Reverse words\n    pass",
         },
         testCases: [
-          {
-            id: "t1",
-            input: "hello world",
-            expectedOutput: "world hello",
-            isHidden: false,
-            points: 10,
-          },
-          {
-            id: "t2",
-            input: "the sky is blue",
-            expectedOutput: "blue is sky the",
-            isHidden: true,
-            points: 10,
-          },
+          { id: "t1", input: "hello world", expectedOutput: "world hello", isHidden: false, points: 10 },
+          { id: "t2", input: "the sky is blue", expectedOutput: "blue is sky the", isHidden: true, points: 10 },
         ],
       },
       {
@@ -392,33 +364,13 @@ function getMockQuestions(
         type: "coding",
         points: 30,
         starterCode: {
-          javascript:
-            "function solve(input) {\n  const nums = input.split(',').map(Number);\n  // Kadane's algorithm\n}",
-          python:
-            "def solve(input):\n    nums = list(map(int, input.split(',')))\n    # Kadane's algorithm\n    pass",
+          javascript: "function solve(input) {\n  const nums = input.split(',').map(Number);\n  // Kadane's algorithm\n}",
+          python: "def solve(input):\n    nums = list(map(int, input.split(',')))\n    # Kadane's algorithm\n    pass",
         },
         testCases: [
-          {
-            id: "t1",
-            input: "-2,1,-3,4,-1,2,1,-5,4",
-            expectedOutput: "6",
-            isHidden: false,
-            points: 10,
-          },
-          {
-            id: "t2",
-            input: "5,4,-1,7,8",
-            expectedOutput: "23",
-            isHidden: false,
-            points: 10,
-          },
-          {
-            id: "t3",
-            input: "-1,-2,-3",
-            expectedOutput: "-1",
-            isHidden: true,
-            points: 10,
-          },
+          { id: "t1", input: "-2,1,-3,4,-1,2,1,-5,4", expectedOutput: "6", isHidden: false, points: 10 },
+          { id: "t2", input: "5,4,-1,7,8", expectedOutput: "23", isHidden: false, points: 10 },
+          { id: "t3", input: "-1,-2,-3", expectedOutput: "-1", isHidden: true, points: 10 },
         ],
       },
     ];
@@ -481,8 +433,6 @@ function getMockQuestions(
         "GET is idempotent — same result on repeat calls",
         "REST = Representational State Transfer",
       ][i % 5],
-    })).map((q) => ({
-      ...q,
       id: crypto.randomUUID(),
     }));
   }
