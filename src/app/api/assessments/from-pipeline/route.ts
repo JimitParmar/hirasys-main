@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryOne } from "@/lib/db";
+import { query, queryOne } from "@/lib/db"; // ✅ FIXED
 import { getSession } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     console.log("Preset questions:", questions.length);
 
     // ==========================================
-    // AUTO MODE — Generate questions directly (no HTTP call)
+    // AUTO MODE — Generate questions directly
     // ==========================================
     if (questionMode === "auto" || questions.length === 0) {
       console.log("Auto-generating questions for:", application.job_title);
@@ -81,7 +81,6 @@ export async function GET(req: NextRequest) {
       }
 
       if (questions.length === 0) {
-        // Final fallback — use mock questions
         console.log("Using mock questions as fallback");
         questions = getMockQuestions(
           targetSubtype === "mcq_assessment" ? "mcq" : "coding",
@@ -96,6 +95,31 @@ export async function GET(req: NextRequest) {
           error: "Could not generate questions. HR needs to configure them in the pipeline builder.",
         }, { status: 404 });
       }
+    }
+
+    // ==========================================
+    // ✅ Cache questions for grading
+    // ==========================================
+    try {
+      if (questions.length > 0) {
+        const appId = applicationId;
+        const nodeId = assessmentNode.id;
+
+        await query(
+          `INSERT INTO ai_cache (cache_key, value, expires_at)
+           VALUES ($1, $2, NOW() + INTERVAL '24 hours')
+           ON CONFLICT (cache_key)
+           DO UPDATE SET value = $2, expires_at = NOW() + INTERVAL '24 hours'`,
+          [
+            `assessment_questions:v1:${appId}:${nodeId}`,
+            JSON.stringify(questions),
+          ]
+        );
+
+        console.log("Cached", questions.length, "questions for grading");
+      }
+    } catch (cacheErr) {
+      console.error("Question caching failed:", cacheErr);
     }
 
     return NextResponse.json({
@@ -115,11 +139,12 @@ export async function GET(req: NextRequest) {
         jobTitle: application.job_title,
       },
     });
+
   } catch (error: any) {
     console.error("Pipeline assessment fetch error:", error);
     return NextResponse.json({ error: "Failed to fetch assessment" }, { status: 500 });
   }
-}
+
 
 // ==========================================
 // Generate questions directly (no HTTP call needed)
@@ -187,7 +212,10 @@ Return JSON:
         `Generate ${questionCount} ${difficulty} coding questions for "${jobContext.title}". Test: ${jobContext.skills.join(", ")}`
       );
 
-      return result.questions || [];
+      return (result.questions || []).map((q: any) => ({
+  ...q,
+  id: crypto.randomUUID(),
+}));
     }
 
     if (type === "mcq") {
@@ -281,7 +309,10 @@ function getMockQuestions(type: string, difficulty: string, count: number, langu
         ],
       },
     ];
-    return problems.slice(0, count);
+  return problems.slice(0, count).map((q) => ({
+  ...q,
+  id: crypto.randomUUID(),
+}));
   }
 
   if (type === "mcq") {
@@ -327,8 +358,12 @@ function getMockQuestions(type: string, difficulty: string, count: number, langu
         "GET is idempotent — same result on repeat calls",
         "REST = Representational State Transfer",
       ][i % 5],
-    }));
+    })).map((q) => ({
+  ...q,
+  id: crypto.randomUUID(),
+}));
   }
 
   return [];
+}
 }

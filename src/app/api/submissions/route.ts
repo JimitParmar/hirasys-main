@@ -259,30 +259,69 @@ export async function POST(req: NextRequest) {
       );
 
       let questions: any[] = [];
+const nodeId = submission.assessment_id; // or pass explicitly if different
 
-      if (application?.pipeline_id) {
-        const pipeline = await queryOne("SELECT * FROM pipelines WHERE id = $1", [application.pipeline_id]);
-        if (pipeline) {
-          let nodes: any[] = [];
-          try {
-            nodes = typeof pipeline.nodes === "string" ? JSON.parse(pipeline.nodes) : pipeline.nodes || [];
-          } catch {}
+// 1. Try fetching cached AI-generated questions
+try {
+  const cacheKey = `assessment_questions:v1:${submission.application_id}:${nodeId}`;
 
-          for (const node of nodes) {
-            if (node.data?.subtype === "coding_assessment" || node.data?.subtype === "mcq_assessment") {
-              const nodeQuestions = node.data?.config?.questions || [];
-              questions.push(...nodeQuestions);
-            }
-          }
-        }
-      }
+  const cached = await queryOne(
+    `SELECT value FROM ai_cache WHERE cache_key = $1 AND expires_at > NOW()`,
+    [cacheKey]
+  );
 
-      if (questions.length === 0) {
-        const assessment = await queryOne("SELECT * FROM assessments WHERE id = $1", [submission.assessment_id]);
-        if (assessment?.questions) {
-          questions = typeof assessment.questions === "string" ? JSON.parse(assessment.questions) : assessment.questions;
-        }
-      }
+  if (cached?.value) {
+    questions = typeof cached.value === "string"
+      ? JSON.parse(cached.value)
+      : cached.value;
+
+    console.log("Loaded questions from cache:", questions.length);
+  }
+} catch (err) {
+  console.error("Cache fetch failed:", err);
+}
+
+// 2. Fallback → pipeline config (preset questions)
+if (questions.length === 0 && application?.pipeline_id) {
+  const pipeline = await queryOne(
+    "SELECT * FROM pipelines WHERE id = $1",
+    [application.pipeline_id]
+  );
+
+  if (pipeline) {
+    let nodes: any[] = [];
+    try {
+      nodes = typeof pipeline.nodes === "string"
+        ? JSON.parse(pipeline.nodes)
+        : pipeline.nodes || [];
+    } catch {}
+
+    const node = nodes.find((n: any) => n.id === nodeId);
+
+    if (node) {
+      questions = node.data?.config?.questions || [];
+      console.log("Loaded questions from pipeline config:", questions.length);
+    }
+  }
+}
+
+// 3. Final fallback → assessments table
+if (questions.length === 0) {
+  const assessment = await queryOne(
+    "SELECT * FROM assessments WHERE id = $1",
+    [submission.assessment_id]
+  );
+
+  if (assessment?.questions) {
+    questions = typeof assessment.questions === "string"
+      ? JSON.parse(assessment.questions)
+      : assessment.questions;
+
+    console.log("Loaded questions from DB:", questions.length);
+  }
+}
+
+      
 
       console.log("Found", questions.length, "questions for grading");
 
@@ -294,7 +333,9 @@ export async function POST(req: NextRequest) {
       const gradedAnswers = [];
 
       for (const answer of (answers || [])) {
-        const question = questions.find((q: any) => q.title === answer.questionTitle);
+        const question =
+  questions.find((q: any) => q.id === answer.questionId) ||
+  questions.find((q: any) => q.title === answer.questionTitle);
         if (!question) {
           console.log("Question not found:", answer.questionTitle);
           continue;
@@ -349,6 +390,7 @@ export async function POST(req: NextRequest) {
 
         totalScore += score;
         gradedAnswers.push({
+          questionId: question.id,
           questionTitle: answer.questionTitle,
           type: answer.type || question.type,
           score, maxScore: qMaxScore, grading,

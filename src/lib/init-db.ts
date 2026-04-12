@@ -201,7 +201,15 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
     CREATE INDEX IF NOT EXISTS idx_pipelines_created_by ON pipelines(created_by);
   `);
-
+    await query(`
+  CREATE TABLE IF NOT EXISTS ai_cache (
+    cache_key TEXT PRIMARY KEY,
+    value JSONB,
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_cache_expires ON ai_cache(expires_at);
+`);
   await query(`
     DO $$ BEGIN
       ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS linked_job_id TEXT REFERENCES jobs(id);
@@ -443,5 +451,3 @@ export async function initializeDatabase() {
 
   console.log("Database schema initialized successfully");
 }
-
-// 2. The core route handler that safely executes the logic ON DEMAND
