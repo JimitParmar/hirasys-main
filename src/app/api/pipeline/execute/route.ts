@@ -719,19 +719,62 @@ function getStageLabel(subtype: string): string {
 }
 
 async function createNotification(
-  userId: string,
-  type: string,
-  title: string,
-  message: string,
-  link: string
+  userId: string, type: string, title: string, message: string, link: string
 ) {
   try {
+    // In-app notification
     await query(
-      `INSERT INTO notifications (user_id, type, title, message, link)
-       VALUES ($1, $2, $3, $4, $5)`,
+      `INSERT INTO notifications (user_id, type, title, message, link) VALUES ($1, $2, $3, $4, $5)`,
       [userId, type, title, message, link]
     );
+
+    // Send email
+    const user = await queryOne(
+      "SELECT email, first_name, last_name FROM users WHERE id = $1",
+      [userId]
+    );
+
+    if (user?.email) {
+      const { sendStageAdvanced, sendRejectionWithFeedback, sendOfferExtended, sendAssessmentReady } = await import("@/lib/email");
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      if (type === "REJECTION") {
+        await sendRejectionWithFeedback({
+          to: user.email,
+          candidateName: user.first_name || "there",
+          jobTitle: title.includes("—") ? title.split("—")[1]?.trim() : "the position",
+          companyName: "the hiring team",
+          feedbackUrl: `${appUrl}${link}`,
+        });
+      } else if (type === "OFFER_EXTENDED") {
+        await sendOfferExtended({
+          to: user.email,
+          candidateName: user.first_name || "there",
+          jobTitle: message.includes("for ") ? message.split("for ").pop()?.split("!")[0] || "" : "",
+          companyName: "the hiring team",
+        });
+      } else if (type === "ASSESSMENT_AVAILABLE") {
+        await sendAssessmentReady({
+          to: user.email,
+          candidateName: user.first_name || "there",
+          jobTitle: message.includes("for ") ? message.split("for ").pop()?.split(" is")[0] || "" : "",
+          companyName: "the hiring team",
+          assessmentType: message.includes("quiz") ? "Technical Quiz" : "Coding Challenge",
+          duration: 60,
+        });
+      } else if (type === "STAGE_ADVANCED") {
+        await sendStageAdvanced({
+          to: user.email,
+          candidateName: user.first_name || "there",
+          jobTitle: "",
+          companyName: "",
+          stageName: title.replace("Next: ", "").replace("🤖 ", "").replace("📅 ", ""),
+          stageDescription: message,
+          actionUrl: `${appUrl}${link}`,
+        });
+      }
+    }
   } catch (err) {
-    console.error("Notification failed:", err);
+    console.error("Notification/email failed:", err);
   }
 }
