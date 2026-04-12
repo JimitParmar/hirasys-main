@@ -786,7 +786,7 @@ function getMonacoLanguage(lang: string): string {
 }
 
 // 3. The Top-Level Wrapper
-export default function AssessmentPage() {
+function AssessmentPageInner() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -804,6 +804,18 @@ export default function AssessmentPage() {
   return (
     <Suspense fallback={<AssessmentLoader />}>
       <AssessmentContent />
+    </Suspense>
+  );
+}
+
+export default function AssessmentPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <p className="text-white">Loading assessment...</p>
+      </div>
+    }>
+      <AssessmentPageInner />
     </Suspense>
   );
 }

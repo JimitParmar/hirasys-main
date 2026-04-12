@@ -1,4 +1,9 @@
-import { query } from "./db";
+import { NextResponse } from "next/server";
+import { query } from "./db"; // Adjust this import path to your actual db file
+
+// 1. Force Next.js to never cache or pre-render this file during build
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function initializeDatabase() {
   await query(`
@@ -196,17 +201,14 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
     CREATE INDEX IF NOT EXISTS idx_pipelines_created_by ON pipelines(created_by);
   `);
-    // Add linked_job_id column if not exists
+
   await query(`
     DO $$ BEGIN
       ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS linked_job_id TEXT REFERENCES jobs(id);
     EXCEPTION WHEN OTHERS THEN NULL;
     END $$;
   `);
-  console.log("Database schema initialized");
-}
 
-  // Fix submissions table — ensure assessment_id can accept pipeline node IDs
   await query(`
     DO $$ BEGIN
       ALTER TABLE submissions ALTER COLUMN assessment_id TYPE TEXT;
@@ -215,8 +217,6 @@ export async function initializeDatabase() {
     END $$;
   `);
 
-  // Drop the foreign key constraint on assessment_id if it exists
-  // (because we now use pipeline node IDs which aren't in the assessments table)
   await query(`
     DO $$ BEGIN
       ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_assessment_id_fkey;
@@ -262,14 +262,14 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_feedback_interview ON interview_feedback(interview_id);
   `);
 
-    await query(`
+  await query(`
     DO $$ BEGIN
       ALTER TABLE f2f_interviews ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
     EXCEPTION WHEN OTHERS THEN NULL;
     END $$;
   `);
 
-    await query(`
+  await query(`
     CREATE TABLE IF NOT EXISTS integrations (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
       user_id TEXT NOT NULL,
@@ -302,7 +302,6 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_external_postings_job ON job_postings_external(job_id);
   `);
 
-    // Companies table
   await query(`
     CREATE TABLE IF NOT EXISTS companies (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -364,7 +363,6 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id);
   `);
 
-    // Billing tables
   await query(`
     CREATE TABLE IF NOT EXISTS billing_plans (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -442,3 +440,8 @@ export async function initializeDatabase() {
       ('Enterprise', 'enterprise', 599, 5699, 'USD', 2000, '{"jobs": "unlimited", "resumeScreens": "unlimited", "assessments": "unlimited", "aiInterviews": "unlimited", "pipelineBuilder": true, "aiGenerate": true, "customNodes": true, "sso": true, "templates": "all", "integrations": true, "dedicated_support": true, "audit_logs": true}', '{"maxJobs": -1, "maxApplicantsPerJob": -1}')
     ON CONFLICT (slug) DO NOTHING;
   `);
+
+  console.log("Database schema initialized successfully");
+}
+
+// 2. The core route handler that safely executes the logic ON DEMAND

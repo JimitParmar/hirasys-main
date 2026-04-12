@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,12 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  ArrowLeft, Loader2, Sparkles, Plus, Save, Code,
-  CheckCircle,
+  ArrowLeft, Loader2, Sparkles, Save, Code, CheckCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Link from "next/link";
 
-export default function NewAssessmentPage() {
+function NewAssessmentPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get("jobId");
@@ -105,30 +104,24 @@ export default function NewAssessmentPage() {
     }
   };
 
-  const selectedJob = jobs.find((j) => j.id === selectedJobId);
-
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="bg-white border-b border-slate-200 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto h-12 flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <Link href="/hr/dashboard">
-              <Button variant="ghost" size="icon"><ArrowLeft className="w-5 h-5" /></Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="w-4 h-4" /></Button>
             </Link>
-            <h1 className="font-bold text-slate-800">Create Assessment</h1>
+            <span className="font-semibold text-sm text-slate-800">Create Assessment</span>
           </div>
-          <Button
-            onClick={handleSave}
-            disabled={saving || questions.length === 0}
-            className="bg-[#0245EF] hover:bg-[#0237BF]"
-          >
+          <Button onClick={handleSave} disabled={saving || questions.length === 0} className="bg-[#0245EF] hover:bg-[#0237BF]">
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
             Save Assessment
           </Button>
         </div>
-      </header>
+      </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <Card>
           <CardHeader><CardTitle>Assessment Settings</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -146,11 +139,7 @@ export default function NewAssessmentPage() {
               </div>
               <div className="space-y-2">
                 <Label>Title *</Label>
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. React Coding Challenge"
-                />
+                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. React Coding Challenge" />
               </div>
             </div>
 
@@ -187,22 +176,13 @@ export default function NewAssessmentPage() {
               </div>
             </div>
 
-            <Button
-              onClick={generateQuestions}
-              disabled={generating || !selectedJobId}
-              className="w-full bg-purple-600 hover:bg-purple-700"
-            >
-              {generating ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Sparkles className="w-4 h-4 mr-2" />
-              )}
-              {generating ? "Generating questions from job description..." : "AI Generate Questions"}
+            <Button onClick={generateQuestions} disabled={generating || !selectedJobId} className="w-full bg-purple-600 hover:bg-purple-700">
+              {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+              {generating ? "Generating..." : "AI Generate Questions"}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Generated Questions Preview */}
         {questions.length > 0 && (
           <Card>
             <CardHeader>
@@ -216,29 +196,12 @@ export default function NewAssessmentPage() {
                 <div key={i} className="bg-slate-50 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Badge variant="outline">{q.type}</Badge>
-                    <Badge className={
-                      q.difficulty === "easy" ? "bg-emerald-100 text-emerald-700" :
-                      q.difficulty === "hard" ? "bg-red-100 text-red-700" :
-                      "bg-amber-100 text-amber-700"
-                    }>{q.difficulty}</Badge>
+                    <Badge className={q.difficulty === "easy" ? "bg-emerald-100 text-emerald-700" : q.difficulty === "hard" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}>{q.difficulty}</Badge>
                     <Badge variant="secondary">{q.points} pts</Badge>
                   </div>
                   <h4 className="font-semibold text-slate-800">{q.title}</h4>
                   <p className="text-sm text-slate-500 mt-1 line-clamp-3">{q.description}</p>
-                  {q.testCases && (
-                    <p className="text-xs text-slate-400 mt-2">
-                      {q.testCases.length} test cases ({q.testCases.filter((t: any) => !t.isHidden).length} visible, {q.testCases.filter((t: any) => t.isHidden).length} hidden)
-                    </p>
-                  )}
-                  {q.options && (
-                    <div className="mt-2 flex gap-2 flex-wrap">
-                      {q.options.map((o: any) => (
-                        <Badge key={o.id} variant={o.id === q.correctAnswer ? "default" : "outline"} className="text-xs">
-                          {o.id}: {o.text}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
+                  {q.testCases && <p className="text-xs text-slate-400 mt-2">{q.testCases.length} test cases</p>}
                 </div>
               ))}
             </CardContent>
@@ -246,5 +209,17 @@ export default function NewAssessmentPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function NewAssessmentPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
+      </div>
+    }>
+      <NewAssessmentPageInner />
+    </Suspense>
   );
 }

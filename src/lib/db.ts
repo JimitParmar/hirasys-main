@@ -1,17 +1,24 @@
 import { Pool } from "pg";
 
 const pool = new Pool({
-  host: "localhost",
-  port: 5432,
-  user: "hirasys",
-  password: "hirasys123",
-  database: "hirasys",
+  connectionString: process.env.DATABASE_URL,
+  // Fallback to individual params only for local dev
+  ...(!process.env.DATABASE_URL && {
+    host: "localhost",
+    port: 5432,
+    user: "hirasys",
+    password: "hirasys123",
+    database: "hirasys",
+  }),
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000,
+  // Required for Railway/Neon SSL
+  ssl: process.env.DATABASE_URL?.includes("railway.app") || process.env.DATABASE_URL?.includes("neon.tech")
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
-// Test connection on startup
 pool.on("connect", () => {
   console.log("Database connected");
 });
@@ -22,7 +29,6 @@ pool.on("error", (err) => {
 
 export { pool as db };
 
-// Helper for single queries
 export async function query(text: string, params?: any[]) {
   const start = Date.now();
   const res = await pool.query(text, params);
@@ -33,13 +39,11 @@ export async function query(text: string, params?: any[]) {
   return res;
 }
 
-// Helper for getting single row
 export async function queryOne<T = any>(text: string, params?: any[]): Promise<T | null> {
   const res = await query(text, params);
   return (res.rows[0] as T) || null;
 }
 
-// Helper for getting multiple rows
 export async function queryMany<T = any>(text: string, params?: any[]): Promise<T[]> {
   const res = await query(text, params);
   return res.rows as T[];

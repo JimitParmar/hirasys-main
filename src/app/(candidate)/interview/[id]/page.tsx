@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ interface Message {
   timestamp: string;
 }
 
-export default function InterviewPage() {
+function InterviewPageInner() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -368,5 +368,20 @@ export default function InterviewPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function InterviewPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-[#0245EF] mx-auto mb-4" />
+          <p className="text-slate-500">Preparing interview...</p>
+        </div>
+      </div>
+    }>
+      <InterviewPageInner />
+    </Suspense>
   );
 }
