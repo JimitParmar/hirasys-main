@@ -154,6 +154,13 @@ function AssessmentContent() {
         setLoading(false);
         return;
       }
+      console.log("📥 START RESPONSE:", sData);
+
+if (!sData.submission) {
+  console.error("❌ No submission returned");
+} else {
+  console.log("✅ Submission created:", sData.submission.id);
+}
 
       if (!sData.submission) {
         toast.error("Failed to start assessment");
@@ -303,55 +310,78 @@ function AssessmentContent() {
   };
 
   const handleSubmit = async () => {
-    if (isFinished || submitting || submitCalledRef.current) return;
+  console.log("🟢 Submit button clicked");
 
-    const sub = submissionRef.current;
-    if (!sub?.id) {
-      const id = await new Promise<string | null>((resolve) => {
-        setSubmission((c: any) => { resolve(c?.id || null); return c; });
-      });
-      if (!id) { toast.error("No active submission. Refresh page."); return; }
-      await submitAnswers(id, answersRef.current);
-      return;
-    }
+  if (isFinished || submitting || submitCalledRef.current) {
+    console.log("⛔ Submit blocked", { isFinished, submitting, submitCalledRef: submitCalledRef.current });
+    return;
+  }
 
-    await submitAnswers(sub.id, answersRef.current);
-  };
+  const sub = submissionRef.current;
+
+  console.log("📦 Current submissionRef:", sub);
+
+  if (!sub?.id) {
+    console.error("❌ No submission ID found");
+    toast.error("Submission not initialized. Refresh page.");
+    return;
+  }
+
+  await submitAnswers(sub.id, answersRef.current);
+};
 
   const submitAnswers = async (submissionId: string, finalAnswers: Record<string, any>) => {
-    if (submitting) return;
-    setSubmitting(true);
-    submitCalledRef.current = true;
+  if (submitting) {
+    console.log("⛔ Already submitting, skipping...");
+    return;
+  }
 
-    try {
-      const res = await fetch("/api/submissions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "submit",
-          submissionId,
-          answers: Object.values(finalAnswers),
-        }),
-      });
+  setSubmitting(true);
+  submitCalledRef.current = true;
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.error === "Already graded") { setIsFinished(true); return; }
-        throw new Error(data.error);
-      }
-
-      setIsFinished(true);
-      if (timerRef.current) clearInterval(timerRef.current);
-
-       toast.success("Assessment submitted successfully! 🎉", { duration: 5000 });
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit");
-      submitCalledRef.current = false;
-    } finally {
-      setSubmitting(false);
-    }
+  const payload = {
+    action: "submit",
+    submissionId,
+    answers: Object.values(finalAnswers),
   };
+
+  console.log("🚀 SUBMIT PAYLOAD:", payload);
+
+  try {
+    const res = await fetch("/api/submissions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    console.log("🌐 API RESPONSE STATUS:", res.status);
+
+    const data = await res.json();
+
+    console.log("📩 API RESPONSE DATA:", data);
+
+    if (!res.ok) {
+      console.error("❌ API ERROR:", data);
+      throw new Error(data.error || "Submit failed");
+    }
+
+    console.log("✅ Submission successful");
+
+    setIsFinished(true);
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    toast.success("Assessment submitted successfully! 🎉", { duration: 5000 });
+
+  } catch (err: any) {
+    console.error("❌ Submit failed:", err);
+    toast.error(err.message || "Failed to submit");
+    submitCalledRef.current = false;
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const runCode = async () => {
     const question = assessment.questions[currentQuestionIndex];

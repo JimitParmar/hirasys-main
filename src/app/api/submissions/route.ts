@@ -173,9 +173,19 @@ export async function POST(req: NextRequest) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json();
+    console.log("🔥 POST /api/submissions HIT");
+
+let body;
+try {
+  body = await req.json();
+  console.log("📦 REQUEST BODY:", body);
+} catch (err) {
+  console.error("❌ Failed to parse JSON:", err);
+  return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+}
     const candidateId = (session.user as any).id;
     const action = body.action;
+    console.log("🔥 API HIT:", body.action);
 
     console.log("=== SUBMISSION ACTION ===", action);
 
@@ -183,7 +193,10 @@ export async function POST(req: NextRequest) {
     // START
     // ==========================================
     if (action === "start") {
-      const { assessmentId, applicationId } = body;
+  console.log("🚀 START action triggered");
+
+  const { assessmentId, applicationId } = body;
+  console.log("📌 START params:", { assessmentId, applicationId, candidateId });
 
       if (!assessmentId || !applicationId) {
         return NextResponse.json({ error: "assessmentId and applicationId required" }, { status: 400 });
@@ -238,16 +251,28 @@ export async function POST(req: NextRequest) {
     // SUBMIT — Grade everything server-side
     // ==========================================
     if (action === "submit") {
-      const { submissionId, answers } = body;
+  console.log("🔥 SUBMIT action triggered");
 
-      if (!submissionId) return NextResponse.json({ error: "submissionId required" }, { status: 400 });
+  const { submissionId, answers } = body;
+
+  console.log("📌 Submission ID:", submissionId);
+  console.log("📌 Answers received:", answers?.length);
+
+  if (!submissionId) {
+    console.error("❌ Missing submissionId");
+    return NextResponse.json({ error: "submissionId required" }, { status: 400 });
+  }
 
       console.log("Grading submission:", submissionId);
 
-      const submission = await queryOne(
-        "SELECT * FROM submissions WHERE id = $1 AND candidate_id = $2",
-        [submissionId, candidateId]
-      );
+      console.log("🔍 Fetching submission...");
+
+const submission = await queryOne(
+  "SELECT * FROM submissions WHERE id = $1 AND candidate_id = $2",
+  [submissionId, candidateId]
+);
+
+console.log("📦 Submission from DB:", submission);
 
       if (!submission) return NextResponse.json({ error: "Submission not found" }, { status: 404 });
       if (submission.status === "GRADED") return NextResponse.json({ error: "Already graded", submission }, { status: 409 });
@@ -276,6 +301,8 @@ try {
       : cached.value;
 
     console.log("Loaded questions from cache:", questions.length);
+    console.log("📚 Questions loaded:", questions.length);
+console.log("📚 Questions:", questions.map(q => ({ id: q.id, title: q.title })));
   }
 } catch (err) {
   console.error("Cache fetch failed:", err);
@@ -339,16 +366,18 @@ console.log("submission.assessment_id:", submission.assessment_id);
 console.log("answers received:", answers?.length);
 
       for (const answer of (answers || [])) {
-        console.log("\n--- ANSWER ---");
-console.log("answer.questionId:", answer.questionId);
-console.log("answer.questionTitle:", answer.questionTitle);
-        const question =
-  questions.find((q: any) => q.id === answer.questionId) ||
-  questions.find((q: any) => q.title === answer.questionTitle);
-        if (!question) {
-          console.log("Question not found:", answer.questionTitle);
-          continue;
-        }
+  console.log("\n🧪 Grading answer:", answer.questionTitle);
+
+  const question =
+    questions.find((q: any) => q.id === answer.questionId) ||
+    questions.find((q: any) => q.title === answer.questionTitle);
+
+  if (!question) {
+    console.error("❌ Question NOT FOUND:", answer.questionTitle);
+    continue;
+  }
+
+  console.log("✅ Matched question:", question.title);
 
         let score = 0;
         let grading: any = {};
