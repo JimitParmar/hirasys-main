@@ -5,6 +5,21 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Parse database timestamp — always interpret as UTC
+export function parseDBTimestamp(timestamp: string | Date): Date {
+  if (timestamp instanceof Date) return timestamp;
+
+  const str = String(timestamp).trim();
+
+  // Already has timezone info
+  if (str.endsWith("Z") || /[+-]\d{2}(:\d{2})?$/.test(str)) {
+    return new Date(str);
+  }
+
+  // No timezone — database stores as UTC, append Z
+  return new Date(str + "Z");
+}
+
 export function formatCurrency(amount: number, currency: string = "USD"): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -14,12 +29,32 @@ export function formatCurrency(amount: number, currency: string = "USD"): string
   }).format(amount);
 }
 
+export function formatDate(date: Date | string): string {
+  const d = parseDBTimestamp(date);
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(d);
+}
+
+export function formatDateTime(date: Date | string): string {
+  const d = parseDBTimestamp(date);
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
 export function formatRelativeTime(date: Date | string): string {
   const now = new Date();
-  const d = new Date(date);
-
-  // Handle timezone — ensure we're comparing in the same timezone
+  const d = parseDBTimestamp(date);
   const diff = now.getTime() - d.getTime();
+
+  if (diff < 0) return "just now"; // Future timestamp safety
 
   const seconds = Math.floor(diff / 1000);
   const minutes = Math.floor(diff / 60000);
@@ -35,33 +70,12 @@ export function formatRelativeTime(date: Date | string): string {
   return formatDate(date);
 }
 
-export function formatDate(date: Date | string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(date));
-}
-
-export function formatDateTime(date: Date | string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(date));
-}
-
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
 export function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w ]+/g, "")
-    .replace(/ +/g, "-");
+  return text.toLowerCase().replace(/[^\w ]+/g, "").replace(/ +/g, "-");
 }
 
 export function truncate(text: string, length: number): string {

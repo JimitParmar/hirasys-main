@@ -8,7 +8,7 @@ import { NotificationBell } from "./NotificationBell";
 import { Logo } from "./Logo";
 import {
   Briefcase, LogOut, LayoutDashboard, GitBranch,
-  PlusCircle, Search, User, FileText, Globe, Users
+  PlusCircle, Search, User, FileText, Globe, Users, CreditCard,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -52,6 +52,9 @@ export function AppHeader() {
                   <NavLink href="/profile" icon={User} label="Profile" active={isActive("/profile")} />
                 </>
               )}
+              {(user as any)?.role === "ADMIN" && (
+  <NavLink href="/hr/billing" icon={CreditCard} label="Billing" active={isActive("/hr/billing")} />
+)}
             </nav>
           </div>
 

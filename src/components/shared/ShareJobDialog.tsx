@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -63,8 +64,8 @@ export function ShareJobDialog({ open, onOpenChange, jobId, jobTitle }: Props) {
   };
 
   const platforms = [
-    { id: "linkedin", label: "LinkedIn", icon: linkedinIcon, color: "bg-blue-600" },
-    { id: "twitter", label: "Twitter/X", icon: twitterIcon, color: "bg-black" },
+    { id: "linkedin", label: "LinkedIn", icon: <Image src="linkedin.svg" alt="LinkedIn" />, color: "bg-blue-600" },
+    { id: "twitter", label: "Twitter/X", icon: <Image src="x.svg" alt="Twitter/X" />, color: "bg-black" },
     { id: "indeed", label: "Indeed", icon: Globe, color: "bg-blue-700" },
     { id: "naukri", label: "Naukri", icon: Globe, color: "bg-blue-500" },
     { id: "wellfound", label: "Wellfound", icon: Globe, color: "bg-black" },
@@ -136,7 +137,7 @@ export function ShareJobDialog({ open, onOpenChange, jobId, jobTitle }: Props) {
                     className="flex items-center gap-2 p-3 rounded-lg border border-slate-200 hover:border-[#0245EF] hover:bg-[#EBF0FF] transition-colors text-left"
                   >
                     <div className={`w-8 h-8 rounded ${p.color} flex items-center justify-center`}>
-                      <Icon className="w-4 h-4 text-white" />
+                      
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-700">{p.label}</p>

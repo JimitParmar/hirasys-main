@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, queryMany } from "@/lib/db";
+import { trackUsage } from "@/lib/billing";
+import { getUserCompanyId } from "@/lib/company";
 
 // Import these dynamically to avoid circular dependencies
 async function calculateRating(applicationId: string) {
@@ -17,12 +19,24 @@ async function generateFeedback(applicationId: string) {
 // ==========================================
 
 export async function POST(req: NextRequest) {
+  
   try {
     const { applicationId, trigger } = await req.json();
 
     console.log("\n=== PIPELINE EXECUTION ===");
     console.log("Application:", applicationId, "Trigger:", trigger);
 
+    const validTriggers = [
+      "application_submitted",
+      "assessment_completed",
+      "interview_completed",
+      "f2f_completed",
+      "seed_application",
+    ];
+    if (trigger && !validTriggers.includes(trigger)) {
+      console.log("Skipping — invalid trigger:", trigger);
+      return NextResponse.json({ action: "skipped", reason: `Trigger "${trigger}" not auto-executable` });
+    }
     // Get application + job + pipeline
     const application = await queryOne(
       `SELECT a.*, j.pipeline_id, j.title as job_title, j.id as job_id,
@@ -119,25 +133,43 @@ export async function POST(req: NextRequest) {
         }
 
         // Coding/MCQ Assessment — candidate needs to take it
-        if (nodeSubtype === "coding_assessment" || nodeSubtype === "mcq_assessment") {
+       if (nodeSubtype === "coding_assessment") {
+          console.log(`  ⏸️ Waiting for candidate: coding_assessment`);
           if (stageStatus) {
-            console.log(`  ➡️ Waiting for candidate: ${nodeSubtype}`);
             await query(
               "UPDATE applications SET status = $2, current_stage = $3, updated_at = NOW() WHERE id = $1",
               [applicationId, stageStatus, nodeSubtype]
             );
-
             await createNotification(
               application.candidate_id,
               "ASSESSMENT_AVAILABLE",
-              "📝 Assessment Ready",
-              `Your ${nodeSubtype === "mcq_assessment" ? "quiz" : "coding challenge"} for ${application.job_title} is ready. Complete it to advance.`,
+              "📝 Coding Challenge Ready",
+              `Your coding challenge for ${application.job_title} is ready. Complete it to advance.`,
               "/applications"
             );
-
             actionsTaken.push(`waiting:${stageStatus}`);
           }
-          break; // STOP — candidate needs to complete
+          break;
+        }
+
+        // MCQ Assessment — candidate must take it
+        if (nodeSubtype === "mcq_assessment") {
+          console.log(`  ⏸️ Waiting for candidate: mcq_assessment`);
+          if (stageStatus) {
+            await query(
+              "UPDATE applications SET status = $2, current_stage = $3, updated_at = NOW() WHERE id = $1",
+              [applicationId, stageStatus, nodeSubtype]
+            );
+            await createNotification(
+              application.candidate_id,
+              "ASSESSMENT_AVAILABLE",
+              "📝 Quiz Ready",
+              `Your knowledge quiz for ${application.job_title} is ready. Complete it to advance.`,
+              "/applications"
+            );
+            actionsTaken.push(`waiting:${stageStatus}`);
+          }
+          break;
         }
 
         // AI Interview — candidate needs to take it
@@ -425,8 +457,11 @@ async function isStageCompleted(applicationId: string, subtype: string): Promise
   }
 
   if (subtype === "coding_assessment" || subtype === "mcq_assessment") {
+    // Check for a GRADED submission specifically for this application
     const sub = await queryOne(
-      "SELECT id FROM submissions WHERE application_id = $1 AND status = 'GRADED'",
+      `SELECT id, status FROM submissions 
+       WHERE application_id = $1 AND status = 'GRADED'
+       LIMIT 1`,
       [applicationId]
     );
     return !!sub;
@@ -434,7 +469,9 @@ async function isStageCompleted(applicationId: string, subtype: string): Promise
 
   if (subtype === "ai_technical_interview" || subtype === "ai_behavioral_interview") {
     const int = await queryOne(
-      "SELECT id FROM ai_interviews WHERE application_id = $1 AND status = 'COMPLETED'",
+      `SELECT id, status FROM ai_interviews 
+       WHERE application_id = $1 AND status = 'COMPLETED'
+       LIMIT 1`,
       [applicationId]
     );
     return !!int;
@@ -442,7 +479,9 @@ async function isStageCompleted(applicationId: string, subtype: string): Promise
 
   if (subtype === "f2f_interview" || subtype === "panel_interview") {
     const f2f = await queryOne(
-      "SELECT id FROM f2f_interviews WHERE application_id = $1 AND status = 'COMPLETED'",
+      `SELECT id, status FROM f2f_interviews 
+       WHERE application_id = $1 AND status = 'COMPLETED'
+       LIMIT 1`,
       [applicationId]
     );
     return !!f2f;

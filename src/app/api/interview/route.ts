@@ -6,19 +6,14 @@ import { getSession } from "@/lib/session";
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     const applicationId = searchParams.get("applicationId");
 
     if (id) {
-      const interview = await queryOne(
-        "SELECT * FROM ai_interviews WHERE id = $1",
-        [id]
-      );
+      const interview = await queryOne("SELECT * FROM ai_interviews WHERE id = $1", [id]);
       return NextResponse.json({ interview });
     }
 
@@ -30,19 +25,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ interviews });
     }
 
-    // HR: get all interviews
     if (["HR", "ADMIN"].includes((session.user as any).role)) {
       const interviews = await queryMany(
-        `SELECT ai.*,
-          u.first_name as candidate_first_name,
-          u.last_name as candidate_last_name,
-          j.title as job_title
+        `SELECT ai.*, u.first_name as candidate_first_name, u.last_name as candidate_last_name, j.title as job_title
          FROM ai_interviews ai
          LEFT JOIN users u ON ai.candidate_id = u.id
          LEFT JOIN applications a ON ai.application_id = a.id
          LEFT JOIN jobs j ON a.job_id = j.id
-         ORDER BY ai.created_at DESC
-         LIMIT 50`
+         ORDER BY ai.created_at DESC LIMIT 50`
       );
       return NextResponse.json({ interviews });
     }
@@ -58,9 +48,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
     const candidateId = (session.user as any).id;
@@ -71,47 +59,31 @@ export async function POST(req: NextRequest) {
     if (body.action === "start") {
       const { applicationId, interviewType } = body;
 
-      // Check existing
       const existing = await queryOne(
-        `SELECT * FROM ai_interviews
-         WHERE application_id = $1 AND candidate_id = $2
-         AND type = $3`,
+        `SELECT * FROM ai_interviews WHERE application_id = $1 AND candidate_id = $2 AND type = $3`,
         [applicationId, candidateId, interviewType || "TECHNICAL"]
       );
 
       if (existing) {
         if (existing.status === "COMPLETED") {
-          return NextResponse.json(
-            { error: "Already completed", interview: existing },
-            { status: 409 }
-          );
+          return NextResponse.json({ error: "Already completed", interview: existing }, { status: 409 });
         }
-        // Resume existing
         let messages = existing.messages;
         if (typeof messages === "string") messages = JSON.parse(messages);
-        return NextResponse.json({
-          interview: { ...existing, messages },
-        });
+        return NextResponse.json({ interview: { ...existing, messages } });
       }
 
-      // Get job + pipeline context
       const application = await queryOne(
         `SELECT a.*, a.resume_text, a.resume_parsed,
           j.title as job_title, j.description as job_description,
-          j.skills as job_skills, j.requirements as job_requirements,
-          j.pipeline_id
-         FROM applications a
-         JOIN jobs j ON a.job_id = j.id
-         WHERE a.id = $1`,
+          j.skills as job_skills, j.requirements as job_requirements, j.pipeline_id
+         FROM applications a JOIN jobs j ON a.job_id = j.id WHERE a.id = $1`,
         [applicationId]
       );
 
-      if (!application) {
-        return NextResponse.json({ error: "Application not found" }, { status: 404 });
-      }
+      if (!application) return NextResponse.json({ error: "Application not found" }, { status: 404 });
 
-      // Get interview config from pipeline node
-            // Get interview config from pipeline node
+      // Get config from pipeline node
       let maxQuestions = 10;
       let duration = 30;
       let adaptive = true;
@@ -123,22 +95,13 @@ export async function POST(req: NextRequest) {
       let scoringCriteria: string[] = [];
 
       if (application.pipeline_id) {
-        const pipeline = await queryOne(
-          "SELECT * FROM pipelines WHERE id = $1",
-          [application.pipeline_id]
-        );
-
+        const pipeline = await queryOne("SELECT * FROM pipelines WHERE id = $1", [application.pipeline_id]);
         if (pipeline) {
           let nodes: any[] = [];
-          try {
-            nodes = typeof pipeline.nodes === "string"
-              ? JSON.parse(pipeline.nodes) : pipeline.nodes || [];
-          } catch {}
+          try { nodes = typeof pipeline.nodes === "string" ? JSON.parse(pipeline.nodes) : pipeline.nodes || []; } catch {}
 
           const interviewNode = nodes.find(
-            (n: any) =>
-              n.data?.subtype === "ai_technical_interview" ||
-              n.data?.subtype === "ai_behavioral_interview"
+            (n: any) => n.data?.subtype === "ai_technical_interview" || n.data?.subtype === "ai_behavioral_interview"
           );
 
           if (interviewNode?.data?.config) {
@@ -151,19 +114,15 @@ export async function POST(req: NextRequest) {
             provideHints = cfg.provideHints !== false;
             useResumeContext = cfg.useResumeContext !== false;
             topics = cfg.topics || [];
-
-            // Build scoring criteria list
             if (cfg.scoreTechnical !== false) scoringCriteria.push("technical knowledge");
             if (cfg.scoreCommunication !== false) scoringCriteria.push("communication");
             if (cfg.scoreProblemSolving !== false) scoringCriteria.push("problem solving");
             if (cfg.scoreCultureFit) scoringCriteria.push("culture fit");
             if (cfg.scoreLeadership) scoringCriteria.push("leadership");
-            if (cfg.scoreCreativity) scoringCriteria.push("creativity");
           }
         }
       }
 
-      // Build context
       const jobContext = {
         title: application.job_title,
         description: application.job_description,
@@ -174,61 +133,47 @@ export async function POST(req: NextRequest) {
       let resumeContext = {};
       try {
         resumeContext = typeof application.resume_parsed === "string"
-          ? JSON.parse(application.resume_parsed)
-          : application.resume_parsed || {};
+          ? JSON.parse(application.resume_parsed) : application.resume_parsed || {};
       } catch {}
 
-      // Create interview
       const interview = await queryOne(
-        `INSERT INTO ai_interviews (
-          application_id, candidate_id, type, status,
-          job_context, resume_context, messages,
-          max_questions, started_at
-        ) VALUES ($1, $2, $3, 'IN_PROGRESS', $4, $5, '[]', $6, NOW())
-        RETURNING *`,
-        [
-          applicationId,
-          candidateId,
-          interviewType || "TECHNICAL",
-          JSON.stringify(jobContext),
-          JSON.stringify(resumeContext),
-          maxQuestions,
-        ]
+        `INSERT INTO ai_interviews (application_id, candidate_id, type, status, job_context, resume_context, messages, max_questions, started_at)
+         VALUES ($1, $2, $3, 'IN_PROGRESS', $4, $5, '[]', $6, NOW()) RETURNING *`,
+        [applicationId, candidateId, interviewType || "TECHNICAL", JSON.stringify(jobContext), JSON.stringify(resumeContext), maxQuestions]
       );
 
-      // Update application status
-      await query(
-        "UPDATE applications SET status = 'AI_INTERVIEW', updated_at = NOW() WHERE id = $1",
-        [applicationId]
-      );
+      await query("UPDATE applications SET status = 'AI_INTERVIEW', updated_at = NOW() WHERE id = $1", [applicationId]);
 
-      // Generate first message from AI
+      // Track usage
+      try {
+        const { getUserCompanyId } = await import("@/lib/company");
+        const { trackUsage } = await import("@/lib/billing");
+        const job = await queryOne(
+          "SELECT posted_by FROM jobs j JOIN applications a ON a.job_id = j.id WHERE a.id = $1",
+          [applicationId]
+        );
+        const hrCompany = job?.posted_by ? await getUserCompanyId(job.posted_by) : null;
+        if (hrCompany) {
+          await trackUsage({
+            companyId: hrCompany,
+            nodeType: interviewType === "BEHAVIORAL" ? "ai_behavioral_interview" : "ai_technical_interview",
+            jobId: application.job_id,
+            applicationId,
+          });
+        }
+      } catch {}
+
+      // Generate first message
       const { aiText } = await import("@/lib/ai");
 
-            const systemPrompt = buildSystemPrompt(
-        interviewType || "TECHNICAL",
-        jobContext,
-        resumeContext,
-        maxQuestions,
-        {
-          interviewMode,
-          difficulty,
-          adaptive,
-          provideHints,
-          useResumeContext,
-          topics,
-          scoringCriteria,
-        }
+      const systemPrompt = buildSystemPrompt(
+        interviewType || "TECHNICAL", jobContext, resumeContext, maxQuestions,
+        { interviewMode, difficulty, adaptive, provideHints, useResumeContext, topics, scoringCriteria }
       );
 
-      const firstMessage = await aiText(
-        systemPrompt,
-        "Start the interview. Introduce yourself briefly and ask the first question."
-      );
+      const firstMessage = await aiText(systemPrompt, "Start the interview. Introduce yourself briefly and ask the first question.");
 
-      const messages = [
-        { role: "assistant", content: firstMessage, timestamp: new Date().toISOString() },
-      ];
+      const messages = [{ role: "assistant", content: firstMessage, timestamp: new Date().toISOString() }];
 
       await query(
         `UPDATE ai_interviews SET messages = $2, questions_asked = 1 WHERE id = $1`,
@@ -241,7 +186,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ==========================================
-    // SEND MESSAGE (candidate responds)
+    // SEND MESSAGE
     // ==========================================
     if (body.action === "message") {
       const { interviewId, message } = body;
@@ -251,45 +196,25 @@ export async function POST(req: NextRequest) {
         [interviewId, candidateId]
       );
 
-      if (!interview) {
-        return NextResponse.json({ error: "Interview not found" }, { status: 404 });
-      }
-
-      if (interview.status === "COMPLETED") {
-        return NextResponse.json({ error: "Interview already completed" }, { status: 409 });
-      }
+      if (!interview) return NextResponse.json({ error: "Interview not found" }, { status: 404 });
+      if (interview.status === "COMPLETED") return NextResponse.json({ error: "Already completed" }, { status: 409 });
 
       let messages: any[] = [];
-      try {
-        messages = typeof interview.messages === "string"
-          ? JSON.parse(interview.messages) : interview.messages || [];
-      } catch { messages = []; }
+      try { messages = typeof interview.messages === "string" ? JSON.parse(interview.messages) : interview.messages || []; } catch { messages = []; }
 
       let jobContext: any = {};
-      try {
-        jobContext = typeof interview.job_context === "string"
-          ? JSON.parse(interview.job_context) : interview.job_context || {};
-      } catch {}
+      try { jobContext = typeof interview.job_context === "string" ? JSON.parse(interview.job_context) : interview.job_context || {}; } catch {}
 
       let resumeContext: any = {};
-      try {
-        resumeContext = typeof interview.resume_context === "string"
-          ? JSON.parse(interview.resume_context) : interview.resume_context || {};
-      } catch {}
+      try { resumeContext = typeof interview.resume_context === "string" ? JSON.parse(interview.resume_context) : interview.resume_context || {}; } catch {}
 
-      // Add candidate's message
-      messages.push({
-        role: "user",
-        content: message,
-        timestamp: new Date().toISOString(),
-      });
+      messages.push({ role: "user", content: message, timestamp: new Date().toISOString() });
 
       const questionsAsked = (interview.questions_asked || 0) + 1;
       const maxQuestions = interview.max_questions || 10;
 
       // Check if interview should end
       if (questionsAsked >= maxQuestions) {
-        // Generate final evaluation
         const { aiJSON } = await import("@/lib/ai");
 
         const evaluation = await aiJSON<{
@@ -302,33 +227,17 @@ export async function POST(req: NextRequest) {
           analysis: string;
           recommendation: string;
         }>(
-          `You are evaluating a candidate interview. Based on the entire conversation, score them.
-Return JSON:
-{
-  "overallScore": 0-100,
-  "technicalScore": 0-100,
-  "communicationScore": 0-100,
-  "problemSolvingScore": 0-100,
-  "strengths": ["strength1", "strength2", "strength3"],
-  "weaknesses": ["area1", "area2"],
-  "analysis": "2-3 sentence summary of the candidate",
-  "recommendation": "strong_yes|yes|maybe|no|strong_no"
-}`,
-          `Job: ${jobContext.title}
-Skills required: ${(jobContext.skills || []).join(", ")}
-
-Interview transcript:
-${messages.map((m: any) => `${m.role === "user" ? "Candidate" : "Interviewer"}: ${m.content}`).join("\n\n")}`
+          `You are evaluating a candidate interview. Score them based on the conversation.
+Return JSON: { "overallScore": 0-100, "technicalScore": 0-100, "communicationScore": 0-100, "problemSolvingScore": 0-100, "strengths": ["..."], "weaknesses": ["..."], "analysis": "2-3 sentences", "recommendation": "strong_yes|yes|maybe|no|strong_no" }`,
+          `Job: ${jobContext.title}\nSkills: ${(jobContext.skills || []).join(", ")}\n\nTranscript:\n${messages.map((m: any) => `${m.role === "user" ? "Candidate" : "Interviewer"}: ${m.content}`).join("\n\n")}`
         );
 
-        // Add closing message
         messages.push({
           role: "assistant",
           content: "Thank you for your time! That concludes our interview. We'll review your responses and get back to you soon. Good luck! 🙌",
           timestamp: new Date().toISOString(),
         });
 
-        // Save completed interview
         await query(
           `UPDATE ai_interviews
            SET messages = $2, questions_asked = $3, status = 'COMPLETED',
@@ -336,51 +245,27 @@ ${messages.map((m: any) => `${m.role === "user" ? "Candidate" : "Interviewer"}: 
                strengths = $7, weaknesses = $8, completed_at = NOW(),
                duration = EXTRACT(EPOCH FROM (NOW() - started_at))::integer
            WHERE id = $1`,
-          [
-            interviewId,
-            JSON.stringify(messages),
-            questionsAsked,
-            evaluation.overallScore || 0,
-            JSON.stringify(evaluation),
-            evaluation.analysis || "",
-            evaluation.strengths || [],
-            evaluation.weaknesses || [],
-          ]
+          [interviewId, JSON.stringify(messages), questionsAsked, evaluation.overallScore || 0, JSON.stringify(evaluation), evaluation.analysis || "", evaluation.strengths || [], evaluation.weaknesses || []]
         );
 
-                // Trigger pipeline execution
+        // Trigger pipeline execution
         try {
           await fetch(
             `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/pipeline/execute`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                applicationId: interview.application_id,
-                trigger: "interview_completed",
-              }),
+              body: JSON.stringify({ applicationId: interview.application_id, trigger: "interview_completed" }),
             }
           );
-        } catch (err) {
-          console.error("Pipeline trigger failed:", err);
-        }
+        } catch {}
 
-        return NextResponse.json({
-          messages,
-          isComplete: true,
-          evaluation,
-        });
+        return NextResponse.json({ messages, isComplete: true, evaluation });
       }
 
       // Generate next question
       const { aiText } = await import("@/lib/ai");
-
-      const systemPrompt = buildSystemPrompt(
-        interview.type || "TECHNICAL",
-        jobContext,
-        resumeContext,
-        maxQuestions
-      );
+      const systemPrompt = buildSystemPrompt(interview.type || "TECHNICAL", jobContext, resumeContext, maxQuestions);
 
       const conversationHistory = messages.map((m: any) =>
         `${m.role === "user" ? "Candidate" : "You"}: ${m.content}`
@@ -388,32 +273,21 @@ ${messages.map((m: any) => `${m.role === "user" ? "Candidate" : "Interviewer"}: 
 
       const nextResponse = await aiText(
         systemPrompt,
-        `Here's the conversation so far:\n\n${conversationHistory}\n\nThis is question ${questionsAsked + 1} of ${maxQuestions}. ${
+        `Conversation so far:\n\n${conversationHistory}\n\nThis is question ${questionsAsked + 1} of ${maxQuestions}. ${
           questionsAsked >= maxQuestions - 2
-            ? "We're near the end. Ask a final important question."
-            : "Ask a relevant follow-up or new question based on their last answer."
+            ? "Near the end. Ask a final important question."
+            : "Ask a relevant follow-up or new question."
         }`
       );
 
-      messages.push({
-        role: "assistant",
-        content: nextResponse,
-        timestamp: new Date().toISOString(),
-      });
+      messages.push({ role: "assistant", content: nextResponse, timestamp: new Date().toISOString() });
 
       await query(
-        `UPDATE ai_interviews
-         SET messages = $2, questions_asked = $3
-         WHERE id = $1`,
+        `UPDATE ai_interviews SET messages = $2, questions_asked = $3 WHERE id = $1`,
         [interviewId, JSON.stringify(messages), questionsAsked]
       );
 
-      return NextResponse.json({
-        messages,
-        isComplete: false,
-        questionsAsked,
-        maxQuestions,
-      });
+      return NextResponse.json({ messages, isComplete: false, questionsAsked, maxQuestions });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -424,18 +298,10 @@ ${messages.map((m: any) => `${m.role === "user" ? "Candidate" : "Interviewer"}: 
 }
 
 function buildSystemPrompt(
-  type: string,
-  jobContext: any,
-  resumeContext: any,
-  maxQuestions: number,
+  type: string, jobContext: any, resumeContext: any, maxQuestions: number,
   config?: {
-    interviewMode?: string;
-    difficulty?: string;
-    adaptive?: boolean;
-    provideHints?: boolean;
-    useResumeContext?: boolean;
-    topics?: string[];
-    scoringCriteria?: string[];
+    interviewMode?: string; difficulty?: string; adaptive?: boolean;
+    provideHints?: boolean; useResumeContext?: boolean; topics?: string[]; scoringCriteria?: string[];
   }
 ): string {
   const mode = config?.interviewMode || (type === "BEHAVIORAL" ? "behavioral" : "technical");
@@ -446,31 +312,22 @@ function buildSystemPrompt(
   const topics = config?.topics || [];
 
   let modeInstructions = "";
-  if (mode === "technical") {
-    modeInstructions = "Focus on technical skills, system design, algorithms, coding concepts, and architecture decisions.";
-  } else if (mode === "behavioral") {
-    modeInstructions = "Focus on teamwork, leadership, conflict resolution, project management, and work approach. Use STAR method questions.";
-  } else {
-    modeInstructions = "Mix technical questions (60%) with behavioral questions (40%). Cover both skills and soft skills.";
-  }
+  if (mode === "technical") modeInstructions = "Focus on technical skills, system design, algorithms, coding concepts, and architecture decisions.";
+  else if (mode === "behavioral") modeInstructions = "Focus on teamwork, leadership, conflict resolution, project management, and work approach. Use STAR method.";
+  else modeInstructions = "Mix technical questions (60%) with behavioral questions (40%).";
 
   let diffInstructions = "";
-  if (diff === "progressive") {
-    diffInstructions = "Start with easy warm-up questions and progressively increase difficulty.";
-  } else if (diff === "easy") {
-    diffInstructions = "Keep all questions at an easy/introductory level.";
-  } else if (diff === "hard") {
-    diffInstructions = "Ask senior-level, challenging questions from the start.";
-  } else {
-    diffInstructions = "Keep questions at a medium difficulty throughout.";
-  }
+  if (diff === "progressive") diffInstructions = "Start with easy warm-up questions and progressively increase difficulty.";
+  else if (diff === "easy") diffInstructions = "Keep all questions at an easy/introductory level.";
+  else if (diff === "hard") diffInstructions = "Ask senior-level, challenging questions from the start.";
+  else diffInstructions = "Keep questions at medium difficulty.";
 
   return `You are an expert interviewer conducting a ${mode} interview at a top company.
-You are interviewing a candidate for: ${jobContext.title || "Software Engineer"}.
+Interviewing for: ${jobContext.title || "Software Engineer"}.
 
 JOB CONTEXT:
 ${jobContext.description || "Not specified"}
-Skills needed: ${(jobContext.skills || []).join(", ") || "Not specified"}
+Skills: ${(jobContext.skills || []).join(", ") || "Not specified"}
 Requirements: ${(jobContext.requirements || []).join(", ") || "Not specified"}
 
 ${useResume && resumeContext ? `CANDIDATE BACKGROUND:
@@ -478,20 +335,19 @@ ${resumeContext.summary || resumeContext.experience || JSON.stringify(resumeCont
 Matched skills: ${(resumeContext.matchedSkills || []).join(", ") || "Unknown"}
 ` : ""}
 
-INTERVIEW SETTINGS:
+SETTINGS:
 - Total questions: ${maxQuestions}
 - Mode: ${modeInstructions}
 - Difficulty: ${diffInstructions}
-${topics.length > 0 ? `- MUST cover these topics: ${topics.join(", ")}` : ""}
+${topics.length > 0 ? `- Cover these topics: ${topics.join(", ")}` : ""}
 
 RULES:
 - Ask ONE question at a time
-- ${adaptiveMode ? "Ask follow-up questions based on their answers" : "Ask pre-planned questions in sequence"}
-- ${hints ? "If the candidate seems stuck, provide a small hint" : "Do not provide hints"}
+- ${adaptiveMode ? "Ask follow-up questions based on answers" : "Ask pre-planned questions in sequence"}
+- ${hints ? "Provide small hints if stuck" : "No hints"}
 - Be conversational and encouraging, not interrogating
-- Keep each response to 2-4 sentences (brief context + question)
-- DO NOT give answers or evaluate during the interview
-- DO NOT mention scores, evaluations, or how they're doing
-- DO NOT say "great answer" or "good job" — stay neutral
-- ${useResume ? "Reference their resume/experience when relevant" : "Don't reference their background"}`;
+- Keep responses to 2-4 sentences
+- DO NOT evaluate or score during the interview
+- DO NOT say "great answer" — stay neutral
+- ${useResume ? "Reference their background when relevant" : "Don't reference background"}`;
 }

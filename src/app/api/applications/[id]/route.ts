@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryOne } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { logAudit, getAuditUser } from "@/lib/audit";
 
 export async function PUT(
   req: NextRequest,
@@ -16,16 +17,28 @@ export async function PUT(
     const { status } = await req.json();
 
     const application = await queryOne(
-      `UPDATE applications
-       SET status = $2, updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
-      [id, status]
+      `UPDATE applications SET status = $2, current_stage = $3, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id, status, status.toLowerCase()]
     );
 
     if (!application) {
       return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
+
+    // Log the audit
+    try {
+      await logAudit({
+        ...getAuditUser(session),
+        action: "APPLICATION_STATUS_CHANGED",
+        resourceType: "application",
+        resourceId: id,
+        details: { newStatus: status },
+      });
+    } catch {}
+
+    // DO NOT trigger pipeline execution on manual status changes
+    // Pipeline only runs when candidate completes actions (assessment, interview)
 
     return NextResponse.json({ success: true, application });
   } catch (error) {

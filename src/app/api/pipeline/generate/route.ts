@@ -31,58 +31,67 @@ export async function POST(req: NextRequest) {
       costPerUnit: n.costPerUnit,
     }));
 
-    const result = await aiJSON<{
-      name: string;
-      description: string;
-      nodes: {
-        subtype: string;
-        label: string;
-        config: Record<string, any>;
-      }[];
-      filters: {
-        afterNode: string;
-        type: string;
-        config: Record<string, any>;
-      }[];
-      estimatedApplicants: number;
-      reasoning: string;
-    }>(
-      `You are an expert hiring pipeline designer for Hirasys, an AI-powered hiring platform.
+          const result = await aiJSON<{
+        name: string;
+        description: string;
+        nodes: {
+          subtype: string;
+          label: string;
+          config: Record<string, any>;
+        }[];
+        filters: {
+          afterNode: string;
+          type: string;
+          config: Record<string, any>;
+        }[];
+        estimatedApplicants: number;
+        reasoning: string;
+      }>(
+        `You are an expert hiring pipeline designer for Hirasys, an AI-powered hiring platform.
 
-Given an HR's description of what they need, design a complete hiring pipeline.
+Given an HR's description, design a complete hiring pipeline.
 
-AVAILABLE STAGE NODES (candidate does something):
+AVAILABLE STAGE NODES:
 - ai_resume_screen: AI screens resumes against job requirements
-- coding_assessment: Timed coding test with IDE (languages: javascript, python, typescript, sql)
-- mcq_assessment: Multiple choice technical quiz
-- ai_technical_interview: AI conducts adaptive technical interview
-- ai_behavioral_interview: AI conducts behavioral/culture fit interview
-- f2f_interview: Face-to-face interview with team (HR schedules)
-- panel_interview: Multiple interviewers evaluate candidate
+- coding_assessment: Timed coding test with IDE (config: {duration, difficulty, questionCount, languages, questionMode: "auto"})
+- mcq_assessment: Multiple choice quiz (config: {duration, difficulty, questionCount, questionMode: "auto"})
+- ai_technical_interview: AI conducts TECHNICAL interview — coding, system design, algorithms (config: {maxQuestions, duration, difficulty, interviewMode: "technical", adaptive: true})
+- ai_behavioral_interview: AI conducts BEHAVIORAL interview — leadership, teamwork, communication (config: {maxQuestions, duration, difficulty, interviewMode: "behavioral", adaptive: true})
+- f2f_interview: Face-to-face interview with team (config: {duration, interviewType})
+- panel_interview: Multiple interviewers evaluate candidate (config: {duration, panelSize, interviewType})
 
-AVAILABLE FILTER NODES (control candidate flow, all FREE):
-- score_gate: Only candidates above a score threshold pass (config: {minScore: 0-100})
+AVAILABLE FILTER NODES (all FREE):
+- score_gate: Only candidates above score threshold pass (config: {minScore: 0-100})
 - top_n: Only top N candidates pass (config: {n: number})
 - percentage: Only top X% pass (config: {percentage: 0-100})
-- hybrid: Fast-track high scorers + batch filter rest (config: {fastTrackThreshold: 0-100, batchN: number})
-- human_approval: HR manually reviews and approves
+- hybrid: Fast-track high scorers + batch filter rest
+- human_approval: HR manually reviews
 
 EXIT NODES:
 - offer: Extend job offer
-- rejection: Reject with personalized feedback
+- rejection: Reject with feedback
 
-RULES:
-1. ALWAYS start with ai_resume_screen (first stage after entry)
-2. ALWAYS add a filter after ai_resume_screen to control volume
-3. ALWAYS end with offer node
-4. Add filters between stages to progressively narrow candidates
-5. For technical roles: include coding_assessment
-6. For non-technical roles: skip coding, use mcq or behavioral
-7. For senior roles: add more stages (system design, panel)
-8. For junior/intern: simpler pipeline (screen, basic test, interview)
-9. For high-volume roles: add stricter filters
-10. Score gate minScore: 40-60 for lenient, 60-80 for moderate, 80+ for strict
-11. Be practical — don't add too many stages (4-7 total stages ideal)
+CRITICAL RULES FOR INTERVIEW TYPE:
+1. For TECHNICAL roles (developer, engineer, data scientist, DevOps):
+   → Use ai_technical_interview with interviewMode: "technical"
+   → Include coding_assessment
+2. For NON-TECHNICAL roles (product manager, designer, marketing, HR, sales, support):
+   → Use ai_behavioral_interview with interviewMode: "behavioral"
+   → Use mcq_assessment instead of coding_assessment
+   → Focus on case studies, communication, leadership
+3. For MIXED roles (tech lead, engineering manager, CTO):
+   → Use BOTH ai_technical_interview AND ai_behavioral_interview
+   → Or use ai_technical_interview with interviewMode: "mixed"
+4. When user specifically says "no technical" or "behavioral" or "case study":
+   → MUST use ai_behavioral_interview, NOT ai_technical_interview
+
+OTHER RULES:
+5. ALWAYS start with ai_resume_screen
+6. ALWAYS add a filter after screening
+7. ALWAYS end with offer node
+8. For assessment nodes, set questionMode: "auto" so questions generate from JD
+9. Score gate minScore: 40-60 lenient, 60-80 moderate, 80+ strict
+10. Keep pipelines practical — 4-7 stages ideal
 
 Return JSON:
 {
@@ -92,36 +101,25 @@ Return JSON:
     {
       "subtype": "ai_resume_screen",
       "label": "Resume Screening",
-      "config": { "criteria": ["skills_match", "experience", "education"] }
+      "config": { "criteria": ["skills_match", "experience"] }
     },
     {
-      "subtype": "coding_assessment",
-      "label": "Coding Challenge",
-      "config": {
-        "duration": 90,
-        "difficulty": "medium",
-        "questionCount": 3,
-        "languages": ["javascript", "python"]
-      }
-    }
-  ],
-  "filters": [
-    {
-      "afterNode": "ai_resume_screen",
-      "type": "score_gate",
-      "config": { "minScore": 50, "scoreSource": "previous_stage_score", "filtered": { "rejectEmail": true, "emailType": "ai_personalized", "waitlist": false, "addToTalentPool": false } }
+      "subtype": "mcq_assessment",
+      "label": "Knowledge Quiz",
+      "config": { "duration": 30, "difficulty": "medium", "questionCount": 20, "questionMode": "auto" }
     },
     {
-      "afterNode": "coding_assessment",
-      "type": "top_n",
-      "config": { "n": 20, "rankBy": "previous_stage_score", "batchMode": "all_complete", "filtered": { "rejectEmail": true, "emailType": "ai_personalized", "waitlist": true, "waitlistSize": 10, "addToTalentPool": false } }
+      "subtype": "ai_behavioral_interview",
+      "label": "Behavioral Interview",
+      "config": { "maxQuestions": 8, "duration": 25, "difficulty": "progressive", "interviewMode": "behavioral", "adaptive": true, "useResumeContext": true }
     }
   ],
+  "filters": [...],
   "estimatedApplicants": 500,
-  "reasoning": "Why this pipeline was designed this way"
+  "reasoning": "This is a non-technical role so we focus on behavioral assessment..."
 }`,
-      `Design a hiring pipeline for this request:\n\n"${prompt}"\n\nConsider the role level, skills needed, expected volume, and create an appropriate pipeline.`
-    );
+        `Design a hiring pipeline for:\n\n"${prompt}"\n\nPay close attention to whether this is a technical or non-technical role. Choose the right interview type accordingly.`
+      );
 
     console.log("AI generated pipeline:", result.name);
     console.log("Nodes:", result.nodes?.length, "Filters:", result.filters?.length);

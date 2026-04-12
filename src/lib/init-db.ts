@@ -363,3 +363,82 @@ export async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id);
   `);
+
+    // Billing tables
+  await query(`
+    CREATE TABLE IF NOT EXISTS billing_plans (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      price_monthly DECIMAL(10,2) DEFAULT 0,
+      price_yearly DECIMAL(10,2) DEFAULT 0,
+      currency TEXT DEFAULT 'USD',
+      credits_included DECIMAL(10,2) DEFAULT 0,
+      features JSONB DEFAULT '{}',
+      limits JSONB DEFAULT '{}',
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS company_subscriptions (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      company_id TEXT NOT NULL UNIQUE,
+      plan_id TEXT NOT NULL,
+      status TEXT DEFAULT 'ACTIVE',
+      billing_cycle TEXT DEFAULT 'MONTHLY',
+      current_period_start TIMESTAMP DEFAULT NOW(),
+      current_period_end TIMESTAMP DEFAULT NOW() + INTERVAL '30 days',
+      credits_used DECIMAL(10,2) DEFAULT 0,
+      credits_remaining DECIMAL(10,2) DEFAULT 0,
+      payment_method JSONB,
+      razorpay_subscription_id TEXT,
+      stripe_subscription_id TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS usage_records (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      company_id TEXT NOT NULL,
+      user_id TEXT,
+      node_type TEXT NOT NULL,
+      unit_count INTEGER DEFAULT 1,
+      unit_cost DECIMAL(10,4) NOT NULL,
+      total_cost DECIMAL(10,4) NOT NULL,
+      job_id TEXT,
+      application_id TEXT,
+      description TEXT,
+      is_credited BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS invoices (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      company_id TEXT NOT NULL,
+      period_start TIMESTAMP NOT NULL,
+      period_end TIMESTAMP NOT NULL,
+      plan_name TEXT,
+      base_amount DECIMAL(10,2) DEFAULT 0,
+      usage_amount DECIMAL(10,2) DEFAULT 0,
+      credits_applied DECIMAL(10,2) DEFAULT 0,
+      total_amount DECIMAL(10,2) DEFAULT 0,
+      currency TEXT DEFAULT 'USD',
+      status TEXT DEFAULT 'PENDING',
+      payment_id TEXT,
+      line_items JSONB DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_usage_company ON usage_records(company_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_usage_node ON usage_records(node_type);
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_company ON company_subscriptions(company_id);
+    CREATE INDEX IF NOT EXISTS idx_invoices_company ON invoices(company_id);
+
+    -- Seed default plans if not exist
+    INSERT INTO billing_plans (name, slug, price_monthly, price_yearly, currency, credits_included, features, limits)
+    VALUES
+      ('Free', 'free', 0, 0, 'USD', 0, '{"jobs": 3, "resumeScreens": 50, "assessments": 10, "aiInterviews": 5, "pipelineBuilder": true, "templates": "basic"}', '{"maxJobs": 3, "maxApplicantsPerJob": 100}'),
+      ('Pro', 'pro', 179, 1699, 'USD', 500, '{"jobs": "unlimited", "resumeScreens": "unlimited", "assessments": "unlimited", "aiInterviews": "unlimited", "pipelineBuilder": true, "aiGenerate": true, "templates": "all", "integrations": true, "priority_support": true}', '{"maxJobs": -1, "maxApplicantsPerJob": -1}'),
+      ('Enterprise', 'enterprise', 599, 5699, 'USD', 2000, '{"jobs": "unlimited", "resumeScreens": "unlimited", "assessments": "unlimited", "aiInterviews": "unlimited", "pipelineBuilder": true, "aiGenerate": true, "customNodes": true, "sso": true, "templates": "all", "integrations": true, "dedicated_support": true, "audit_logs": true}', '{"maxJobs": -1, "maxApplicantsPerJob": -1}')
+    ON CONFLICT (slug) DO NOTHING;
+  `);

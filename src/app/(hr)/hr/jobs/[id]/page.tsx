@@ -21,6 +21,7 @@ import {
   ChevronDown, Pencil, FileSearch, Code, Bot,
   Video, Award, XCircle, Clock,
   CheckCircle, ArrowRight, Calendar, Share2,
+  FileText, Eye,
 } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
@@ -50,6 +51,8 @@ export default function HRJobDetailPage() {
   const [updating, setUpdating] = useState<string | null>(null);
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [showShare, setShowShare] = useState(false);
+  // Store node scores per application
+  const [appScores, setAppScores] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (!authLoading && !isHR) router.push("/login");
@@ -68,7 +71,8 @@ export default function HRJobDetailPage() {
       const jobData = await jobRes.json();
       const appsData = await appsRes.json();
       setJob(jobData.job);
-      setApplications(appsData.applications || []);
+      const apps = appsData.applications || [];
+      setApplications(apps);
 
       // Fetch pipeline stages
       if (jobData.job?.pipeline_id) {
@@ -76,11 +80,33 @@ export default function HRJobDetailPage() {
           const pRes = await fetch(`/api/pipeline?id=${jobData.job.pipeline_id}`);
           const pData = await pRes.json();
           if (pData.pipeline) {
-            const stages = extractPipelineStages(pData.pipeline);
-            setPipelineStages(stages);
+            setPipelineStages(extractPipelineStages(pData.pipeline));
           }
         } catch {}
       }
+
+      // Fetch scores for each application
+      const scores: Record<string, any> = {};
+      for (const app of apps) {
+        try {
+          const sRes = await fetch(`/api/candidates/${app.id}/results`);
+          const sData = await sRes.json();
+          scores[app.id] = {
+            resume: sData.application?.resumeScore || 0,
+            resumeCompleted: (sData.application?.resumeScore || 0) > 0,
+            assessment: sData.submissions?.[0]?.percentage || 0,
+            assessmentCompleted: sData.submissions?.some((s: any) => s.status === "GRADED") || false,
+            interview: sData.interviews?.[0]?.overallScore || 0,
+            interviewCompleted: sData.interviews?.some((i: any) => i.status === "COMPLETED") || false,
+            f2f: sData.f2fInterviews?.[0]?.feedback_score || 0,
+            f2fCompleted: sData.f2fInterviews?.some((f: any) => f.status === "COMPLETED") || false,
+            overall: sData.rating?.overallScore || 0,
+          };
+        } catch {
+          scores[app.id] = null;
+        }
+      }
+      setAppScores(scores);
     } catch (err) {
       console.error(err);
     } finally {
@@ -97,19 +123,7 @@ export default function HRJobDetailPage() {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error("Failed to update");
-
-      const label = ALL_STATUSES.find((s) => s.value === newStatus)?.label || newStatus;
-      toast.success(`Moved to ${label}`);
-
-      // Trigger pipeline execution
-      try {
-        await fetch("/api/pipeline/execute", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ applicationId: appId, trigger: "manual_stage_change" }),
-        });
-      } catch {}
-
+      toast.success(`Moved to ${ALL_STATUSES.find((s) => s.value === newStatus)?.label || newStatus}`);
       fetchData();
     } catch {
       toast.error("Failed to update status");
@@ -124,43 +138,27 @@ export default function HRJobDetailPage() {
       if (idx === -1 || idx >= pipelineStages.length - 1) return null;
       return pipelineStages[idx + 1].status;
     }
-    const defaultOrder = ["APPLIED", "SCREENING", "ASSESSMENT", "AI_INTERVIEW", "F2F_INTERVIEW", "UNDER_REVIEW", "OFFERED", "HIRED"];
-    const idx = defaultOrder.indexOf(currentStatus);
-    if (idx === -1 || idx >= defaultOrder.length - 1) return null;
-    return defaultOrder[idx + 1];
+    const order = ["APPLIED", "SCREENING", "ASSESSMENT", "AI_INTERVIEW", "F2F_INTERVIEW", "UNDER_REVIEW", "OFFERED", "HIRED"];
+    const idx = order.indexOf(currentStatus);
+    if (idx === -1 || idx >= order.length - 1) return null;
+    return order[idx + 1];
   };
 
-  const getStatusInfo = (status: string) => {
-    return ALL_STATUSES.find((s) => s.value === status) || ALL_STATUSES[0];
-  };
+  const getStatusInfo = (status: string) => ALL_STATUSES.find((s) => s.value === status) || ALL_STATUSES[0];
 
   if (loading || authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" />
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#0245EF]" /></div>;
   }
 
   if (!job) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-slate-500">Job not found</p>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center"><p className="text-slate-500">Job not found</p></div>;
   }
 
-  const sorted = [...applications].sort(
-    (a, b) => (b.resumeScore || 0) - (a.resumeScore || 0)
-  );
-  const filtered = filterStatus === "all"
-    ? sorted
-    : sorted.filter((a) => a.status === filterStatus);
+  const sorted = [...applications].sort((a, b) => (b.resumeScore || 0) - (a.resumeScore || 0));
+  const filtered = filterStatus === "all" ? sorted : sorted.filter((a) => a.status === filterStatus);
 
   const statusCounts: Record<string, number> = {};
-  applications.forEach((a) => {
-    statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
-  });
+  applications.forEach((a) => { statusCounts[a.status] = (statusCounts[a.status] || 0) + 1; });
 
   const stagesForDropdown = pipelineStages.length > 0 ? pipelineStages : ALL_STATUSES;
 
@@ -171,37 +169,17 @@ export default function HRJobDetailPage() {
         <div className="max-w-7xl mx-auto h-12 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/hr/dashboard">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="w-4 h-4" /></Button>
             </Link>
             <div>
               <h1 className="font-semibold text-sm text-slate-800">{job.title}</h1>
-              <p className="text-[11px] text-slate-400">
-                {job.department} • {applications.length} applicant{applications.length !== 1 ? "s" : ""}
-              </p>
+              <p className="text-[11px] text-slate-400">{job.department} • {applications.length} applicant{applications.length !== 1 ? "s" : ""}</p>
             </div>
           </div>
-
           <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={
-                job.status === "PUBLISHED"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-slate-50 text-slate-500"
-              }
-            >
-              {job.status}
-            </Badge>
-            <Button variant="outline" size="sm" onClick={() => setShowShare(true)}>
-              <Share2 className="w-4 h-4 mr-1" /> Share
-            </Button>
-            <Link href={`/hr/jobs/${id}/edit`}>
-              <Button variant="outline" size="sm">
-                <Pencil className="w-4 h-4 mr-1" /> Edit
-              </Button>
-            </Link>
+            <Badge variant="outline" className={job.status === "PUBLISHED" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500"}>{job.status}</Badge>
+            <Button variant="outline" size="sm" onClick={() => setShowShare(true)}><Share2 className="w-4 h-4 mr-1" /> Share</Button>
+            <Link href={`/hr/jobs/${id}/edit`}><Button variant="outline" size="sm"><Pencil className="w-4 h-4 mr-1" /> Edit</Button></Link>
           </div>
         </div>
       </div>
@@ -209,44 +187,21 @@ export default function HRJobDetailPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Filter tabs */}
         <div className="flex items-center gap-2 mb-6 flex-wrap">
-          <Button
-            variant={filterStatus === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilterStatus("all")}
-            className={filterStatus === "all" ? "bg-[#0245EF]" : ""}
-          >
+          <Button variant={filterStatus === "all" ? "default" : "outline"} size="sm" onClick={() => setFilterStatus("all")} className={filterStatus === "all" ? "bg-[#0245EF]" : ""}>
             All ({applications.length})
           </Button>
-
-          {stagesForDropdown
-            .filter((s) => statusCounts[s.status || s.value])
-            .map((stage) => {
-              const status = stage.status || stage.value;
-              const label = stage.label;
-              const StageIcon = stage.icon;
-              return (
-                <Button
-                  key={status}
-                  variant={filterStatus === status ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterStatus(status)}
-                  className={filterStatus === status ? "bg-[#0245EF]" : ""}
-                >
-                  <StageIcon className="w-3 h-3 mr-1" />
-                  {label} ({statusCounts[status]})
-                </Button>
-              );
-            })}
-
+          {stagesForDropdown.filter((s) => statusCounts[s.status || s.value]).map((stage) => {
+            const status = stage.status || stage.value;
+            const StageIcon = stage.icon;
+            return (
+              <Button key={status} variant={filterStatus === status ? "default" : "outline"} size="sm" onClick={() => setFilterStatus(status)} className={filterStatus === status ? "bg-[#0245EF]" : ""}>
+                <StageIcon className="w-3 h-3 mr-1" />{stage.label} ({statusCounts[status]})
+              </Button>
+            );
+          })}
           {statusCounts["REJECTED"] && !stagesForDropdown.some((s) => (s.status || s.value) === "REJECTED") && (
-            <Button
-              variant={filterStatus === "REJECTED" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setFilterStatus("REJECTED")}
-              className={filterStatus === "REJECTED" ? "bg-red-600" : "text-red-600"}
-            >
-              <XCircle className="w-3 h-3 mr-1" />
-              Rejected ({statusCounts["REJECTED"]})
+            <Button variant={filterStatus === "REJECTED" ? "default" : "outline"} size="sm" onClick={() => setFilterStatus("REJECTED")} className={filterStatus === "REJECTED" ? "bg-red-600" : "text-red-600"}>
+              <XCircle className="w-3 h-3 mr-1" />Rejected ({statusCounts["REJECTED"]})
             </Button>
           )}
         </div>
@@ -255,11 +210,7 @@ export default function HRJobDetailPage() {
         {filtered.length === 0 ? (
           <div className="text-center py-16">
             <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-slate-600">
-              {filterStatus === "all"
-                ? "No applications yet"
-                : `No ${getStatusInfo(filterStatus).label.toLowerCase()} candidates`}
-            </h3>
+            <h3 className="text-lg font-medium text-slate-600">{filterStatus === "all" ? "No applications yet" : `No ${getStatusInfo(filterStatus).label.toLowerCase()} candidates`}</h3>
           </div>
         ) : (
           <div className="space-y-3">
@@ -269,90 +220,80 @@ export default function HRJobDetailPage() {
               const nextStage = getNextStage(app.status);
               const nextStageInfo = nextStage ? getStatusInfo(nextStage) : null;
               const isUpdating = updating === app.id;
+              const scores = appScores[app.id];
 
               return (
-                <Card
-                  key={app.id}
-                  className={`hover:shadow-md transition-all ${
-                    index === 0 && filterStatus === "all" ? "border-[#A3BDFF] bg-[#EBF0FF]/20" : ""
-                  }`}
-                >
+                <Card key={app.id} className={`hover:shadow-md transition-all ${index === 0 && filterStatus === "all" ? "border-[#A3BDFF] bg-[#EBF0FF]/20" : ""}`}>
                   <CardContent className="p-5">
                     {/* Candidate row */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
-                        <div
-                          className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
-                            index === 0 ? "bg-amber-100 text-amber-700" :
-                            index === 1 ? "bg-slate-200 text-slate-600" :
-                            index === 2 ? "bg-orange-100 text-orange-700" :
-                            "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {filterStatus === "all" && index < 3
-                            ? ["🥇", "🥈", "🥉"][index]
-                            : `#${index + 1}`}
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                          index === 0 ? "bg-amber-100 text-amber-700" : index === 1 ? "bg-slate-200 text-slate-600" : index === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-500"
+                        }`}>
+                          {filterStatus === "all" && index < 3 ? ["🥇", "🥈", "🥉"][index] : `#${index + 1}`}
                         </div>
                         <div>
-                          <h3 className="font-semibold text-slate-800">
-                            {app.candidate?.firstName} {app.candidate?.lastName}
-                          </h3>
-                          <p className="text-sm text-slate-500 flex items-center gap-2 mt-0.5">
-                            <Mail className="w-3 h-3" />
-                            {app.candidate?.email}
-                          </p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            Applied {formatRelativeTime(app.appliedAt)}
-                          </p>
+                          <h3 className="font-semibold text-slate-800">{app.candidate?.firstName} {app.candidate?.lastName}</h3>
+                          <p className="text-sm text-slate-500 flex items-center gap-2 mt-0.5"><Mail className="w-3 h-3" />{app.candidate?.email}</p>
+                          <p className="text-xs text-slate-400 mt-1">Applied {formatRelativeTime(app.appliedAt)}</p>
                         </div>
                       </div>
-
                       <div className="flex items-center gap-4">
                         {app.resumeScore > 0 && (
                           <div className="text-center">
-                            <div className={`text-2xl font-bold ${
-                              app.resumeScore >= 70 ? "text-emerald-600" :
-                              app.resumeScore >= 40 ? "text-amber-600" : "text-red-500"
-                            }`}>
-                              {Math.round(app.resumeScore)}
-                            </div>
+                            <div className={`text-2xl font-bold ${app.resumeScore >= 70 ? "text-emerald-600" : app.resumeScore >= 40 ? "text-amber-600" : "text-red-500"}`}>{Math.round(app.resumeScore)}</div>
                             <div className="text-[10px] text-slate-400">Match %</div>
                           </div>
                         )}
-                        <Badge className={statusInfo.color}>
-                          <StatusIcon className="w-3 h-3 mr-1" />
-                          {statusInfo.label}
-                        </Badge>
+                        <Badge className={statusInfo.color}><StatusIcon className="w-3 h-3 mr-1" />{statusInfo.label}</Badge>
                       </div>
                     </div>
 
-                    {/* Interview Scores */}
+                    {/* Node Scores — Only show completed stages */}
+                    {scores && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        <NodeScoreBadge label="Resume" score={scores.resume} completed={scores.resumeCompleted} icon={FileSearch} />
+                        <NodeScoreBadge label="Assessment" score={scores.assessment} completed={scores.assessmentCompleted} icon={Code} />
+                        <NodeScoreBadge label="AI Interview" score={scores.interview} completed={scores.interviewCompleted} icon={Bot} />
+                        <NodeScoreBadge label="F2F" score={scores.f2f} completed={scores.f2fCompleted} icon={Video} />
+                        {scores.overall > 0 && (
+                          <div className="ml-auto flex items-center gap-1 bg-slate-100 rounded-lg px-2 py-1">
+                            <Award className="w-3 h-3 text-[#0245EF]" />
+                            <span className="text-xs font-bold text-[#0245EF]">{Math.round(scores.overall)}%</span>
+                            <span className="text-[10px] text-slate-400">overall</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Interview Scores Expandable */}
                     <InterviewScores applicationId={app.id} status={app.status} />
 
-                    {/* Scheduled F2F */}
+                    {/* F2F Scheduled */}
                     <F2FScheduledInfo applicationId={app.id} />
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 flex-wrap">
+                      {/* View Details */}
+                      <Link href={`/hr/candidates/${app.id}`}>
+                        <Button variant="outline" size="sm" className="text-xs">
+                          <Eye className="w-3 h-3 mr-1" /> View Details
+                        </Button>
+                      </Link>
+
                       {/* Next stage */}
                       {nextStageInfo && app.status !== "REJECTED" && app.status !== "HIRED" && (
-                        <Button
-                          size="sm"
-                          onClick={() => updateStatus(app.id, nextStage!)}
-                          disabled={isUpdating}
-                          className="bg-[#0245EF] hover:bg-[#0237BF]"
-                        >
+                        <Button size="sm" onClick={() => updateStatus(app.id, nextStage!)} disabled={isUpdating} className="bg-[#0245EF] hover:bg-[#0237BF]">
                           {isUpdating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ArrowRight className="w-3 h-3 mr-1" />}
                           Move to {nextStageInfo.label}
                         </Button>
                       )}
 
-                      {/* Change stage dropdown */}
+                      {/* Change stage */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="text-xs">
-                            <ChevronDown className="w-3 h-3 mr-1" /> Change Stage
-                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs"><ChevronDown className="w-3 h-3 mr-1" /> Change Stage</Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-52">
                           {stagesForDropdown.map((stage) => {
@@ -360,23 +301,14 @@ export default function HRJobDetailPage() {
                             const Icon = stage.icon;
                             const isCurrent = app.status === status;
                             return (
-                              <DropdownMenuItem
-                                key={status}
-                                onClick={() => { if (!isCurrent) updateStatus(app.id, status); }}
-                                disabled={isCurrent}
-                                className={isCurrent ? "opacity-50 bg-[#EBF0FF]" : ""}
-                              >
-                                <Icon className="w-4 h-4 mr-2" />
-                                <span className="flex-1">{stage.label}</span>
+                              <DropdownMenuItem key={status} onClick={() => { if (!isCurrent) updateStatus(app.id, status); }} disabled={isCurrent} className={isCurrent ? "opacity-50 bg-[#EBF0FF]" : ""}>
+                                <Icon className="w-4 h-4 mr-2" /><span className="flex-1">{stage.label}</span>
                                 {isCurrent && <Badge variant="outline" className="text-[9px] h-4 px-1">Current</Badge>}
                               </DropdownMenuItem>
                             );
                           })}
                           {app.status !== "REJECTED" && (
-                            <DropdownMenuItem
-                              className="border-t border-slate-100 mt-1 pt-1 text-red-600"
-                              onClick={() => updateStatus(app.id, "REJECTED")}
-                            >
+                            <DropdownMenuItem className="border-t border-slate-100 mt-1 pt-1 text-red-600" onClick={() => updateStatus(app.id, "REJECTED")}>
                               <XCircle className="w-4 h-4 mr-2" /> Reject
                             </DropdownMenuItem>
                           )}
@@ -392,20 +324,13 @@ export default function HRJobDetailPage() {
 
                       {/* Reject */}
                       {app.status !== "REJECTED" && app.status !== "HIRED" && (
-                        <Button
-                          variant="outline" size="sm"
-                          onClick={() => updateStatus(app.id, "REJECTED")}
-                          disabled={isUpdating}
-                          className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 ml-auto"
-                        >
+                        <Button variant="outline" size="sm" onClick={() => updateStatus(app.id, "REJECTED")} disabled={isUpdating} className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 ml-auto">
                           <XCircle className="w-3 h-3 mr-1" /> Reject
                         </Button>
                       )}
 
-                      {/* Hire */}
                       {app.status === "OFFERED" && (
-                        <Button size="sm" onClick={() => updateStatus(app.id, "HIRED")} disabled={isUpdating}
-                          className="bg-emerald-600 hover:bg-emerald-700 ml-auto">
+                        <Button size="sm" onClick={() => updateStatus(app.id, "HIRED")} disabled={isUpdating} className="bg-emerald-600 hover:bg-emerald-700 ml-auto">
                           <Award className="w-3 h-3 mr-1" /> Mark as Hired
                         </Button>
                       )}
@@ -418,32 +343,46 @@ export default function HRJobDetailPage() {
         )}
       </div>
 
-      {/* Schedule F2F Dialog */}
       {scheduleApp && (
-        <ScheduleF2FDialog
-          open={!!scheduleApp}
-          onOpenChange={(open) => { if (!open) setScheduleApp(null); }}
-          applicationId={scheduleApp.id}
-          candidateName={`${scheduleApp.candidate?.firstName || ""} ${scheduleApp.candidate?.lastName || ""}`}
-          onScheduled={fetchData}
-        />
+        <ScheduleF2FDialog open={!!scheduleApp} onOpenChange={(open) => { if (!open) setScheduleApp(null); }} applicationId={scheduleApp.id} candidateName={`${scheduleApp.candidate?.firstName || ""} ${scheduleApp.candidate?.lastName || ""}`} onScheduled={fetchData} />
       )}
 
-      {/* Share Job Dialog */}
       {showShare && (
-        <ShareJobDialog
-          open={showShare}
-          onOpenChange={setShowShare}
-          jobId={id as string}
-          jobTitle={job.title}
-        />
+        <ShareJobDialog open={showShare} onOpenChange={setShowShare} jobId={id as string} jobTitle={job.title} />
       )}
     </div>
   );
 }
 
 // ==========================================
-// Interview Scores
+// Node Score Badge — Shows "Pending" or score
+// ==========================================
+function NodeScoreBadge({ label, score, completed, icon: Icon }: { label: string; score: number; completed: boolean; icon: any }) {
+  if (!completed) {
+    return (
+      <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg px-2 py-1">
+        <Icon className="w-3 h-3 text-slate-400" />
+        <span className="text-[10px] text-slate-400">{label}</span>
+        <Badge variant="outline" className="text-[9px] h-4 px-1 text-slate-400 border-slate-200">Pending</Badge>
+      </div>
+    );
+  }
+
+  const color = score >= 70 ? "text-emerald-600 bg-emerald-50 border-emerald-200" :
+    score >= 40 ? "text-amber-600 bg-amber-50 border-amber-200" :
+    "text-red-600 bg-red-50 border-red-200";
+
+  return (
+    <div className={`flex items-center gap-1.5 rounded-lg px-2 py-1 border ${color}`}>
+      <Icon className="w-3 h-3" />
+      <span className="text-[10px]">{label}</span>
+      <span className="text-xs font-bold">{Math.round(score)}%</span>
+    </div>
+  );
+}
+
+// ==========================================
+// Interview Scores (expandable)
 // ==========================================
 function InterviewScores({ applicationId, status }: { applicationId: string; status: string }) {
   const [scores, setScores] = useState<any>(null);
@@ -475,103 +414,35 @@ function InterviewScores({ applicationId, status }: { applicationId: string; sta
 
   return (
     <div className="mt-3 border border-[#D1DEFF] bg-[#EBF0FF]/50 rounded-lg overflow-hidden">
-      <button onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-3 text-left hover:bg-[#EBF0FF] transition-colors">
+      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between p-3 text-left hover:bg-[#EBF0FF] transition-colors">
         <div className="flex items-center gap-3">
           <Bot className="w-4 h-4 text-[#0245EF]" />
-          <span className="text-sm font-medium text-slate-700">AI Interview Results</span>
-          <Badge className={`text-xs ${
-            (scores.overall_score || 0) >= 70 ? "bg-emerald-100 text-emerald-700" :
-            (scores.overall_score || 0) >= 40 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
-          }`}>
-            {scores.overall_score || 0}/100
-          </Badge>
+          <span className="text-sm font-medium text-slate-700">AI Interview</span>
+          <Badge className={`text-xs ${(scores.overall_score || 0) >= 70 ? "bg-emerald-100 text-emerald-700" : (scores.overall_score || 0) >= 40 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>{scores.overall_score || 0}/100</Badge>
           {breakdown.recommendation && <Badge variant="outline" className="text-xs">{breakdown.recommendation}</Badge>}
         </div>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
-
       {expanded && (
         <div className="px-3 pb-3 space-y-3">
           <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: "Overall", score: scores.overall_score },
-              { label: "Technical", score: breakdown.technicalScore },
-              { label: "Communication", score: breakdown.communicationScore },
-              { label: "Problem Solving", score: breakdown.problemSolvingScore },
-            ].map((item) => (
+            {[{ label: "Overall", score: scores.overall_score }, { label: "Technical", score: breakdown.technicalScore }, { label: "Communication", score: breakdown.communicationScore }, { label: "Problem Solving", score: breakdown.problemSolvingScore }].map((item) => (
               <div key={item.label} className="bg-white rounded-lg p-2">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[11px] text-slate-500">{item.label}</span>
-                  <span className={`text-sm font-bold ${
-                    (item.score || 0) >= 70 ? "text-emerald-600" :
-                    (item.score || 0) >= 40 ? "text-amber-600" : "text-red-500"
-                  }`}>
-                    {item.score || 0}<span className="text-slate-400 font-normal">/100</span>
-                  </span>
+                  <span className={`text-sm font-bold ${(item.score || 0) >= 70 ? "text-emerald-600" : (item.score || 0) >= 40 ? "text-amber-600" : "text-red-500"}`}>{item.score || 0}<span className="text-slate-400 font-normal">/100</span></span>
                 </div>
-                <div className="h-1.5 bg-slate-100 rounded-full">
-                  <div className={`h-full rounded-full ${
-                    (item.score || 0) >= 70 ? "bg-emerald-500" :
-                    (item.score || 0) >= 40 ? "bg-amber-500" : "bg-red-500"
-                  }`} style={{ width: `${Math.min(item.score || 0, 100)}%` }} />
-                </div>
+                <div className="h-1.5 bg-slate-100 rounded-full"><div className={`h-full rounded-full ${(item.score || 0) >= 70 ? "bg-emerald-500" : (item.score || 0) >= 40 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.min(item.score || 0, 100)}%` }} /></div>
               </div>
             ))}
           </div>
-
-          {scores.analysis && (
-            <div className="bg-white rounded-lg p-3">
-              <p className="text-xs font-semibold text-slate-600 mb-1">AI Analysis</p>
-              <p className="text-xs text-slate-500 leading-relaxed">{scores.analysis}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-2">
-            {scores.strengths?.length > 0 && (
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-xs font-semibold text-emerald-600 mb-1">💪 Strengths</p>
-                <ul className="space-y-0.5">
-                  {scores.strengths.map((s: string, i: number) => (
-                    <li key={i} className="text-[11px] text-slate-500 flex items-start gap-1">
-                      <span className="text-emerald-500 mt-0.5">•</span> {s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {scores.weaknesses?.length > 0 && (
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-xs font-semibold text-red-600 mb-1">📈 Improve</p>
-                <ul className="space-y-0.5">
-                  {scores.weaknesses.map((w: string, i: number) => (
-                    <li key={i} className="text-[11px] text-slate-500 flex items-start gap-1">
-                      <span className="text-red-500 mt-0.5">•</span> {w}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-
-          <Button variant="outline" size="sm" className="w-full text-xs"
-            onClick={() => {
-              const msgs = typeof scores.messages === "string" ? JSON.parse(scores.messages) : scores.messages || [];
-              const transcript = msgs.map((m: any) =>
-                `${m.role === "user" ? "📝 Candidate" : "🤖 Interviewer"}:\n${m.content}`
-              ).join("\n\n---\n\n");
-              const win = window.open("", "_blank");
-              if (win) {
-                win.document.write(`<html><head><title>Transcript</title>
-                  <style>body{font-family:-apple-system,sans-serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#334155}
-                  h1{color:#0245EF}pre{white-space:pre-wrap;background:#F8FAFC;padding:20px;border-radius:12px;border:1px solid #E2E8F0}</style>
-                  </head><body><h1>AI Interview Transcript</h1>
-                  <p><strong>Score:</strong> ${scores.overall_score || 0}/100</p>
-                  ${scores.analysis ? `<p>${scores.analysis}</p>` : ""}<hr/><pre>${transcript}</pre></body></html>`);
-              }
-            }}>
-            📄 View Full Transcript
-          </Button>
+          {scores.analysis && <div className="bg-white rounded-lg p-3"><p className="text-xs font-semibold text-slate-600 mb-1">AI Analysis</p><p className="text-xs text-slate-500">{scores.analysis}</p></div>}
+          <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => {
+            const msgs = typeof scores.messages === "string" ? JSON.parse(scores.messages) : scores.messages || [];
+            const transcript = msgs.map((m: any) => `${m.role === "user" ? "📝 Candidate" : "🤖 Interviewer"}:\n${m.content}`).join("\n\n---\n\n");
+            const win = window.open("", "_blank");
+            if (win) win.document.write(`<html><head><title>Transcript</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#334155}h1{color:#0245EF}pre{white-space:pre-wrap;background:#F8FAFC;padding:20px;border-radius:12px;border:1px solid #E2E8F0}</style></head><body><h1>AI Interview Transcript</h1><p>Score: ${scores.overall_score}/100</p>${scores.analysis ? `<p>${scores.analysis}</p>` : ""}<hr/><pre>${transcript}</pre></body></html>`);
+          }}>📄 View Transcript</Button>
         </div>
       )}
     </div>
@@ -586,13 +457,8 @@ function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
   const [editingInterview, setEditingInterview] = useState<any>(null);
 
   useEffect(() => { fetchInterviews(); }, [applicationId]);
-
   const fetchInterviews = async () => {
-    try {
-      const res = await fetch(`/api/f2f?applicationId=${applicationId}`);
-      const data = await res.json();
-      setInterviews(data.interviews || []);
-    } catch {}
+    try { const res = await fetch(`/api/f2f?applicationId=${applicationId}`); const data = await res.json(); setInterviews(data.interviews || []); } catch {}
   };
 
   if (interviews.length === 0) return null;
@@ -604,83 +470,40 @@ function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
         const isPast = date < new Date();
         const isToday = date.toDateString() === new Date().toDateString();
         const isCancelled = interview.status === "CANCELLED";
-
         let metadata = interview.metadata || {};
         try { if (typeof metadata === "string") metadata = JSON.parse(metadata); } catch { metadata = {}; }
         const interviewerList = metadata.interviewers || [];
 
         return (
-          <div key={interview.id}
-            className={`border rounded-lg p-3 ${
-              isCancelled ? "bg-red-50 border-red-200 opacity-60" :
-              isToday ? "bg-[#EBF0FF] border-[#A3BDFF]" :
-              isPast ? interview.status === "COMPLETED" ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200" :
-              "bg-blue-50 border-blue-200"
-            }`}>
+          <div key={interview.id} className={`border rounded-lg p-3 ${isCancelled ? "bg-red-50 border-red-200 opacity-60" : isToday ? "bg-[#EBF0FF] border-[#A3BDFF]" : isPast ? interview.status === "COMPLETED" ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200" : "bg-blue-50 border-blue-200"}`}>
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-2">
-                <Calendar className={`w-4 h-4 mt-0.5 shrink-0 ${
-                  isCancelled ? "text-red-400" : isToday ? "text-[#0245EF]" : isPast ? "text-slate-400" : "text-blue-500"
-                }`} />
+                <Calendar className={`w-4 h-4 mt-0.5 shrink-0 ${isCancelled ? "text-red-400" : isToday ? "text-[#0245EF]" : isPast ? "text-slate-400" : "text-blue-500"}`} />
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-xs font-semibold ${
-                      isCancelled ? "text-red-600 line-through" : isToday ? "text-[#0245EF]" :
-                      isPast ? "text-slate-600" : "text-blue-700"
-                    }`}>
-                      {isCancelled ? "Cancelled" : isToday ? "🔴 Today" :
-                       isPast ? (interview.status === "COMPLETED" ? "✅ Completed" : "Past") : "Scheduled"}
+                    <span className={`text-xs font-semibold ${isCancelled ? "text-red-600 line-through" : isToday ? "text-[#0245EF]" : isPast ? "text-slate-600" : "text-blue-700"}`}>
+                      {isCancelled ? "Cancelled" : isToday ? "🔴 Today" : isPast ? (interview.status === "COMPLETED" ? "✅ Completed" : "Past") : "Scheduled"}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 capitalize">
-                      {interview.interview_type}
-                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 capitalize">{interview.interview_type}</span>
                   </div>
-
-                  <p className="text-xs text-slate-500 mt-1">
-                    {date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                    {" at "}{date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                    {interview.duration && ` • ${interview.duration} min`}
-                  </p>
-
+                  <p className="text-xs text-slate-500 mt-1">{date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}{interview.duration && ` • ${interview.duration} min`}</p>
                   {interviewerList.length > 0 && (
                     <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                       <span className="text-[10px] text-slate-400">Panel:</span>
-                      {interviewerList.map((person: any, i: number) => (
-                        <span key={i} className="text-[10px] bg-white border border-slate-200 rounded-full px-2 py-0.5 text-slate-600">
-                          {person.name}{person.role && <span className="text-slate-400 ml-0.5">• {person.role}</span>}
-                        </span>
-                      ))}
+                      {interviewerList.map((p: any, i: number) => <span key={i} className="text-[10px] bg-white border border-slate-200 rounded-full px-2 py-0.5 text-slate-600">{p.name}{p.role && <span className="text-slate-400 ml-0.5">• {p.role}</span>}</span>)}
                     </div>
                   )}
-
-                  {interview.meeting_link && (
-                    <a href={interview.meeting_link} target="_blank" rel="noopener noreferrer"
-                      className="text-[10px] text-[#0245EF] hover:underline mt-1 inline-flex items-center gap-1">
-                      <Video className="w-3 h-3" /> Meeting link
-                    </a>
-                  )}
+                  {interview.meeting_link && <a href={interview.meeting_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#0245EF] hover:underline mt-1 inline-flex items-center gap-1"><Video className="w-3 h-3" /> Meeting link</a>}
                 </div>
               </div>
-
               {!isCancelled && interview.status !== "COMPLETED" && (
-                <Button variant="ghost" size="sm" className="text-xs h-7 text-[#0245EF] hover:bg-[#EBF0FF]"
-                  onClick={() => setEditingInterview(interview)}>
-                  <Pencil className="w-3 h-3 mr-1" /> Edit
-                </Button>
+                <Button variant="ghost" size="sm" className="text-xs h-7 text-[#0245EF] hover:bg-[#EBF0FF]" onClick={() => setEditingInterview(interview)}><Pencil className="w-3 h-3 mr-1" /> Edit</Button>
               )}
             </div>
           </div>
         );
       })}
-
-      {editingInterview && (
-        <EditF2FDialog
-          open={!!editingInterview}
-          onOpenChange={(open) => { if (!open) setEditingInterview(null); }}
-          interview={editingInterview}
-          onUpdated={() => { setEditingInterview(null); fetchInterviews(); }}
-        />
-      )}
+      {editingInterview && <EditF2FDialog open={!!editingInterview} onOpenChange={(open) => { if (!open) setEditingInterview(null); }} interview={editingInterview} onUpdated={() => { setEditingInterview(null); fetchInterviews(); }} />}
     </div>
   );
 }
@@ -691,38 +514,19 @@ function F2FScheduledInfo({ applicationId }: { applicationId: string }) {
 function extractPipelineStages(pipeline: any) {
   let nodes: any[] = [];
   let edges: any[] = [];
-  try {
-    nodes = typeof pipeline.nodes === "string" ? JSON.parse(pipeline.nodes) : pipeline.nodes || [];
-    edges = typeof pipeline.edges === "string" ? JSON.parse(pipeline.edges) : pipeline.edges || [];
-  } catch { return []; }
+  try { nodes = typeof pipeline.nodes === "string" ? JSON.parse(pipeline.nodes) : pipeline.nodes || []; edges = typeof pipeline.edges === "string" ? JSON.parse(pipeline.edges) : pipeline.edges || []; } catch { return []; }
 
   const adjMap = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
   for (const node of nodes) { adjMap.set(node.id, []); inDegree.set(node.id, 0); }
-  for (const edge of edges) {
-    if (!edge.sourceHandle || edge.sourceHandle === "pass") {
-      const targets = adjMap.get(edge.source) || [];
-      targets.push(edge.target);
-      adjMap.set(edge.source, targets);
-      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
-    }
-  }
+  for (const edge of edges) { if (!edge.sourceHandle || edge.sourceHandle === "pass") { const t = adjMap.get(edge.source) || []; t.push(edge.target); adjMap.set(edge.source, t); inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1); } }
 
   const queue: string[] = [];
-  for (const [id, degree] of inDegree.entries()) { if (degree === 0) queue.push(id); }
+  for (const [id, deg] of inDegree.entries()) { if (deg === 0) queue.push(id); }
   const ordered: any[] = [];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const node = nodes.find((n: any) => n.id === current);
-    if (node) ordered.push(node);
-    for (const next of (adjMap.get(current) || [])) {
-      const nd = (inDegree.get(next) || 1) - 1;
-      inDegree.set(next, nd);
-      if (nd === 0) queue.push(next);
-    }
-  }
+  while (queue.length > 0) { const c = queue.shift()!; const n = nodes.find((nd: any) => nd.id === c); if (n) ordered.push(n); for (const nx of (adjMap.get(c) || [])) { const d = (inDegree.get(nx) || 1) - 1; inDegree.set(nx, d); if (d === 0) queue.push(nx); } }
 
-  const subtypeToStatus: Record<string, { status: string; label: string; icon: any }> = {
+  const map: Record<string, { status: string; label: string; icon: any }> = {
     job_posting: { status: "APPLIED", label: "Applied", icon: Briefcase },
     ai_resume_screen: { status: "SCREENING", label: "Screening", icon: FileSearch },
     coding_assessment: { status: "ASSESSMENT", label: "Assessment", icon: Code },
@@ -737,18 +541,8 @@ function extractPipelineStages(pipeline: any) {
 
   const stages: any[] = [];
   const seen = new Set<string>();
-  for (const node of ordered) {
-    const subtype = node.data?.subtype;
-    if (!subtype || ["filter", "logic", "action"].includes(node.data?.type)) continue;
-    const mapping = subtypeToStatus[subtype];
-    if (mapping && !seen.has(mapping.status)) {
-      seen.add(mapping.status);
-      stages.push(mapping);
-    }
-  }
-
+  for (const node of ordered) { const st = node.data?.subtype; if (!st || ["filter", "logic", "action"].includes(node.data?.type)) continue; const m = map[st]; if (m && !seen.has(m.status)) { seen.add(m.status); stages.push(m); } }
   if (!seen.has("UNDER_REVIEW")) stages.push({ status: "UNDER_REVIEW", label: "Under Review", icon: Clock });
   if (!seen.has("OFFERED") && !seen.has("HIRED")) stages.push({ status: "OFFERED", label: "Offered", icon: Award });
-
   return stages;
 }

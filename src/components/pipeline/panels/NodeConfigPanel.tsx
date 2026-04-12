@@ -977,6 +977,7 @@ function MCQConfig({
   const [generating, setGenerating] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const questions = config.questions || [];
+  const questionMode = config.questionMode || "auto";
 
   const generateQuestions = async () => {
     setGenerating(true);
@@ -1015,7 +1016,7 @@ function MCQConfig({
       const data = await res.json();
       if (data.questions) {
         updateConfig("questions", data.questions);
-        toast.success(`Generated ${data.questions.length} MCQs based on job description!`);
+        toast.success(`Generated ${data.questions.length} MCQs!`);
       }
     } catch {
       toast.error("Failed to generate");
@@ -1030,9 +1031,12 @@ function MCQConfig({
 
       <div className="space-y-2">
         <Label className="text-sm">Duration (minutes)</Label>
-        <Input type="number" value={config.duration || 45}
+        <Input
+          type="number"
+          value={config.duration || 45}
           onChange={(e) => updateConfig("duration", parseInt(e.target.value) || 15)}
-          min={10} max={120} className="h-9" />
+          min={10} max={120} className="h-9"
+        />
       </div>
 
       <div className="space-y-2">
@@ -1049,30 +1053,144 @@ function MCQConfig({
 
       <div className="space-y-2">
         <Label className="text-sm">Number of Questions</Label>
-        <Input type="number" value={config.questionCount || 20}
+        <Input
+          type="number"
+          value={config.questionCount || 20}
           onChange={(e) => updateConfig("questionCount", parseInt(e.target.value) || 5)}
-          min={5} max={50} className="h-9" />
+          min={5} max={50} className="h-9"
+        />
       </div>
 
       <Separator />
-      <SectionTitle>Questions</SectionTitle>
+      <SectionTitle>Question Mode</SectionTitle>
 
-      {questions.length > 0 ? (
-        <div className="space-y-2">
-          <span className="text-sm text-emerald-600 font-medium">✅ {questions.length} MCQs ready</span>
-          <Button variant="outline" size="sm" className="w-full text-xs" onClick={generateQuestions} disabled={generating}>
-            {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null} Regenerate
-          </Button>
+      {/* Mode Selector */}
+      <div className="space-y-2">
+        <div
+          onClick={() => updateConfig("questionMode", "auto")}
+          className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+            questionMode === "auto"
+              ? "border-[#0245EF] bg-[#EBF0FF]"
+              : "border-slate-200 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm font-medium ${questionMode === "auto" ? "text-[#0245EF]" : "text-slate-700"}`}>
+                🤖 Auto-generate from Job Description
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                MCQs generated when candidate starts. Different questions for each job using this pipeline.
+              </p>
+            </div>
+            <div className={`w-4 h-4 rounded-full border-2 ${
+              questionMode === "auto" ? "border-[#0245EF] bg-[#0245EF]" : "border-slate-300"
+            }`}>
+              {questionMode === "auto" && (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      ) : (
+
+        <div
+          onClick={() => updateConfig("questionMode", "preset")}
+          className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+            questionMode === "preset"
+              ? "border-[#0245EF] bg-[#EBF0FF]"
+              : "border-slate-200 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm font-medium ${questionMode === "preset" ? "text-[#0245EF]" : "text-slate-700"}`}>
+                📝 Pre-set Questions
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Same questions for every candidate. Generate and review them now.
+              </p>
+            </div>
+            <div className={`w-4 h-4 rounded-full border-2 ${
+              questionMode === "preset" ? "border-[#0245EF] bg-[#0245EF]" : "border-slate-300"
+            }`}>
+              {questionMode === "preset" && (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Auto mode info */}
+      {questionMode === "auto" && (
+        <div className="bg-[#EBF0FF] border border-[#A3BDFF] rounded-lg p-3 text-xs text-[#02298F] space-y-1">
+          <p className="font-semibold">✨ How Auto-Generate Works</p>
+          <p>When a candidate starts the quiz, Hirasys reads the job description and generates {config.questionCount || 20} MCQs relevant to THAT specific role.</p>
+          <p>• React Developer → React, JS, frontend MCQs</p>
+          <p>• Python Backend → Python, Django, API MCQs</p>
+          <p>• Same pipeline works for ALL your roles!</p>
+        </div>
+      )}
+
+      {/* Preset mode — generate/preview */}
+      {questionMode === "preset" && (
         <div className="space-y-2">
-          <Button className="w-full bg-purple-600 hover:bg-purple-700" size="sm" onClick={generateQuestions} disabled={generating}>
-            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            AI Generate MCQs
-          </Button>
-          <p className="text-[10px] text-slate-400 text-center">
-            Questions based on job description and required skills
-          </p>
+          {questions.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-emerald-600 font-medium">✅ {questions.length} MCQs ready</span>
+                <button onClick={() => setPreviewOpen(!previewOpen)} className="text-xs text-[#0245EF] hover:underline">
+                  {previewOpen ? "Hide" : "Preview"}
+                </button>
+              </div>
+              {previewOpen && (
+                <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                  {questions.map((q: any, i: number) => (
+                    <div key={i} className="bg-slate-50 rounded-lg p-2 text-xs border border-slate-100">
+                      <p className="font-medium text-slate-700">Q{i + 1}: {q.title}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {q.options?.map((o: any) => (
+                          <span
+                            key={o.id}
+                            className={`text-[10px] px-1.5 py-0.5 rounded ${
+                              o.id === q.correctAnswer
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {o.id}: {o.text}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button variant="outline" size="sm" className="w-full text-xs" onClick={generateQuestions} disabled={generating}>
+                {generating ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null} Regenerate
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+                ⚠️ No questions generated yet.
+              </div>
+              <Button className="w-full bg-purple-600 hover:bg-purple-700" size="sm" onClick={generateQuestions} disabled={generating}>
+                {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                AI Generate MCQs
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {questionMode === "preset" && questions.length === 0 && (
+        <div className="text-[10px] text-amber-600">
+          ⚠️ Switch to Auto mode or generate questions before publishing
         </div>
       )}
     </div>

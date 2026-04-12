@@ -6,12 +6,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Bot, User, Send, Loader2, Clock, CheckCircle,
   ArrowLeft,
 } from "lucide-react";
-import { formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime, parseDBTimestamp } from "@/lib/utils";
 import toast from "react-hot-toast";
 import Link from "next/link";
 
@@ -90,8 +91,8 @@ export default function InterviewPage() {
         if (data.interview.status === "COMPLETED") {
           setIsComplete(true);
         }
-        if (data.interview.started_at) {
-          setStartTime(new Date(data.interview.started_at).getTime());
+                if (data.interview.started_at) {
+          setStartTime(parseDBTimestamp(data.interview.started_at).getTime());
         }
       }
     } catch (err) {

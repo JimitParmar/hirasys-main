@@ -399,7 +399,10 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
                     }}
                   >
                     <Bot className="w-4 h-4 mr-2" />
-                    Start AI Interview →
+    {stages[currentStageIndex].subtype === "ai_behavioral_interview"
+      ? "Start Behavioral Interview →"
+      : "Start Technical Interview →"
+    }
                   </Button>
                 )}
               </div>
