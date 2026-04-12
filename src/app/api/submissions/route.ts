@@ -80,7 +80,6 @@ try {
         { timeout: TIMEOUT, maxBuffer: 1024 * 1024 }
       );
       return { stdout: stdout.trim(), stderr: stderr.trim() };
-
     } else if (language === "python") {
       const wrappedCode = `
 import sys, os, json
@@ -107,7 +106,11 @@ except Exception as e:
 `;
       writeFileSync(join(workDir, "solution.py"), wrappedCode);
       let cmd = "python3";
-      try { await execAsync("python3 --version"); } catch { cmd = "python"; }
+      try {
+        await execAsync("python3 --version");
+      } catch {
+        cmd = "python";
+      }
       const { stdout, stderr } = await execAsync(
         `${cmd} "${join(workDir, "solution.py")}"`,
         { timeout: TIMEOUT, maxBuffer: 1024 * 1024 }
@@ -122,7 +125,9 @@ except Exception as e:
       stderr: error.stderr?.trim() || error.message || "Execution failed",
     };
   } finally {
-    try { rmSync(workDir, { recursive: true, force: true }); } catch {}
+    try {
+      rmSync(workDir, { recursive: true, force: true });
+    } catch {}
   }
 }
 
@@ -132,7 +137,8 @@ except Exception as e:
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const applicationId = searchParams.get("applicationId");
@@ -171,35 +177,42 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     console.log("🔥 POST /api/submissions HIT");
 
-let body;
-try {
-  body = await req.json();
-  console.log("📦 REQUEST BODY:", body);
-} catch (err) {
-  console.error("❌ Failed to parse JSON:", err);
-  return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-}
+    let body;
+    try {
+      body = await req.json();
+      console.log("📦 REQUEST BODY:", body);
+    } catch (err) {
+      console.error("❌ Failed to parse JSON:", err);
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
     const candidateId = (session.user as any).id;
     const action = body.action;
     console.log("🔥 API HIT:", body.action);
-
     console.log("=== SUBMISSION ACTION ===", action);
 
     // ==========================================
     // START
     // ==========================================
     if (action === "start") {
-  console.log("🚀 START action triggered");
+      console.log("🚀 START action triggered");
 
-  const { assessmentId, applicationId } = body;
-  console.log("📌 START params:", { assessmentId, applicationId, candidateId });
+      const { assessmentId, applicationId } = body;
+      console.log("📌 START params:", {
+        assessmentId,
+        applicationId,
+        candidateId,
+      });
 
       if (!assessmentId || !applicationId) {
-        return NextResponse.json({ error: "assessmentId and applicationId required" }, { status: 400 });
+        return NextResponse.json(
+          { error: "assessmentId and applicationId required" },
+          { status: 400 }
+        );
       }
 
       const existing = await queryOne(
@@ -209,7 +222,10 @@ try {
 
       if (existing) {
         if (existing.status === "GRADED") {
-          return NextResponse.json({ error: "Already submitted", submission: existing }, { status: 409 });
+          return NextResponse.json(
+            { error: "Already submitted", submission: existing },
+            { status: 409 }
+          );
         }
         console.log("Returning existing submission:", existing.id);
         return NextResponse.json({ submission: existing });
@@ -230,9 +246,16 @@ try {
       try {
         const { getUserCompanyId } = await import("@/lib/company");
         const { trackUsage } = await import("@/lib/billing");
-        const app = await queryOne("SELECT job_id FROM applications WHERE id = $1", [applicationId]);
-        const job = await queryOne("SELECT posted_by FROM jobs WHERE id = $1", [app?.job_id]);
-        const hrCompany = job?.posted_by ? await getUserCompanyId(job.posted_by) : null;
+        const app = await queryOne(
+          "SELECT job_id FROM applications WHERE id = $1",
+          [applicationId]
+        );
+        const job = await queryOne("SELECT posted_by FROM jobs WHERE id = $1", [
+          app?.job_id,
+        ]);
+        const hrCompany = job?.posted_by
+          ? await getUserCompanyId(job.posted_by)
+          : null;
         if (hrCompany) {
           await trackUsage({
             companyId: hrCompany,
@@ -251,31 +274,41 @@ try {
     // SUBMIT — Grade everything server-side
     // ==========================================
     if (action === "submit") {
-  console.log("🔥 SUBMIT action triggered");
+      console.log("🔥 SUBMIT action triggered");
 
-  const { submissionId, answers } = body;
+      const { submissionId, answers, questions: incomingQuestions } = body;
 
-  console.log("📌 Submission ID:", submissionId);
-  console.log("📌 Answers received:", answers?.length);
+      console.log("📌 Submission ID:", submissionId);
+      console.log("📌 Answers received:", answers?.length);
 
-  if (!submissionId) {
-    console.error("❌ Missing submissionId");
-    return NextResponse.json({ error: "submissionId required" }, { status: 400 });
-  }
+      if (!submissionId) {
+        console.error("❌ Missing submissionId");
+        return NextResponse.json(
+          { error: "submissionId required" },
+          { status: 400 }
+        );
+      }
 
       console.log("Grading submission:", submissionId);
-
       console.log("🔍 Fetching submission...");
 
-const submission = await queryOne(
-  "SELECT * FROM submissions WHERE id = $1 AND candidate_id = $2",
-  [submissionId, candidateId]
-);
+      const submission = await queryOne(
+        "SELECT * FROM submissions WHERE id = $1 AND candidate_id = $2",
+        [submissionId, candidateId]
+      );
 
-console.log("📦 Submission from DB:", submission);
+      console.log("📦 Submission from DB:", submission);
 
-      if (!submission) return NextResponse.json({ error: "Submission not found" }, { status: 404 });
-      if (submission.status === "GRADED") return NextResponse.json({ error: "Already graded", submission }, { status: 409 });
+      if (!submission)
+        return NextResponse.json(
+          { error: "Submission not found" },
+          { status: 404 }
+        );
+      if (submission.status === "GRADED")
+        return NextResponse.json(
+          { error: "Already graded", submission },
+          { status: 409 }
+        );
 
       // Get questions from pipeline node config
       const application = await queryOne(
@@ -284,71 +317,85 @@ console.log("📦 Submission from DB:", submission);
       );
 
       let questions: any[] = [];
-const nodeId = submission.assessment_id; // or pass explicitly if different
+      const nodeId = submission.assessment_id;
 
-// 1. Try fetching cached AI-generated questions
-try {
-  const cacheKey = `assessment_questions:v1:${submission.application_id}:${nodeId}`;
+      // 1. Try fetching cached AI-generated questions
+      try {
+        const cacheKey = `assessment_questions:v1:${submission.application_id}:${nodeId}`;
 
-  const cached = await queryOne(
-    `SELECT value FROM ai_cache WHERE cache_key = $1 AND expires_at > NOW()`,
-    [cacheKey]
-  );
+        console.log("🔍 Looking up cache key:", cacheKey);
 
-  if (cached?.value) {
-    questions = typeof cached.value === "string"
-      ? JSON.parse(cached.value)
-      : cached.value;
+        const cached = await queryOne(
+          `SELECT value FROM ai_cache WHERE cache_key = $1 AND expires_at > NOW()`,
+          [cacheKey]
+        );
 
-    console.log("Loaded questions from cache:", questions.length);
-    console.log("📚 Questions loaded:", questions.length);
-console.log("📚 Questions:", questions.map(q => ({ id: q.id, title: q.title })));
-  }
-} catch (err) {
-  console.error("Cache fetch failed:", err);
-}
+        if (cached?.value) {
+          questions =
+            typeof cached.value === "string"
+              ? JSON.parse(cached.value)
+              : cached.value;
 
-// 2. Fallback → pipeline config (preset questions)
-if (questions.length === 0 && application?.pipeline_id) {
-  const pipeline = await queryOne(
-    "SELECT * FROM pipelines WHERE id = $1",
-    [application.pipeline_id]
-  );
+          console.log("✅ Loaded questions from cache:", questions.length);
+          console.log(
+            "📚 Question IDs:",
+            questions.map((q: any) => q.id)
+          );
+          console.log(
+            "📚 Question Titles:",
+            questions.map((q: any) => q.title)
+          );
+        } else {
+          console.log("❌ No cached questions found for key:", cacheKey);
+        }
+      } catch (err) {
+        console.error("Cache fetch failed:", err);
+      }
 
-  if (pipeline) {
-    let nodes: any[] = [];
-    try {
-      nodes = typeof pipeline.nodes === "string"
-        ? JSON.parse(pipeline.nodes)
-        : pipeline.nodes || [];
-    } catch {}
+      // 2. Fallback → pipeline config (preset questions)
+      if (questions.length === 0 && application?.pipeline_id) {
+        const pipeline = await queryOne(
+          "SELECT * FROM pipelines WHERE id = $1",
+          [application.pipeline_id]
+        );
 
-    const node = nodes.find((n: any) => n.id === nodeId);
+        if (pipeline) {
+          let nodes: any[] = [];
+          try {
+            nodes =
+              typeof pipeline.nodes === "string"
+                ? JSON.parse(pipeline.nodes)
+                : pipeline.nodes || [];
+          } catch {}
 
-    if (node) {
-      questions = node.data?.config?.questions || [];
-      console.log("Loaded questions from pipeline config:", questions.length);
-    }
-  }
-}
+          const node = nodes.find((n: any) => n.id === nodeId);
 
-// 3. Final fallback → assessments table
-if (questions.length === 0) {
-  const assessment = await queryOne(
-    "SELECT * FROM assessments WHERE id = $1",
-    [submission.assessment_id]
-  );
+          if (node) {
+            questions = node.data?.config?.questions || [];
+            console.log(
+              "Loaded questions from pipeline config:",
+              questions.length
+            );
+          }
+        }
+      }
 
-  if (assessment?.questions) {
-    questions = typeof assessment.questions === "string"
-      ? JSON.parse(assessment.questions)
-      : assessment.questions;
+      // 3. Final fallback → assessments table
+      if (questions.length === 0) {
+        const assessment = await queryOne(
+          "SELECT * FROM assessments WHERE id = $1",
+          [submission.assessment_id]
+        );
 
-    console.log("Loaded questions from DB:", questions.length);
-  }
-}
+        if (assessment?.questions) {
+          questions =
+            typeof assessment.questions === "string"
+              ? JSON.parse(assessment.questions)
+              : assessment.questions;
 
-      
+          console.log("Loaded questions from DB:", questions.length);
+        }
+      }
 
       console.log("Found", questions.length, "questions for grading");
 
@@ -359,49 +406,78 @@ if (questions.length === 0) {
       let maxScore = 0;
       const gradedAnswers = [];
 
-      console.log("=== FINAL QUESTIONS DEBUG ===");
-console.log("questions.length:", questions.length);
-console.log("questions sample:", questions.slice(0, 2));
-console.log("submission.assessment_id:", submission.assessment_id);
-console.log("answers received:", answers?.length);
+      console.log("=== GRADING START ===");
+      console.log("questions.length:", questions.length);
+      console.log("questions sample:", questions.slice(0, 2));
+      console.log("submission.assessment_id:", submission.assessment_id);
+      console.log("answers received:", answers?.length);
 
-      for (const answer of (answers || [])) {
-  console.log("\n🧪 Grading answer:", answer.questionTitle);
+      if (questions.length === 0) {
+        console.error("❌ NO QUESTIONS FOUND — grading will produce 0/0");
+        console.error(
+          "Cache key used:",
+          `assessment_questions:v1:${submission.application_id}:${submission.assessment_id}`
+        );
+        console.error("Assessment ID:", submission.assessment_id);
+        console.error("Application ID:", submission.application_id);
+      }
 
-  const question =
-    questions.find((q: any) => q.id === answer.questionId) ||
-    questions.find((q: any) => q.title === answer.questionTitle);
+      for (const answer of answers || []) {
+        console.log(
+          "\n🧪 Grading answer:",
+          answer.questionTitle,
+          "| questionId:",
+          answer.questionId
+        );
 
-  if (!question) {
-    console.error("❌ Question NOT FOUND:", answer.questionTitle);
-    continue;
-  }
+        const question =
+          questions.find((q: any) => q.id === answer.questionId) ||
+          questions.find((q: any) => q.title === answer.questionTitle);
 
-  console.log("✅ Matched question:", question.title);
+        if (!question) {
+          console.error("❌ Question NOT FOUND for:", {
+            answerQuestionId: answer.questionId,
+            answerTitle: answer.questionTitle,
+            availableQuestionIds: questions.map((q: any) => q.id),
+            availableQuestionTitles: questions.map((q: any) => q.title),
+          });
+          continue;
+        }
+
+        console.log("✅ Matched question:", question.title);
 
         let score = 0;
         let grading: any = {};
         const qMaxScore = question.points || 10;
         maxScore += qMaxScore;
 
-        console.log(`\nGrading: "${question.title}" (${question.type}, ${qMaxScore} pts)`);
+        console.log(
+          `\nGrading: "${question.title}" (${question.type}, ${qMaxScore} pts)`
+        );
 
         if (question.type === "coding" || answer.type === "coding") {
           const testCases = question.testCases || [];
           const testResults = [];
 
           for (const tc of testCases) {
-            const result = await executeCode(answer.code || "", answer.language || "javascript", tc.input || "");
+            const result = await executeCode(
+              answer.code || "",
+              answer.language || "javascript",
+              tc.input || ""
+            );
 
             const actualOutput = result.stdout || "";
             const expectedOutput = tc.expectedOutput || "";
-            const passed = normalizeOutput(actualOutput) === normalizeOutput(expectedOutput) && !result.stderr;
+            const passed =
+              normalizeOutput(actualOutput) ===
+                normalizeOutput(expectedOutput) && !result.stderr;
 
             const tcPoints = tc.points || 5;
             if (passed) score += tcPoints;
 
             testResults.push({
-              id: tc.id, passed,
+              id: tc.id,
+              passed,
               input: tc.isHidden ? "[hidden]" : tc.input,
               expected: tc.isHidden ? "[hidden]" : expectedOutput,
               actual: tc.isHidden && !passed ? "[hidden]" : actualOutput,
@@ -409,7 +485,9 @@ console.log("answers received:", answers?.length);
               points: tcPoints,
             });
 
-            console.log(`  TC ${tc.id}: ${passed ? "✅" : "❌"} | got: "${actualOutput.substring(0, 50)}" | expected: "${expectedOutput.substring(0, 50)}"`);
+            console.log(
+              `TC ${tc.id}: ${passed ? "✅" : "❌"} | got: "${actualOutput.substring(0, 50)}" | expected: "${expectedOutput.substring(0, 50)}"`
+            );
           }
 
           grading = {
@@ -422,8 +500,14 @@ console.log("answers received:", answers?.length);
           if (answer.selectedOption === question.correctAnswer) {
             score = qMaxScore;
           }
-          grading = { correct: score > 0, selected: answer.selectedOption, correctAnswer: question.correctAnswer };
-          console.log(`  MCQ: ${answer.selectedOption} === ${question.correctAnswer} → ${score > 0 ? "✅" : "❌"}`);
+          grading = {
+            correct: score > 0,
+            selected: answer.selectedOption,
+            correctAnswer: question.correctAnswer,
+          };
+          console.log(
+            `MCQ: ${answer.selectedOption} === ${question.correctAnswer} → ${score > 0 ? "✅" : "❌"}`
+          );
         }
 
         totalScore += score;
@@ -431,26 +515,42 @@ console.log("answers received:", answers?.length);
           questionId: question.id,
           questionTitle: answer.questionTitle,
           type: answer.type || question.type,
-          score, maxScore: qMaxScore, grading,
+          score,
+          maxScore: qMaxScore,
+          grading,
         });
 
-        console.log(`  Score: ${score}/${qMaxScore}`);
+        console.log(`Score: ${score}/${qMaxScore}`);
       }
 
       const percentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
-            const startedAtMs = submission.started_at instanceof Date
-        ? submission.started_at.getTime()
-        : new Date(String(submission.started_at).endsWith("Z") ? submission.started_at : submission.started_at + "Z").getTime();
+      const startedAtMs =
+        submission.started_at instanceof Date
+          ? submission.started_at.getTime()
+          : new Date(
+              String(submission.started_at).endsWith("Z")
+                ? submission.started_at
+                : submission.started_at + "Z"
+            ).getTime();
       const timeTaken = Math.floor((Date.now() - startedAtMs) / 1000);
 
-      console.log(`\n=== FINAL: ${totalScore}/${maxScore} (${percentage.toFixed(1)}%) in ${timeTaken}s ===\n`);
+      console.log(
+        `\n=== FINAL: ${totalScore}/${maxScore} (${percentage.toFixed(1)}%) in ${timeTaken}s ===\n`
+      );
 
       const updated = await queryOne(
         `UPDATE submissions
          SET answers = $2, total_score = $3, max_score = $4, percentage = $5,
              status = 'GRADED', submitted_at = NOW(), time_taken = $6
          WHERE id = $1 RETURNING *`,
-        [submissionId, JSON.stringify(gradedAnswers), totalScore, maxScore, Math.round(percentage * 100) / 100, timeTaken]
+        [
+          submissionId,
+          JSON.stringify(gradedAnswers),
+          totalScore,
+          maxScore,
+          Math.round(percentage * 100) / 100,
+          timeTaken,
+        ]
       );
 
       // Trigger pipeline execution
@@ -460,7 +560,10 @@ console.log("answers received:", answers?.length);
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ applicationId: submission.application_id, trigger: "assessment_completed" }),
+            body: JSON.stringify({
+              applicationId: submission.application_id,
+              trigger: "assessment_completed",
+            }),
           }
         );
       } catch (err) {
@@ -468,20 +571,26 @@ console.log("answers received:", answers?.length);
       }
 
       return NextResponse.json({
-        success: true, submission: updated,
-        totalScore, maxScore,
+        success: true,
+        submission: updated,
+        totalScore,
+        maxScore,
         percentage: Math.round(percentage * 100) / 100,
         gradedAnswers,
       });
     }
-        // ==========================================
+
+    // ==========================================
     // RESET TIMER — Called when assessment page fully loads
     // ==========================================
     if (action === "reset_timer") {
       const { submissionId } = body;
 
       if (!submissionId) {
-        return NextResponse.json({ error: "submissionId required" }, { status: 400 });
+        return NextResponse.json(
+          { error: "submissionId required" },
+          { status: 400 }
+        );
       }
 
       const submission = await queryOne(
@@ -490,13 +599,17 @@ console.log("answers received:", answers?.length);
       );
 
       if (!submission) {
-        return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Submission not found" },
+          { status: 404 }
+        );
       }
 
-      // Only reset if still IN_PROGRESS and started less than 5 minutes ago
-      // This prevents abuse (candidate can't keep resetting)
       if (submission.status !== "IN_PROGRESS") {
-        return NextResponse.json({ error: "Cannot reset — already submitted" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Cannot reset — already submitted" },
+          { status: 400 }
+        );
       }
 
       const startedAt = new Date(
@@ -505,27 +618,41 @@ console.log("answers received:", answers?.length);
           : submission.started_at + "Z"
       ).getTime();
       const elapsed = Date.now() - startedAt;
-      const maxResetWindow = 5 * 60 * 1000; // 5 minutes — only allow reset within first 5 min
+      const maxResetWindow = 5 * 60 * 1000;
 
       if (elapsed > maxResetWindow) {
-        // Too late to reset — return current submission
-        console.log("Timer reset denied — started", Math.floor(elapsed / 1000), "seconds ago");
+        console.log(
+          "Timer reset denied — started",
+          Math.floor(elapsed / 1000),
+          "seconds ago"
+        );
         return NextResponse.json({ submission });
       }
 
-      // Reset started_at to NOW
       const updated = await queryOne(
         "UPDATE submissions SET started_at = NOW() WHERE id = $1 RETURNING *",
         [submissionId]
       );
 
-      console.log("Timer reset! Old start:", submission.started_at, "New start:", updated.started_at);
+      console.log(
+        "Timer reset! Old start:",
+        submission.started_at,
+        "New start:",
+        updated.started_at
+      );
 
       return NextResponse.json({ submission: updated });
     }
-    return NextResponse.json({ error: "Invalid action. Use 'start' or 'submit'" }, { status: 400 });
+
+    return NextResponse.json(
+      { error: "Invalid action. Use 'start' or 'submit'" },
+      { status: 400 }
+    );
   } catch (error: any) {
     console.error("Submission error:", error);
-    return NextResponse.json({ error: `Submission failed: ${error.message}` }, { status: 500 });
+    return NextResponse.json(
+      { error: `Submission failed: ${error.message}` },
+      { status: 500 }
+    );
   }
 }

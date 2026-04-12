@@ -9,24 +9,41 @@ import { formatRelativeTime, parseDBTimestamp } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Play, Send, Clock, CheckCircle, XCircle, Loader2,
-  ChevronLeft, ChevronRight, Code, Terminal, FileText,
+  Play,
+  Send,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Code,
+  Terminal,
+  FileText,
   AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-// 1. Shared Loader Component: Ensures the Server and Client render the EXACT same HTML initially
+// 1. Shared Loader Component
 function AssessmentLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900">
       <div className="text-center">
         <Loader2 className="w-10 h-10 animate-spin text-[#0245EF] mx-auto mb-4" />
-        <p className="text-white text-lg font-medium">Preparing your assessment...</p>
-        <p className="text-slate-400 text-sm mt-2">Setting up your environment.</p>
+        <p className="text-white text-lg font-medium">
+          Preparing your assessment...
+        </p>
+        <p className="text-slate-400 text-sm mt-2">
+          Setting up your environment.
+        </p>
       </div>
     </div>
   );
@@ -41,7 +58,6 @@ function AssessmentContent() {
 
   const applicationId = searchParams.get("applicationId");
   const assessmentId = params.id as string;
-  
 
   // Core state
   const [assessment, setAssessment] = useState<any>(null);
@@ -60,11 +76,9 @@ function AssessmentContent() {
   const [isFinished, setIsFinished] = useState(false);
   const [activeTab, setActiveTab] = useState("output");
   const [questionsReady, setQuestionsReady] = useState(false);
-  
-  
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const submitCalledRef = useRef(false);
-  
+
   // Keep an up-to-date ref of answers for the interval timer
   const answersRef = useRef<Record<string, any>>({});
   useEffect(() => {
@@ -81,6 +95,7 @@ function AssessmentContent() {
     if (isAuthenticated && assessmentId) {
       loadAssessment();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, assessmentId]);
 
   // Timer
@@ -104,6 +119,7 @@ function AssessmentContent() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionsReady, isFinished]);
 
   // Sync language when switching questions
@@ -117,7 +133,7 @@ function AssessmentContent() {
     }
   }, [currentQuestionIndex, assessment, answers]);
 
- const loadAssessment = async () => {
+  const loadAssessment = async () => {
     try {
       const aRes = await fetch(
         `/api/assessments/from-pipeline?applicationId=${applicationId}&nodeSubtype=${assessmentId}`
@@ -131,7 +147,9 @@ function AssessmentContent() {
       }
 
       if (!aData.assessment?.questions?.length) {
-        toast.error("No questions available. Please contact the hiring team.");
+        toast.error(
+          "No questions available. Please contact the hiring team."
+        );
         setLoading(false);
         return;
       }
@@ -149,25 +167,24 @@ function AssessmentContent() {
       });
       const sData = await sRes.json();
 
-      if (sData.error === "Already submitted" || sData.submission?.status === "GRADED") {
+      if (
+        sData.error === "Already submitted" ||
+        sData.submission?.status === "GRADED"
+      ) {
         setIsFinished(true);
         setLoading(false);
         return;
       }
       console.log("📥 START RESPONSE:", sData);
 
-if (!sData.submission) {
-  console.error("❌ No submission returned");
-} else {
-  console.log("✅ Submission created:", sData.submission.id);
-}
-
       if (!sData.submission) {
+        console.error("❌ No submission returned");
         toast.error("Failed to start assessment");
         setLoading(false);
         return;
       }
 
+      console.log("✅ Submission created:", sData.submission.id);
       saveSubmission(sData.submission);
 
       // --- ROBUST TIMER CALCULATION ---
@@ -175,37 +192,37 @@ if (!sData.submission) {
       let remaining = durationSec;
 
       if (sData.submission?.started_at) {
-        const startedAt = parseDBTimestamp(sData.submission.started_at).getTime();
+        const startedAt = parseDBTimestamp(
+          sData.submission.started_at
+        ).getTime();
         const now = Date.now();
 
         if (!isNaN(startedAt)) {
           let elapsed = Math.floor((now - startedAt) / 1000);
 
-          // ---------------------------------------------------------
-          // 🌐 DYNAMIC TIMEZONE SKEW CORRECTOR
-          // ---------------------------------------------------------
-          // Detects if the backend is accidentally applying timezone 
-          // offsets (e.g. IST is 19,800 seconds off). This rounds to 
-          // the nearest 30-min timezone block and neutralizes it.
+          // DYNAMIC TIMEZONE SKEW CORRECTOR
           if (elapsed > durationSec && elapsed > 1800) {
-            const skewSeconds = Math.round(elapsed / 1800) * 1800; 
-            console.warn(`⚠️ DB Timezone Skew Detected: Off by ~${skewSeconds / 3600} hours. Auto-correcting.`);
+            const skewSeconds = Math.round(elapsed / 1800) * 1800;
+            console.warn(
+              `⚠️ DB Timezone Skew Detected: Off by ~${skewSeconds / 3600} hours. Auto-correcting.`
+            );
             elapsed -= skewSeconds;
           } else if (elapsed < -1800) {
-            // Handles cases where DB time is artificially hours in the future
-            const skewSeconds = Math.round(Math.abs(elapsed) / 1800) * 1800;
-            console.warn(`⚠️ DB Timezone Skew Detected: Future offset by ~${skewSeconds / 3600} hours. Auto-correcting.`);
+            const skewSeconds =
+              Math.round(Math.abs(elapsed) / 1800) * 1800;
+            console.warn(
+              `⚠️ DB Timezone Skew Detected: Future offset by ~${skewSeconds / 3600} hours. Auto-correcting.`
+            );
             elapsed += skewSeconds;
           }
 
-          // Fallback bounds
           if (elapsed < 0) elapsed = 0;
 
           console.log("⏱️ Final Timer Debug:", {
             rawServerTime: sData.submission.started_at,
             clientNow: new Date(now).toLocaleString(),
             correctedElapsedSeconds: elapsed,
-            remainingSeconds: Math.max(0, durationSec - elapsed)
+            remainingSeconds: Math.max(0, durationSec - elapsed),
           });
 
           if (elapsed >= durationSec) {
@@ -231,13 +248,18 @@ if (!sData.submission) {
       questions.forEach((q: any) => {
         if (q.type === "coding") {
           initial[q.title] = {
+            questionId: q.id,
             questionTitle: q.title,
-            code: q.starterCode?.[defaultLang] || q.starterCode?.javascript || "// Write your solution here\n",
+            code:
+              q.starterCode?.[defaultLang] ||
+              q.starterCode?.javascript ||
+              "// Write your solution here\n",
             language: defaultLang,
             type: "coding",
           };
         } else if (q.type === "mcq") {
           initial[q.title] = {
+            questionId: q.id,
             questionTitle: q.title,
             selectedOption: null,
             type: "mcq",
@@ -245,11 +267,10 @@ if (!sData.submission) {
         }
       });
 
-            setAnswers(initial);
+      setAnswers(initial);
       setLanguage(defaultLang);
 
       // UPDATE started_at to NOW — timer starts when page is actually ready
-      // This is fair because candidate couldn't do anything during loading
       try {
         const resetRes = await fetch("/api/submissions", {
           method: "POST",
@@ -262,14 +283,17 @@ if (!sData.submission) {
         const resetData = await resetRes.json();
 
         if (resetData.submission?.started_at) {
-          // Recalculate with new start time
           const newStartedAt = new Date(
             String(resetData.submission.started_at).endsWith("Z")
               ? resetData.submission.started_at
               : resetData.submission.started_at + "Z"
           ).getTime();
-          const newDurationMs = (aData.assessment?.duration || 60) * 60 * 1000;
-          const newRemaining = Math.max(0, Math.floor((newDurationMs - (Date.now() - newStartedAt)) / 1000));
+          const newDurationMs =
+            (aData.assessment?.duration || 60) * 60 * 1000;
+          const newRemaining = Math.max(
+            0,
+            Math.floor((newDurationMs - (Date.now() - newStartedAt)) / 1000)
+          );
 
           console.log("Timer reset! New remaining:", newRemaining, "seconds");
           setTimeLeft(newRemaining);
@@ -277,12 +301,10 @@ if (!sData.submission) {
           setTimeLeft(remaining);
         }
       } catch {
-        // If reset fails, use original time
         setTimeLeft(remaining);
       }
 
       setQuestionsReady(true);
-
     } catch (err) {
       console.error(err);
       toast.error("Failed to load assessment");
@@ -290,13 +312,15 @@ if (!sData.submission) {
       setLoading(false);
     }
   };
+
   const handleAutoSubmit = async () => {
     const sub = submissionRef.current;
     if (!sub?.id || isFinished) return;
 
     const currentAnswers = answersRef.current;
-    const hasContent = Object.values(currentAnswers).some((a: any) =>
-      (a.code && a.code.trim().length > 10) || a.selectedOption
+    const hasContent = Object.values(currentAnswers).some(
+      (a: any) =>
+        (a.code && a.code.trim().length > 10) || a.selectedOption
     );
 
     if (!hasContent) {
@@ -310,94 +334,116 @@ if (!sData.submission) {
   };
 
   const handleSubmit = async () => {
-  console.log("🟢 Submit button clicked");
+    console.log("🟢 Submit button clicked");
 
-  if (isFinished || submitting || submitCalledRef.current) {
-    console.log("⛔ Submit blocked", { isFinished, submitting, submitCalledRef: submitCalledRef.current });
-    return;
-  }
-
-  const sub = submissionRef.current;
-
-  console.log("📦 Current submissionRef:", sub);
-
-  if (!sub?.id) {
-    console.error("❌ No submission ID found");
-    toast.error("Submission not initialized. Refresh page.");
-    return;
-  }
-
-  await submitAnswers(sub.id, answersRef.current);
-};
-
-  const submitAnswers = async (submissionId: string, finalAnswers: Record<string, any>) => {
-  if (submitting) {
-    console.log("⛔ Already submitting, skipping...");
-    return;
-  }
-
-  setSubmitting(true);
-  submitCalledRef.current = true;
-
-  const payload = {
-    action: "submit",
-    submissionId,
-    answers: Object.values(finalAnswers),
-  };
-
-  console.log("🚀 SUBMIT PAYLOAD:", payload);
-
-  try {
-    const res = await fetch("/api/submissions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    console.log("🌐 API RESPONSE STATUS:", res.status);
-
-    const data = await res.json();
-
-    console.log("📩 API RESPONSE DATA:", data);
-
-    if (!res.ok) {
-      console.error("❌ API ERROR:", data);
-      throw new Error(data.error || "Submit failed");
+    if (isFinished || submitting || submitCalledRef.current) {
+      console.log("⛔ Submit blocked", {
+        isFinished,
+        submitting,
+        submitCalledRef: submitCalledRef.current,
+      });
+      return;
     }
 
-    console.log("✅ Submission successful");
+    const sub = submissionRef.current;
+    console.log("📦 Current submissionRef:", sub);
 
-    setIsFinished(true);
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (!sub?.id) {
+      console.error("❌ No submission ID found");
+      toast.error("Submission not initialized. Refresh page.");
+      return;
+    }
 
-    toast.success("Assessment submitted successfully! 🎉", { duration: 5000 });
+    await submitAnswers(sub.id, answersRef.current);
+  };
 
-  } catch (err: any) {
-    console.error("❌ Submit failed:", err);
-    toast.error(err.message || "Failed to submit");
-    submitCalledRef.current = false;
-  } finally {
-    setSubmitting(false);
-  }
-};
+  const submitAnswers = async (
+    submissionId: string,
+    finalAnswers: Record<string, any>
+  ) => {
+    if (submitting) {
+      console.log("⛔ Already submitting, skipping...");
+      return;
+    }
+
+    setSubmitting(true);
+    submitCalledRef.current = true;
+
+    const payload = {
+      action: "submit",
+      submissionId,
+      answers: Object.values(finalAnswers),
+      questions: assessment.questions,
+    };
+
+    console.log("🚀 SUBMIT PAYLOAD:", payload);
+
+    try {
+      console.log("🚀 SUBMIT PAYLOAD:", {
+        submissionId,
+        answers: Object.values(finalAnswers),
+        questions: assessment?.questions?.length,
+      });
+      const res = await fetch("/api/submissions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      console.log("🌐 API RESPONSE STATUS:", res.status);
+
+      const data = await res.json();
+
+      console.log("📩 API RESPONSE DATA:", data);
+
+      if (!res.ok) {
+        console.error("❌ API ERROR:", data);
+        throw new Error(data.error || "Submit failed");
+      }
+
+      console.log("✅ Submission successful");
+
+      setIsFinished(true);
+      if (timerRef.current) clearInterval(timerRef.current);
+
+      toast.success("Assessment submitted successfully! 🎉", {
+        duration: 5000,
+      });
+    } catch (err: any) {
+      console.error("❌ Submit failed:", err);
+      toast.error(err.message || "Failed to submit");
+      submitCalledRef.current = false;
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const runCode = async () => {
     const question = assessment.questions[currentQuestionIndex];
     const answer = answersRef.current[question.title];
-    if (!answer?.code) { toast.error("Write some code first"); return; }
+    if (!answer?.code) {
+      toast.error("Write some code first");
+      return;
+    }
 
     setRunning(true);
     setOutput("");
     setActiveTab("output");
 
     try {
-      const firstVisible = question.testCases?.find((tc: any) => !tc.isHidden);
+      const firstVisible = question.testCases?.find(
+        (tc: any) => !tc.isHidden
+      );
       const res = await fetch("/api/assessments/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: answer.code, language: answer.language || language, input: firstVisible?.input || "" }),
+        body: JSON.stringify({
+          code: answer.code,
+          language: answer.language || language,
+          input: firstVisible?.input || "",
+        }),
       });
       const result = await res.json();
 
@@ -408,22 +454,31 @@ if (!sData.submission) {
         text = `✅ Output:\n${result.stdout}`;
         if (firstVisible) {
           text += `\n\n📋 Expected:\n${firstVisible.expectedOutput}`;
-          text += normalizeOutput(result.stdout) === normalizeOutput(firstVisible.expectedOutput)
-            ? "\n\n✅ Matches!" : "\n\n⚠️ Does not match";
+          text +=
+            normalizeOutput(result.stdout) ===
+            normalizeOutput(firstVisible.expectedOutput)
+              ? "\n\n✅ Matches!"
+              : "\n\n⚠️ Does not match";
         }
       } else {
         text = "⚠️ No output. Make sure your function returns a value.";
       }
       if (result.version) text += `\n\n--- ${result.version} ---`;
       setOutput(text);
-    } catch { setOutput("❌ Execution failed."); }
-    finally { setRunning(false); }
+    } catch {
+      setOutput("❌ Execution failed.");
+    } finally {
+      setRunning(false);
+    }
   };
 
   const runTests = async () => {
     const question = assessment.questions[currentQuestionIndex];
     const answer = answersRef.current[question.title];
-    if (!answer?.code) { toast.error("Write some code first"); return; }
+    if (!answer?.code) {
+      toast.error("Write some code first");
+      return;
+    }
 
     setRunningTests(true);
     setTestResults([]);
@@ -431,53 +486,97 @@ if (!sData.submission) {
 
     try {
       const results = [];
-      for (const tc of (question.testCases || [])) {
+      for (const tc of question.testCases || []) {
         try {
           const res = await fetch("/api/assessments/execute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: answer.code, language: answer.language || language, input: tc.input }),
+            body: JSON.stringify({
+              code: answer.code,
+              language: answer.language || language,
+              input: tc.input,
+            }),
           });
           const result = await res.json();
           const actual = result.stdout?.trim() || "";
           const expected = tc.expectedOutput?.trim() || "";
-          const passed = normalizeOutput(actual) === normalizeOutput(expected) && !result.stderr;
-          results.push({ id: tc.id, passed, input: tc.isHidden ? "[hidden]" : tc.input, expected: tc.isHidden ? "[hidden]" : expected, actual: tc.isHidden && !passed ? "[hidden]" : actual, error: result.stderr || null, isHidden: tc.isHidden, points: tc.points || 5 });
+          const passed =
+            normalizeOutput(actual) === normalizeOutput(expected) &&
+            !result.stderr;
+          results.push({
+            id: tc.id,
+            passed,
+            input: tc.isHidden ? "[hidden]" : tc.input,
+            expected: tc.isHidden ? "[hidden]" : expected,
+            actual: tc.isHidden && !passed ? "[hidden]" : actual,
+            error: result.stderr || null,
+            isHidden: tc.isHidden,
+            points: tc.points || 5,
+          });
         } catch {
-          results.push({ id: tc.id, passed: false, input: tc.isHidden ? "[hidden]" : tc.input, expected: "[error]", actual: "", error: "Execution failed", isHidden: tc.isHidden, points: tc.points || 5 });
+          results.push({
+            id: tc.id,
+            passed: false,
+            input: tc.isHidden ? "[hidden]" : tc.input,
+            expected: "[error]",
+            actual: "",
+            error: "Execution failed",
+            isHidden: tc.isHidden,
+            points: tc.points || 5,
+          });
         }
       }
       setTestResults(results);
       const p = results.filter((r) => r.passed).length;
-      const pts = results.filter((r) => r.passed).reduce((s, r) => s + r.points, 0);
+      const pts = results
+        .filter((r) => r.passed)
+        .reduce((s, r) => s + r.points, 0);
       const total = results.reduce((s, r) => s + r.points, 0);
-      toast(`${p}/${results.length} passed (${pts}/${total} pts)`, { icon: p === results.length ? "🎉" : p > 0 ? "⚠️" : "❌", duration: 4000 });
-    } catch { toast.error("Test failed"); }
-    finally { setRunningTests(false); }
+      toast(`${p}/${results.length} passed (${pts}/${total} pts)`, {
+        icon: p === results.length ? "🎉" : p > 0 ? "⚠️" : "❌",
+        duration: 4000,
+      });
+    } catch {
+      toast.error("Test failed");
+    } finally {
+      setRunningTests(false);
+    }
   };
 
   const updateAnswer = (questionTitle: string, updates: any) => {
-    setAnswers((prev) => ({ ...prev, [questionTitle]: { ...prev[questionTitle], ...updates } }));
+    setAnswers((prev) => ({
+      ...prev,
+      [questionTitle]: { ...prev[questionTitle], ...updates },
+    }));
   };
 
   const formatTime = (s: number) =>
-    `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+    `${Math.floor(s / 60)
+      .toString()
+      .padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   if (loading) return <AssessmentLoader />;
 
-    if (isFinished) {
+  if (isFinished) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
           <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Assessment Complete!</h2>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">
+            Assessment Complete!
+          </h2>
           <p className="text-slate-500 mb-4">
-            Your answers have been submitted and will be reviewed by the hiring team.
+            Your answers have been submitted and will be reviewed by the hiring
+            team.
           </p>
           <p className="text-xs text-slate-400 mb-6">
-            You&apos;ll be notified about next steps through your application tracker.
+            You&apos;ll be notified about next steps through your application
+            tracker.
           </p>
-          <Button onClick={() => router.push("/applications")} className="bg-[#0245EF] hover:bg-[#0237BF]">
+          <Button
+            onClick={() => router.push("/applications")}
+            className="bg-[#0245EF] hover:bg-[#0237BF]"
+          >
             Back to Applications
           </Button>
         </div>
@@ -491,7 +590,13 @@ if (!sData.submission) {
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
           <p className="text-lg">No questions available</p>
-          <Button onClick={() => router.push("/applications")} variant="outline" className="mt-4">Go Back</Button>
+          <Button
+            onClick={() => router.push("/applications")}
+            variant="outline"
+            className="mt-4"
+          >
+            Go Back
+          </Button>
         </div>
       </div>
     );
@@ -508,15 +613,22 @@ if (!sData.submission) {
         <div className="flex items-center gap-3">
           <Code className="w-5 h-5 text-[#0245EF]" />
           <span className="font-semibold text-sm">{assessment.title}</span>
-          <Badge variant="outline" className="text-[10px] border-slate-600 text-slate-300">
+          <Badge
+            variant="outline"
+            className="text-[10px] border-slate-600 text-slate-300"
+          >
             {questions.length} question{questions.length > 1 ? "s" : ""}
           </Badge>
         </div>
         <div className="flex items-center gap-4">
           {questionsReady && timeLeft > 0 ? (
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-lg font-mono text-sm font-bold ${
-              timeLeft < 300 ? "bg-red-900/50 text-red-400 animate-pulse" : "bg-slate-700 text-slate-300"
-            }`}>
+            <div
+              className={`flex items-center gap-2 px-3 py-1 rounded-lg font-mono text-sm font-bold ${
+                timeLeft < 300
+                  ? "bg-red-900/50 text-red-400 animate-pulse"
+                  : "bg-slate-700 text-slate-300"
+              }`}
+            >
               <Clock className="w-4 h-4" />
               {formatTime(timeLeft)}
             </div>
@@ -525,8 +637,17 @@ if (!sData.submission) {
               <Loader2 className="w-4 h-4 animate-spin" /> Loading...
             </div>
           ) : null}
-          <Button onClick={handleSubmit} disabled={submitting || isFinished} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || isFinished}
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-700"
+          >
+            {submitting ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-1" />
+            ) : (
+              <Send className="w-4 h-4 mr-1" />
+            )}
             Submit All
           </Button>
         </div>
@@ -537,15 +658,33 @@ if (!sData.submission) {
         <div className="w-[420px] bg-slate-800 border-r border-slate-700 flex flex-col shrink-0 overflow-hidden">
           {/* Navigation */}
           <div className="flex items-center justify-between p-3 border-b border-slate-700 shrink-0">
-            <Button variant="ghost" size="sm" disabled={currentQuestionIndex === 0}
-              onClick={() => { setCurrentQuestionIndex((i) => i - 1); setTestResults([]); setOutput(""); }}
-              className="text-slate-300 hover:text-white">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={currentQuestionIndex === 0}
+              onClick={() => {
+                setCurrentQuestionIndex((i) => i - 1);
+                setTestResults([]);
+                setOutput("");
+              }}
+              className="text-slate-300 hover:text-white"
+            >
               <ChevronLeft className="w-4 h-4 mr-1" /> Prev
             </Button>
-            <span className="text-xs text-slate-400">Q{currentQuestionIndex + 1}/{questions.length}</span>
-            <Button variant="ghost" size="sm" disabled={currentQuestionIndex === questions.length - 1}
-              onClick={() => { setCurrentQuestionIndex((i) => i + 1); setTestResults([]); setOutput(""); }}
-              className="text-slate-300 hover:text-white">
+            <span className="text-xs text-slate-400">
+              Q{currentQuestionIndex + 1}/{questions.length}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={currentQuestionIndex === questions.length - 1}
+              onClick={() => {
+                setCurrentQuestionIndex((i) => i + 1);
+                setTestResults([]);
+                setOutput("");
+              }}
+              className="text-slate-300 hover:text-white"
+            >
               Next <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -557,12 +696,21 @@ if (!sData.submission) {
               const ans = answers[q?.title];
               const hasAnswer = ans?.code?.trim() || ans?.selectedOption;
               return (
-                <button key={i} onClick={() => { setCurrentQuestionIndex(i); setTestResults([]); setOutput(""); }}
+                <button
+                  key={i}
+                  onClick={() => {
+                    setCurrentQuestionIndex(i);
+                    setTestResults([]);
+                    setOutput("");
+                  }}
                   className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
-                    i === currentQuestionIndex ? "bg-[#0245EF] text-white ring-2 ring-[#4775FF]"
-                    : hasAnswer ? "bg-emerald-900/50 text-emerald-400 border border-emerald-700"
-                    : "bg-slate-700 text-slate-400 hover:bg-slate-600"
-                  }`}>
+                    i === currentQuestionIndex
+                      ? "bg-[#0245EF] text-white ring-2 ring-[#4775FF]"
+                      : hasAnswer
+                        ? "bg-emerald-900/50 text-emerald-400 border border-emerald-700"
+                        : "bg-slate-700 text-slate-400 hover:bg-slate-600"
+                  }`}
+                >
                   {i + 1}
                 </button>
               );
@@ -575,45 +723,93 @@ if (!sData.submission) {
               {currentQuestion && (
                 <>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge className={`${
-                      currentQuestion.difficulty === "easy" ? "bg-emerald-900 text-emerald-300" :
-                      currentQuestion.difficulty === "hard" ? "bg-red-900 text-red-300" : "bg-amber-900 text-amber-300"
-                    }`}>{currentQuestion.difficulty}</Badge>
-                    <Badge variant="outline" className="border-slate-600 text-slate-300">{currentQuestion.points} pts</Badge>
-                    <Badge variant="outline" className="border-slate-600 text-slate-300">{currentQuestion.type}</Badge>
+                    <Badge
+                      className={`${
+                        currentQuestion.difficulty === "easy"
+                          ? "bg-emerald-900 text-emerald-300"
+                          : currentQuestion.difficulty === "hard"
+                            ? "bg-red-900 text-red-300"
+                            : "bg-amber-900 text-amber-300"
+                      }`}
+                    >
+                      {currentQuestion.difficulty}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="border-slate-600 text-slate-300"
+                    >
+                      {currentQuestion.points} pts
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="border-slate-600 text-slate-300"
+                    >
+                      {currentQuestion.type}
+                    </Badge>
                   </div>
 
-                  <h3 className="text-lg font-semibold">{currentQuestion.title}</h3>
-                  <div className="text-sm text-slate-300 whitespace-pre-line leading-relaxed">{currentQuestion.description}</div>
+                  <h3 className="text-lg font-semibold">
+                    {currentQuestion.title}
+                  </h3>
+                  <div className="text-sm text-slate-300 whitespace-pre-line leading-relaxed">
+                    {currentQuestion.description}
+                  </div>
 
                   {/* Test cases */}
-                  {currentQuestion.type === "coding" && currentQuestion.testCases?.some((tc: any) => !tc.isHidden) && (
-                    <div className="space-y-3 mt-4">
-                      <h4 className="text-sm font-semibold text-[#4775FF]">📋 Test Cases</h4>
-                      {currentQuestion.testCases?.filter((tc: any) => !tc.isHidden).map((tc: any, i: number) => (
-                        <TestCaseDisplay key={tc.id} testCase={tc} index={i} />
-                      ))}
-                      {currentQuestion.testCases?.some((tc: any) => tc.isHidden) && (
-                        <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50 text-xs text-slate-500 flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-amber-500" />
-                          + {currentQuestion.testCases.filter((tc: any) => tc.isHidden).length} hidden test cases
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {currentQuestion.type === "coding" &&
+                    currentQuestion.testCases?.some(
+                      (tc: any) => !tc.isHidden
+                    ) && (
+                      <div className="space-y-3 mt-4">
+                        <h4 className="text-sm font-semibold text-[#4775FF]">
+                          📋 Test Cases
+                        </h4>
+                        {currentQuestion.testCases
+                          ?.filter((tc: any) => !tc.isHidden)
+                          .map((tc: any, i: number) => (
+                            <TestCaseDisplay
+                              key={tc.id}
+                              testCase={tc}
+                              index={i}
+                            />
+                          ))}
+                        {currentQuestion.testCases?.some(
+                          (tc: any) => tc.isHidden
+                        ) && (
+                          <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50 text-xs text-slate-500 flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-500" />
+                            +{" "}
+                            {
+                              currentQuestion.testCases.filter(
+                                (tc: any) => tc.isHidden
+                              ).length
+                            }{" "}
+                            hidden test cases
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                   {/* MCQ */}
                   {currentQuestion.type === "mcq" && (
                     <div className="space-y-2 mt-4">
                       {currentQuestion.options?.map((opt: any) => (
-                        <button key={opt.id}
-                          onClick={() => updateAnswer(currentQuestion.title, { selectedOption: opt.id })}
+                        <button
+                          key={opt.id}
+                          onClick={() =>
+                            updateAnswer(currentQuestion.title, {
+                              selectedOption: opt.id,
+                            })
+                          }
                           className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
                             currentAnswer.selectedOption === opt.id
                               ? "border-[#0245EF] bg-[#0245EF]/20 text-white"
                               : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500"
-                          }`}>
-                          <span className="font-mono mr-2 text-slate-500">{opt.id.toUpperCase()}.</span>
+                          }`}
+                        >
+                          <span className="font-mono mr-2 text-slate-500">
+                            {opt.id.toUpperCase()}.
+                          </span>
                           {opt.text}
                         </button>
                       ))}
@@ -629,58 +825,132 @@ if (!sData.submission) {
         {currentQuestion?.type === "coding" && (
           <div className="flex-1 flex flex-col">
             <div className="h-10 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-3">
-              <Select value={language} onValueChange={(v) => {
-                setLanguage(v);
-                const starter = currentQuestion.starterCode?.[v];
-                const currentCode = currentAnswer.code || "";
-                const oldStarter = currentQuestion.starterCode?.[currentAnswer.language || language] || "";
-                if (normalizeCode(currentCode) === normalizeCode(oldStarter) || !currentCode.trim()) {
-                  updateAnswer(currentQuestion.title, { language: v, code: starter || currentCode });
-                } else {
-                  updateAnswer(currentQuestion.title, { language: v });
-                  toast("Language changed. Code kept — ensure valid syntax.", { icon: "⚠️", duration: 3000 });
-                }
-              }}>
-                <SelectTrigger className="w-[140px] h-7 bg-slate-700 border-slate-600 text-xs"><SelectValue /></SelectTrigger>
+              <Select
+                value={language}
+                onValueChange={(v) => {
+                  setLanguage(v);
+                  const starter = currentQuestion.starterCode?.[v];
+                  const currentCode = currentAnswer.code || "";
+                  const oldStarter =
+                    currentQuestion.starterCode?.[
+                      currentAnswer.language || language
+                    ] || "";
+                  if (
+                    normalizeCode(currentCode) ===
+                      normalizeCode(oldStarter) ||
+                    !currentCode.trim()
+                  ) {
+                    updateAnswer(currentQuestion.title, {
+                      language: v,
+                      code: starter || currentCode,
+                    });
+                  } else {
+                    updateAnswer(currentQuestion.title, { language: v });
+                    toast(
+                      "Language changed. Code kept — ensure valid syntax.",
+                      { icon: "⚠️", duration: 3000 }
+                    );
+                  }
+                }}
+              >
+                <SelectTrigger className="w-[140px] h-7 bg-slate-700 border-slate-600 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  {(assessment.languages || ["javascript", "python"]).map((l: string) => (
-                    <SelectItem key={l} value={l}>
-                      {l === "sql" ? "SQL" : l === "cpp" ? "C++" : l.charAt(0).toUpperCase() + l.slice(1)}
-                    </SelectItem>
-                  ))}
+                  {(assessment.languages || ["javascript", "python"]).map(
+                    (l: string) => (
+                      <SelectItem key={l} value={l}>
+                        {l === "sql"
+                          ? "SQL"
+                          : l === "cpp"
+                            ? "C++"
+                            : l.charAt(0).toUpperCase() + l.slice(1)}
+                      </SelectItem>
+                    )
+                  )}
                 </SelectContent>
               </Select>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={runCode} disabled={running || runningTests}
-                  className="h-7 text-xs border-slate-600 bg-slate-700 text-slate-200 hover:bg-slate-600">
-                  {running ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Play className="w-3 h-3 mr-1" />} Run
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={runCode}
+                  disabled={running || runningTests}
+                  className="h-7 text-xs border-slate-600 bg-slate-700 text-slate-200 hover:bg-slate-600"
+                >
+                  {running ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : (
+                    <Play className="w-3 h-3 mr-1" />
+                  )}{" "}
+                  Run
                 </Button>
-                <Button variant="outline" size="sm" onClick={runTests} disabled={running || runningTests}
-                  className="h-7 text-xs border-emerald-700 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50">
-                  {runningTests ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle className="w-3 h-3 mr-1" />} Tests
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={runTests}
+                  disabled={running || runningTests}
+                  className="h-7 text-xs border-emerald-700 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50"
+                >
+                  {runningTests ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : (
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                  )}{" "}
+                  Tests
                 </Button>
               </div>
             </div>
 
             <div className="flex-1">
-              <Editor height="100%" language={getMonacoLanguage(language)} theme="vs-dark"
+              <Editor
+                height="100%"
+                language={getMonacoLanguage(language)}
+                theme="vs-dark"
                 value={currentAnswer.code || ""}
-                onChange={(v) => updateAnswer(currentQuestion.title, { code: v || "" })}
-                options={{ fontSize: 14, minimap: { enabled: false }, padding: { top: 16 }, scrollBeyondLastLine: false, wordWrap: "on", tabSize: 2, automaticLayout: true }}
+                onChange={(v) =>
+                  updateAnswer(currentQuestion.title, { code: v || "" })
+                }
+                options={{
+                  fontSize: 14,
+                  minimap: { enabled: false },
+                  padding: { top: 16 },
+                  scrollBeyondLastLine: false,
+                  wordWrap: "on",
+                  tabSize: 2,
+                  automaticLayout: true,
+                }}
               />
             </div>
 
             <div className="h-[200px] bg-slate-900 border-t border-slate-700 flex flex-col shrink-0">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="flex-1 flex flex-col"
+              >
                 <TabsList className="bg-slate-800 rounded-none border-b border-slate-700 h-8 px-2 justify-start">
-                  <TabsTrigger value="output" className="text-xs h-6 data-[state=active]:bg-slate-700">
+                  <TabsTrigger
+                    value="output"
+                    className="text-xs h-6 data-[state=active]:bg-slate-700"
+                  >
                     <Terminal className="w-3 h-3 mr-1" /> Output
                   </TabsTrigger>
-                  <TabsTrigger value="tests" className="text-xs h-6 data-[state=active]:bg-slate-700">
+                  <TabsTrigger
+                    value="tests"
+                    className="text-xs h-6 data-[state=active]:bg-slate-700"
+                  >
                     <FileText className="w-3 h-3 mr-1" /> Tests
                     {testResults.length > 0 && (
-                      <span className={`ml-1.5 text-[10px] font-bold ${testResults.every((r) => r.passed) ? "text-emerald-400" : "text-amber-400"}`}>
-                        {testResults.filter((r) => r.passed).length}/{testResults.length}
+                      <span
+                        className={`ml-1.5 text-[10px] font-bold ${
+                          testResults.every((r) => r.passed)
+                            ? "text-emerald-400"
+                            : "text-amber-400"
+                        }`}
+                      >
+                        {testResults.filter((r) => r.passed).length}/
+                        {testResults.length}
                       </span>
                     )}
                   </TabsTrigger>
@@ -688,38 +958,117 @@ if (!sData.submission) {
                 <TabsContent value="output" className="flex-1 m-0">
                   <ScrollArea className="h-full p-3">
                     <pre className="text-xs font-mono whitespace-pre-wrap">
-                      {running ? <span className="text-[#4775FF]">⏳ Running...</span>
-                        : output ? <span className={output.includes("❌") ? "text-red-400" : "text-slate-300"}>{output}</span>
-                        : <span className="text-slate-600">Click &apos;Run&apos; to test your code.</span>}
+                      {running ? (
+                        <span className="text-[#4775FF]">⏳ Running...</span>
+                      ) : output ? (
+                        <span
+                          className={
+                            output.includes("❌")
+                              ? "text-red-400"
+                              : "text-slate-300"
+                          }
+                        >
+                          {output}
+                        </span>
+                      ) : (
+                        <span className="text-slate-600">
+                          Click &apos;Run&apos; to test your code.
+                        </span>
+                      )}
                     </pre>
                   </ScrollArea>
                 </TabsContent>
                 <TabsContent value="tests" className="flex-1 m-0">
                   <ScrollArea className="h-full p-3">
                     {runningTests ? (
-                      <div className="flex items-center gap-2 text-[#4775FF] text-xs"><Loader2 className="w-4 h-4 animate-spin" /> Running tests...</div>
+                      <div className="flex items-center gap-2 text-[#4775FF] text-xs">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Running
+                        tests...
+                      </div>
                     ) : testResults.length === 0 ? (
-                      <p className="text-xs text-slate-600">Click &apos;Tests&apos; to validate your solution.</p>
+                      <p className="text-xs text-slate-600">
+                        Click &apos;Tests&apos; to validate your solution.
+                      </p>
                     ) : (
                       <div className="space-y-2">
-                        <div className={`p-2 rounded-lg text-xs font-medium ${testResults.every((r) => r.passed) ? "bg-emerald-900/30 text-emerald-400 border border-emerald-800" : "bg-amber-900/30 text-amber-400 border border-amber-800"}`}>
-                          {testResults.filter((r) => r.passed).length}/{testResults.length} passed • {testResults.filter((r) => r.passed).reduce((s, r) => s + r.points, 0)}/{testResults.reduce((s, r) => s + r.points, 0)} pts
+                        <div
+                          className={`p-2 rounded-lg text-xs font-medium ${
+                            testResults.every((r) => r.passed)
+                              ? "bg-emerald-900/30 text-emerald-400 border border-emerald-800"
+                              : "bg-amber-900/30 text-amber-400 border border-amber-800"
+                          }`}
+                        >
+                          {testResults.filter((r) => r.passed).length}/
+                          {testResults.length} passed •{" "}
+                          {testResults
+                            .filter((r) => r.passed)
+                            .reduce((s, r) => s + r.points, 0)}
+                          /{testResults.reduce((s, r) => s + r.points, 0)} pts
                         </div>
                         {testResults.map((r, i) => (
-                          <div key={r.id} className={`p-2.5 rounded-lg text-xs font-mono border ${r.passed ? "bg-emerald-900/20 border-emerald-800/50" : "bg-red-900/20 border-red-800/50"}`}>
+                          <div
+                            key={r.id}
+                            className={`p-2.5 rounded-lg text-xs font-mono border ${
+                              r.passed
+                                ? "bg-emerald-900/20 border-emerald-800/50"
+                                : "bg-red-900/20 border-red-800/50"
+                            }`}
+                          >
                             <div className="flex items-center justify-between mb-1">
                               <div className="flex items-center gap-2">
-                                {r.passed ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <XCircle className="w-3.5 h-3.5 text-red-400" />}
-                                <span className={r.passed ? "text-emerald-400" : "text-red-400"}>Test {i + 1} {r.isHidden ? "(hidden)" : ""}</span>
+                                {r.passed ? (
+                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                ) : (
+                                  <XCircle className="w-3.5 h-3.5 text-red-400" />
+                                )}
+                                <span
+                                  className={
+                                    r.passed
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                  }
+                                >
+                                  Test {i + 1}{" "}
+                                  {r.isHidden ? "(hidden)" : ""}
+                                </span>
                               </div>
-                              <span className="text-slate-500">{r.points} pts</span>
+                              <span className="text-slate-500">
+                                {r.points} pts
+                              </span>
                             </div>
                             {!r.isHidden && (
                               <div className="ml-5 space-y-0.5 text-[11px]">
-                                <div><span className="text-slate-500">Input: </span><span className="text-cyan-400">{r.input}</span></div>
-                                <div><span className="text-slate-500">Expected: </span><span className="text-emerald-400">{r.expected}</span></div>
-                                {!r.passed && <div><span className="text-slate-500">Got: </span><span className="text-red-400">{r.actual || "(empty)"}</span></div>}
-                                {r.error && <div className="mt-1 p-1.5 bg-red-900/30 rounded text-red-300 whitespace-pre-wrap">{r.error}</div>}
+                                <div>
+                                  <span className="text-slate-500">
+                                    Input:{" "}
+                                  </span>
+                                  <span className="text-cyan-400">
+                                    {r.input}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500">
+                                    Expected:{" "}
+                                  </span>
+                                  <span className="text-emerald-400">
+                                    {r.expected}
+                                  </span>
+                                </div>
+                                {!r.passed && (
+                                  <div>
+                                    <span className="text-slate-500">
+                                      Got:{" "}
+                                    </span>
+                                    <span className="text-red-400">
+                                      {r.actual || "(empty)"}
+                                    </span>
+                                  </div>
+                                )}
+                                {r.error && (
+                                  <div className="mt-1 p-1.5 bg-red-900/30 rounded text-red-300 whitespace-pre-wrap">
+                                    {r.error}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -741,7 +1090,13 @@ if (!sData.submission) {
 // HELPERS
 // ==========================================
 
-function TestCaseDisplay({ testCase, index }: { testCase: any; index: number }) {
+function TestCaseDisplay({
+  testCase,
+  index,
+}: {
+  testCase: any;
+  index: number;
+}) {
   let input = testCase.input || "";
   let isSQL = false;
 
@@ -756,17 +1111,34 @@ function TestCaseDisplay({ testCase, index }: { testCase: any; index: number }) 
     const lines = output.split("\n").filter((l) => l.trim());
     if (lines.length > 0 && lines[0].includes("|")) {
       const headers = lines[0].split("|").map((h) => h.trim());
-      const rows = lines.slice(1).map((l) => l.split("|").map((c) => c.trim()));
+      const rows = lines
+        .slice(1)
+        .map((l) => l.split("|").map((c) => c.trim()));
       return (
         <table className="w-full text-xs font-mono">
-          <thead><tr className="border-b border-slate-600">
-            {headers.map((h, i) => <th key={i} className="text-left py-1 px-2 text-[#4775FF] font-semibold">{h}</th>)}
-          </tr></thead>
-          <tbody>{rows.map((row, ri) => (
-            <tr key={ri} className="border-b border-slate-700/50">
-              {row.map((cell, ci) => <td key={ci} className="py-1 px-2 text-emerald-400">{cell}</td>)}
+          <thead>
+            <tr className="border-b border-slate-600">
+              {headers.map((h, i) => (
+                <th
+                  key={i}
+                  className="text-left py-1 px-2 text-[#4775FF] font-semibold"
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
-          ))}</tbody>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={ri} className="border-b border-slate-700/50">
+                {row.map((cell, ci) => (
+                  <td key={ci} className="py-1 px-2 text-emerald-400">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
         </table>
       );
     }
@@ -778,25 +1150,64 @@ function TestCaseDisplay({ testCase, index }: { testCase: any; index: number }) 
     return (
       <div className="bg-slate-900/80 rounded-lg border border-slate-700 overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700 bg-slate-800/50">
-          <span className="text-[11px] text-slate-400">Example {index + 1}</span>
-          <Badge variant="outline" className="text-[9px] border-slate-600">{testCase.points} pts</Badge>
+          <span className="text-[11px] text-slate-400">
+            Example {index + 1}
+          </span>
+          <Badge
+            variant="outline"
+            className="text-[9px] border-slate-600"
+          >
+            {testCase.points} pts
+          </Badge>
         </div>
         <div className="p-3 space-y-3">
           <div>
-            <span className="text-[10px] text-slate-500 uppercase">Tables</span>
+            <span className="text-[10px] text-slate-500 uppercase">
+              Tables
+            </span>
             {tables.map((t, ti) => (
               <div key={ti} className="mt-1">
-                <span className="text-xs text-cyan-400 font-mono font-semibold">{t.name}</span>
+                <span className="text-xs text-cyan-400 font-mono font-semibold">
+                  {t.name}
+                </span>
                 <table className="text-xs font-mono mt-0.5">
-                  <thead><tr className="border-b border-slate-700">{t.columns.map((c, ci) => <th key={ci} className="text-left py-0.5 px-2 text-slate-400">{c}</th>)}</tr></thead>
-                  <tbody>{t.rows.map((r, ri) => <tr key={ri} className="border-b border-slate-800">{r.map((cell, ci) => <td key={ci} className="py-0.5 px-2 text-slate-300">{cell}</td>)}</tr>)}</tbody>
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      {t.columns.map((c, ci) => (
+                        <th
+                          key={ci}
+                          className="text-left py-0.5 px-2 text-slate-400"
+                        >
+                          {c}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {t.rows.map((r, ri) => (
+                      <tr key={ri} className="border-b border-slate-800">
+                        {r.map((cell, ci) => (
+                          <td
+                            key={ci}
+                            className="py-0.5 px-2 text-slate-300"
+                          >
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
             ))}
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase">Expected</span>
-            <div className="mt-1 bg-slate-900 rounded p-2">{renderOutput(testCase.expectedOutput)}</div>
+            <span className="text-[10px] text-slate-500 uppercase">
+              Expected
+            </span>
+            <div className="mt-1 bg-slate-900 rounded p-2">
+              {renderOutput(testCase.expectedOutput)}
+            </div>
           </div>
         </div>
       </div>
@@ -806,12 +1217,25 @@ function TestCaseDisplay({ testCase, index }: { testCase: any; index: number }) 
   return (
     <div className="bg-slate-900/80 rounded-lg p-3 text-xs font-mono border border-slate-700">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-slate-400 font-sans text-[11px]">Example {index + 1}</span>
-        <Badge variant="outline" className="text-[9px] border-slate-600">{testCase.points} pts</Badge>
+        <span className="text-slate-400 font-sans text-[11px]">
+          Example {index + 1}
+        </span>
+        <Badge
+          variant="outline"
+          className="text-[9px] border-slate-600"
+        >
+          {testCase.points} pts
+        </Badge>
       </div>
       <div className="space-y-1.5">
-        <div><span className="text-slate-500">Input: </span><span className="text-cyan-400">{input}</span></div>
-        <div><span className="text-slate-500">Expected: </span>{renderOutput(testCase.expectedOutput)}</div>
+        <div>
+          <span className="text-slate-500">Input: </span>
+          <span className="text-cyan-400">{input}</span>
+        </div>
+        <div>
+          <span className="text-slate-500">Expected: </span>
+          {renderOutput(testCase.expectedOutput)}
+        </div>
       </div>
     </div>
   );
@@ -822,29 +1246,75 @@ function parseCreateStatements(sql: string) {
   const createRegex = /CREATE\s+TABLE\s+(\w+)\s*\((.*?)\)/gi;
   let m;
   while ((m = createRegex.exec(sql)) !== null) {
-    const cols = m[2].split(",").map((c) => c.trim().split(/\s+/)[0]).filter((c) => c && !c.toUpperCase().startsWith("PRIMARY"));
+    const cols = m[2]
+      .split(",")
+      .map((c) => c.trim().split(/\s+/)[0])
+      .filter(
+        (c) => c && !c.toUpperCase().startsWith("PRIMARY")
+      );
     tables.push({ name: m[1], columns: cols, rows: [] });
   }
-  const insertRegex = /INSERT\s+INTO\s+(\w+)\s+VALUES\s+(.*?)(?=;|INSERT|CREATE|$)/gi;
+  const insertRegex =
+    /INSERT\s+INTO\s+(\w+)\s+VALUES\s+(.*?)(?=;|INSERT|CREATE|$)/gi;
   while ((m = insertRegex.exec(sql)) !== null) {
-    const table = tables.find((t) => t.name.toLowerCase() === m![1].toLowerCase());
+    const table = tables.find(
+      (t) => t.name.toLowerCase() === m![1].toLowerCase()
+    );
     if (!table) continue;
     const groups = m[2].match(/\(([^)]+)\)/g);
-    if (groups) groups.forEach((g) => table.rows.push(g.slice(1, -1).split(",").map((v) => v.trim().replace(/^'|'$/g, ""))));
+    if (groups)
+      groups.forEach((g) =>
+        table.rows.push(
+          g
+            .slice(1, -1)
+            .split(",")
+            .map((v) => v.trim().replace(/^'|'$/g, ""))
+        )
+      );
   }
   return tables;
 }
 
 function normalizeOutput(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\s*,\s*/g, ",").replace(/\s*:\s*/g, ":").replace(/\[\s+/g, "[").replace(/\s+\]/g, "]").replace(/\{\s+/g, "{").replace(/\s+\}/g, "}").split("\n").map((l) => l.trim()).filter((l) => l.length > 0).join("\n").trim().replace(/\bTrue\b/g, "true").replace(/\bFalse\b/g, "false").replace(/\bNone\b/g, "null");
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\s*,\s*/g, ",")
+    .replace(/\s*:\s*/g, ":")
+    .replace(/\[\s+/g, "[")
+    .replace(/\s+\]/g, "]")
+    .replace(/\{\s+/g, "{")
+    .replace(/\s+\}/g, "}")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .join("\n")
+    .trim()
+    .replace(/\bTrue\b/g, "true")
+    .replace(/\bFalse\b/g, "false")
+    .replace(/\bNone\b/g, "null");
 }
 
 function normalizeCode(code: string): string {
-  return code.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("//") && !l.startsWith("#")).join("\n").trim();
+  return code
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("//") && !l.startsWith("#"))
+    .join("\n")
+    .trim();
 }
 
 function getMonacoLanguage(lang: string): string {
-  const map: Record<string, string> = { javascript: "javascript", python: "python", typescript: "typescript", java: "java", cpp: "cpp", sql: "sql", mysql: "sql", postgresql: "sql" };
+  const map: Record<string, string> = {
+    javascript: "javascript",
+    python: "python",
+    typescript: "typescript",
+    java: "java",
+    cpp: "cpp",
+    sql: "sql",
+    mysql: "sql",
+    postgresql: "sql",
+  };
   return map[lang] || lang;
 }
 
@@ -856,14 +1326,10 @@ function AssessmentPageInner() {
     setMounted(true);
   }, []);
 
-  // During Server-Side Rendering (SSR) and the initial Client Hydration pass, 
-  // we return EXACTLY the same HTML: the static AssessmentLoader.
   if (!mounted) {
     return <AssessmentLoader />;
   }
 
-  // Once safely mounted on the client, we drop in the Suspense boundary and 
-  // render the content that relies on `useSearchParams()`.
   return (
     <Suspense fallback={<AssessmentLoader />}>
       <AssessmentContent />
@@ -873,11 +1339,13 @@ function AssessmentPageInner() {
 
 export default function AssessmentPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <p className="text-white">Loading assessment...</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-900">
+          <p className="text-white">Loading assessment...</p>
+        </div>
+      }
+    >
       <AssessmentPageInner />
     </Suspense>
   );
