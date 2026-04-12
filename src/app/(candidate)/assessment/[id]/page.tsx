@@ -238,9 +238,42 @@ function AssessmentContent() {
         }
       });
 
-      setAnswers(initial);
+            setAnswers(initial);
       setLanguage(defaultLang);
-      setTimeLeft(remaining);
+
+      // UPDATE started_at to NOW — timer starts when page is actually ready
+      // This is fair because candidate couldn't do anything during loading
+      try {
+        const resetRes = await fetch("/api/submissions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "reset_timer",
+            submissionId: sData.submission.id,
+          }),
+        });
+        const resetData = await resetRes.json();
+
+        if (resetData.submission?.started_at) {
+          // Recalculate with new start time
+          const newStartedAt = new Date(
+            String(resetData.submission.started_at).endsWith("Z")
+              ? resetData.submission.started_at
+              : resetData.submission.started_at + "Z"
+          ).getTime();
+          const newDurationMs = (aData.assessment?.duration || 60) * 60 * 1000;
+          const newRemaining = Math.max(0, Math.floor((newDurationMs - (Date.now() - newStartedAt)) / 1000));
+
+          console.log("Timer reset! New remaining:", newRemaining, "seconds");
+          setTimeLeft(newRemaining);
+        } else {
+          setTimeLeft(remaining);
+        }
+      } catch {
+        // If reset fails, use original time
+        setTimeLeft(remaining);
+      }
+
       setQuestionsReady(true);
 
     } catch (err) {

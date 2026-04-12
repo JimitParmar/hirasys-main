@@ -394,7 +394,55 @@ export async function POST(req: NextRequest) {
         gradedAnswers,
       });
     }
+        // ==========================================
+    // RESET TIMER — Called when assessment page fully loads
+    // ==========================================
+    if (action === "reset_timer") {
+      const { submissionId } = body;
 
+      if (!submissionId) {
+        return NextResponse.json({ error: "submissionId required" }, { status: 400 });
+      }
+
+      const submission = await queryOne(
+        "SELECT * FROM submissions WHERE id = $1 AND candidate_id = $2",
+        [submissionId, candidateId]
+      );
+
+      if (!submission) {
+        return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+      }
+
+      // Only reset if still IN_PROGRESS and started less than 5 minutes ago
+      // This prevents abuse (candidate can't keep resetting)
+      if (submission.status !== "IN_PROGRESS") {
+        return NextResponse.json({ error: "Cannot reset — already submitted" }, { status: 400 });
+      }
+
+      const startedAt = new Date(
+        String(submission.started_at).endsWith("Z")
+          ? submission.started_at
+          : submission.started_at + "Z"
+      ).getTime();
+      const elapsed = Date.now() - startedAt;
+      const maxResetWindow = 5 * 60 * 1000; // 5 minutes — only allow reset within first 5 min
+
+      if (elapsed > maxResetWindow) {
+        // Too late to reset — return current submission
+        console.log("Timer reset denied — started", Math.floor(elapsed / 1000), "seconds ago");
+        return NextResponse.json({ submission });
+      }
+
+      // Reset started_at to NOW
+      const updated = await queryOne(
+        "UPDATE submissions SET started_at = NOW() WHERE id = $1 RETURNING *",
+        [submissionId]
+      );
+
+      console.log("Timer reset! Old start:", submission.started_at, "New start:", updated.started_at);
+
+      return NextResponse.json({ submission: updated });
+    }
     return NextResponse.json({ error: "Invalid action. Use 'start' or 'submit'" }, { status: 400 });
   } catch (error: any) {
     console.error("Submission error:", error);
