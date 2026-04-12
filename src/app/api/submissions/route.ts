@@ -332,7 +332,16 @@ if (questions.length === 0) {
       let maxScore = 0;
       const gradedAnswers = [];
 
+      console.log("=== FINAL QUESTIONS DEBUG ===");
+console.log("questions.length:", questions.length);
+console.log("questions sample:", questions.slice(0, 2));
+console.log("submission.assessment_id:", submission.assessment_id);
+console.log("answers received:", answers?.length);
+
       for (const answer of (answers || [])) {
+        console.log("\n--- ANSWER ---");
+console.log("answer.questionId:", answer.questionId);
+console.log("answer.questionTitle:", answer.questionTitle);
         const question =
   questions.find((q: any) => q.id === answer.questionId) ||
   questions.find((q: any) => q.title === answer.questionTitle);
