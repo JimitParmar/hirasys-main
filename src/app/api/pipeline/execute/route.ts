@@ -5,7 +5,6 @@ import { query, queryOne, queryMany } from "@/lib/db";
 import { trackUsage } from "@/lib/billing";
 import { getUserCompanyId } from "@/lib/company";
 
-// Import these dynamically to avoid circular dependencies
 async function calculateRating(applicationId: string) {
   const mod = await import("../../ratings/route");
   return mod.calculateRating(applicationId);
@@ -16,12 +15,7 @@ async function generateFeedback(applicationId: string) {
   return mod.generateFeedback(applicationId);
 }
 
-// ==========================================
-// MAIN PIPELINE EXECUTOR
-// ==========================================
-
 export async function POST(req: NextRequest) {
-  
   try {
     const { applicationId, trigger } = await req.json();
 
@@ -37,12 +31,15 @@ export async function POST(req: NextRequest) {
     ];
     if (trigger && !validTriggers.includes(trigger)) {
       console.log("Skipping — invalid trigger:", trigger);
-      return NextResponse.json({ action: "skipped", reason: `Trigger "${trigger}" not auto-executable` });
+      return NextResponse.json({
+        action: "skipped",
+        reason: `Trigger "${trigger}" not auto-executable`,
+      });
     }
-    // Get application + job + pipeline
+
     const application = await queryOne(
       `SELECT a.*, j.pipeline_id, j.title as job_title, j.id as job_id,
-        u.first_name as candidate_first_name
+        j.posted_by, u.first_name as candidate_first_name
        FROM applications a
        JOIN jobs j ON a.job_id = j.id
        LEFT JOIN users u ON a.candidate_id = u.id
@@ -52,7 +49,10 @@ export async function POST(req: NextRequest) {
 
     if (!application) {
       console.log("Application not found");
-      return NextResponse.json({ error: "Application not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Application not found" },
+        { status: 404 }
+      );
     }
 
     if (!application.pipeline_id) {
@@ -67,14 +67,23 @@ export async function POST(req: NextRequest) {
 
     if (!pipeline) {
       console.log("Pipeline not found");
-      return NextResponse.json({ error: "Pipeline not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Pipeline not found" },
+        { status: 404 }
+      );
     }
 
     let nodes: any[] = [];
     let edges: any[] = [];
     try {
-      nodes = typeof pipeline.nodes === "string" ? JSON.parse(pipeline.nodes) : pipeline.nodes || [];
-      edges = typeof pipeline.edges === "string" ? JSON.parse(pipeline.edges) : pipeline.edges || [];
+      nodes =
+        typeof pipeline.nodes === "string"
+          ? JSON.parse(pipeline.nodes)
+          : pipeline.nodes || [];
+      edges =
+        typeof pipeline.edges === "string"
+          ? JSON.parse(pipeline.edges)
+          : pipeline.edges || [];
     } catch {}
 
     if (nodes.length === 0) {
@@ -82,18 +91,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ action: "empty_pipeline" });
     }
 
-    // Get ordered nodes
-    const orderedNodes = getOrderedNodes(nodes, edges);
-    console.log("Pipeline:", orderedNodes.map((n: any) => `${n.data?.subtype}(${n.data?.type})`).join(" → "));
+    // Get company ID for billing
+    let companyId: string | null = null;
+    if (application.posted_by) {
+      companyId = await getUserCompanyId(application.posted_by);
+    }
 
-    // Find current position
+    const orderedNodes = getOrderedNodes(nodes, edges);
+    console.log(
+      "Pipeline:",
+      orderedNodes
+        .map((n: any) => `${n.data?.subtype}(${n.data?.type})`)
+        .join(" → ")
+    );
+
     const currentStatus = application.status;
     console.log("Current status:", currentStatus);
 
-    const currentNodeIndex = findCurrentNodeIndex(orderedNodes, currentStatus);
-    console.log("Current node index:", currentNodeIndex, "of", orderedNodes.length);
+    const currentNodeIndex = findCurrentNodeIndex(
+      orderedNodes,
+      currentStatus
+    );
+    console.log(
+      "Current node index:",
+      currentNodeIndex,
+      "of",
+      orderedNodes.length
+    );
 
-    // Process from current position forward
     let nextIndex = currentNodeIndex + 1;
     const actionsTaken: string[] = [];
 
@@ -102,14 +127,19 @@ export async function POST(req: NextRequest) {
       const nodeType = node.data?.type;
       const nodeSubtype = node.data?.subtype;
 
-      console.log(`\n  [${nextIndex}] Processing: ${nodeSubtype} (${nodeType})`);
+      console.log(
+        `\n  [${nextIndex}] Processing: ${nodeSubtype} (${nodeType})`
+      );
 
       // ==========================================
       // STAGE NODES
       // ==========================================
       if (nodeType === "stage") {
         const stageStatus = subtypeToStatus(nodeSubtype);
-        const isCompleted = await isStageCompleted(applicationId, nodeSubtype);
+        const isCompleted = await isStageCompleted(
+          applicationId,
+          nodeSubtype
+        );
 
         if (isCompleted) {
           console.log(`  ✅ Already completed: ${nodeSubtype}`);
@@ -117,9 +147,10 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // AI Resume Screen — auto-completes (scoring done during application)
+        // AI Resume Screen
         if (nodeSubtype === "ai_resume_screen") {
-          const resumeScore = parseFloat(application.resume_score) || 0;
+          const resumeScore =
+            parseFloat(application.resume_score) || 0;
           console.log(`  📄 Resume Screen: score = ${resumeScore}%`);
 
           await query(
@@ -129,14 +160,26 @@ export async function POST(req: NextRequest) {
             [applicationId, nodeSubtype]
           );
 
+          // Track billing
+          if (companyId) {
+            await trackUsage({
+              companyId,
+              nodeType: "ai_resume_screen",
+              jobId: application.job_id,
+              applicationId,
+            });
+          }
+
           actionsTaken.push(`screened:${resumeScore}`);
           nextIndex++;
           continue;
         }
 
-        // Coding/MCQ Assessment — candidate needs to take it
-       if (nodeSubtype === "coding_assessment") {
-          console.log(`  ⏸️ Waiting for candidate: coding_assessment`);
+        // Coding Assessment
+        if (nodeSubtype === "coding_assessment") {
+          console.log(
+            `  ⏸️ Waiting for candidate: coding_assessment`
+          );
           if (stageStatus) {
             await query(
               "UPDATE applications SET status = $2, current_stage = $3, updated_at = NOW() WHERE id = $1",
@@ -154,9 +197,11 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        // MCQ Assessment — candidate must take it
+        // MCQ Assessment
         if (nodeSubtype === "mcq_assessment") {
-          console.log(`  ⏸️ Waiting for candidate: mcq_assessment`);
+          console.log(
+            `  ⏸️ Waiting for candidate: mcq_assessment`
+          );
           if (stageStatus) {
             await query(
               "UPDATE applications SET status = $2, current_stage = $3, updated_at = NOW() WHERE id = $1",
@@ -174,15 +219,19 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        // AI Interview — candidate needs to take it
-        if (nodeSubtype === "ai_technical_interview" || nodeSubtype === "ai_behavioral_interview") {
+        // AI Interview
+        if (
+          nodeSubtype === "ai_technical_interview" ||
+          nodeSubtype === "ai_behavioral_interview"
+        ) {
           if (stageStatus) {
-            console.log(`  ➡️ Waiting for candidate: ${nodeSubtype}`);
+            console.log(
+              `  ➡️ Waiting for candidate: ${nodeSubtype}`
+            );
             await query(
               "UPDATE applications SET status = $2, current_stage = $3, updated_at = NOW() WHERE id = $1",
               [applicationId, stageStatus, nodeSubtype]
             );
-
             await createNotification(
               application.candidate_id,
               "STAGE_ADVANCED",
@@ -190,23 +239,29 @@ export async function POST(req: NextRequest) {
               `Your AI interview for ${application.job_title} is ready. Start when you're prepared.`,
               "/applications"
             );
-
             actionsTaken.push(`waiting:${stageStatus}`);
           }
-          break; // STOP — candidate needs to complete
+          break;
         }
 
-        // F2F Interview — HR needs to schedule
-        if (nodeSubtype === "f2f_interview" || nodeSubtype === "panel_interview") {
+        // F2F Interview
+        if (
+          nodeSubtype === "f2f_interview" ||
+          nodeSubtype === "panel_interview"
+        ) {
           if (stageStatus) {
-            console.log(`  ➡️ Waiting for HR to schedule: ${nodeSubtype}`);
+            console.log(
+              `  ➡️ Waiting for HR to schedule: ${nodeSubtype}`
+            );
             await query(
               "UPDATE applications SET status = $2, current_stage = $3, updated_at = NOW() WHERE id = $1",
               [applicationId, stageStatus, nodeSubtype]
             );
 
-            // Notify HR
-            const hr = await queryOne("SELECT posted_by FROM jobs WHERE id = $1", [application.job_id]);
+            const hr = await queryOne(
+              "SELECT posted_by FROM jobs WHERE id = $1",
+              [application.job_id]
+            );
             if (hr?.posted_by) {
               await createNotification(
                 hr.posted_by,
@@ -227,10 +282,10 @@ export async function POST(req: NextRequest) {
 
             actionsTaken.push(`waiting:${stageStatus}`);
           }
-          break; // STOP — HR needs to schedule
+          break;
         }
 
-        // Any other stage — advance
+        // Generic stage advance
         if (stageStatus) {
           console.log(`  ➡️ Advancing to: ${stageStatus}`);
           await query(
@@ -255,7 +310,11 @@ export async function POST(req: NextRequest) {
       // FILTER NODES
       // ==========================================
       if (nodeType === "filter") {
-        const passed = await evaluateFilter(node, applicationId, application.job_id);
+        const passed = await evaluateFilter(
+          node,
+          applicationId,
+          application.job_id
+        );
 
         if (!passed) {
           console.log(`  ❌ REJECTED by filter: ${nodeSubtype}`);
@@ -265,8 +324,16 @@ export async function POST(req: NextRequest) {
             [applicationId]
           );
 
-          try { await calculateRating(applicationId); } catch (e) { console.error("Rating failed:", e); }
-          try { await generateFeedback(applicationId); } catch (e) { console.error("Feedback failed:", e); }
+          try {
+            await calculateRating(applicationId);
+          } catch (e) {
+            console.error("Rating failed:", e);
+          }
+          try {
+            await generateFeedback(applicationId);
+          } catch (e) {
+            console.error("Feedback failed:", e);
+          }
 
           await createNotification(
             application.candidate_id,
@@ -305,7 +372,19 @@ export async function POST(req: NextRequest) {
             [applicationId]
           );
 
-          try { await calculateRating(applicationId); } catch {}
+          try {
+            await calculateRating(applicationId);
+          } catch {}
+
+          // Track billing
+          if (companyId) {
+            await trackUsage({
+              companyId,
+              nodeType: "offer",
+              jobId: application.job_id,
+              applicationId,
+            });
+          }
 
           await createNotification(
             application.candidate_id,
@@ -320,7 +399,10 @@ export async function POST(req: NextRequest) {
           console.log("\nActions:", actionsTaken.join(", "));
           console.log("=== END PIPELINE ===\n");
 
-          return NextResponse.json({ action: "offered", actionsTaken });
+          return NextResponse.json({
+            action: "offered",
+            actionsTaken,
+          });
         }
 
         if (nodeSubtype === "rejection") {
@@ -330,15 +412,22 @@ export async function POST(req: NextRequest) {
             [applicationId]
           );
 
-          try { await calculateRating(applicationId); } catch {}
-          try { await generateFeedback(applicationId); } catch {}
+          try {
+            await calculateRating(applicationId);
+          } catch {}
+          try {
+            await generateFeedback(applicationId);
+          } catch {}
 
           actionsTaken.push("rejected:exit_node");
 
           console.log("\nActions:", actionsTaken.join(", "));
           console.log("=== END PIPELINE ===\n");
 
-          return NextResponse.json({ action: "rejected", actionsTaken });
+          return NextResponse.json({
+            action: "rejected",
+            actionsTaken,
+          });
         }
 
         if (nodeSubtype === "onboarding") {
@@ -353,31 +442,39 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      // Logic/Action nodes — skip through
-      console.log(`  ⏭️ Skipping: ${nodeSubtype} (${nodeType})`);
+      console.log(
+        `  ⏭️ Skipping: ${nodeSubtype} (${nodeType})`
+      );
       nextIndex++;
     }
 
-    // Calculate rating after any changes
-    try { await calculateRating(applicationId); } catch {}
+    try {
+      await calculateRating(applicationId);
+    } catch {}
 
-    console.log("\nActions:", actionsTaken.join(", ") || "none");
+    console.log(
+      "\nActions:",
+      actionsTaken.join(", ") || "none"
+    );
     console.log("=== END PIPELINE ===\n");
 
     return NextResponse.json({
-      action: actionsTaken.length > 0 ? "processed" : "no_change",
+      action:
+        actionsTaken.length > 0 ? "processed" : "no_change",
       actionsTaken,
     });
   } catch (error: any) {
     console.error("Pipeline execution error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }
 
 // ==========================================
-// NODE ORDERING — Topological Sort
+// NODE ORDERING
 // ==========================================
-
 function getOrderedNodes(nodes: any[], edges: any[]) {
   const adjMap = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
@@ -392,7 +489,10 @@ function getOrderedNodes(nodes: any[], edges: any[]) {
       const targets = adjMap.get(edge.source) || [];
       targets.push(edge.target);
       adjMap.set(edge.source, targets);
-      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+      inDegree.set(
+        edge.target,
+        (inDegree.get(edge.target) || 0) + 1
+      );
     }
   }
 
@@ -406,7 +506,7 @@ function getOrderedNodes(nodes: any[], edges: any[]) {
     const current = queue.shift()!;
     const node = nodes.find((n: any) => n.id === current);
     if (node) ordered.push(node);
-    for (const next of (adjMap.get(current) || [])) {
+    for (const next of adjMap.get(current) || []) {
       const newDeg = (inDegree.get(next) || 1) - 1;
       inDegree.set(next, newDeg);
       if (newDeg === 0) queue.push(next);
@@ -417,15 +517,20 @@ function getOrderedNodes(nodes: any[], edges: any[]) {
 }
 
 // ==========================================
-// FIND CURRENT POSITION IN PIPELINE
+// FIND CURRENT POSITION
 // ==========================================
-
-function findCurrentNodeIndex(orderedNodes: any[], status: string): number {
+function findCurrentNodeIndex(
+  orderedNodes: any[],
+  status: string
+): number {
   const statusMap: Record<string, string[]> = {
     APPLIED: ["job_posting"],
     SCREENING: ["ai_resume_screen"],
     ASSESSMENT: ["coding_assessment", "mcq_assessment"],
-    AI_INTERVIEW: ["ai_technical_interview", "ai_behavioral_interview"],
+    AI_INTERVIEW: [
+      "ai_technical_interview",
+      "ai_behavioral_interview",
+    ],
     F2F_INTERVIEW: ["f2f_interview", "panel_interview"],
     UNDER_REVIEW: [],
     OFFERED: ["offer"],
@@ -448,20 +553,27 @@ function findCurrentNodeIndex(orderedNodes: any[], status: string): number {
 // ==========================================
 // STAGE COMPLETION CHECK
 // ==========================================
-
-async function isStageCompleted(applicationId: string, subtype: string): Promise<boolean> {
+async function isStageCompleted(
+  applicationId: string,
+  subtype: string
+): Promise<boolean> {
   if (subtype === "ai_resume_screen") {
     const app = await queryOne(
       "SELECT resume_score FROM applications WHERE id = $1",
       [applicationId]
     );
-    return app?.resume_score !== null && app?.resume_score !== undefined;
+    return (
+      app?.resume_score !== null &&
+      app?.resume_score !== undefined
+    );
   }
 
-  if (subtype === "coding_assessment" || subtype === "mcq_assessment") {
-    // Check for a GRADED submission specifically for this application
+  if (
+    subtype === "coding_assessment" ||
+    subtype === "mcq_assessment"
+  ) {
     const sub = await queryOne(
-      `SELECT id, status FROM submissions 
+      `SELECT id FROM submissions
        WHERE application_id = $1 AND status = 'GRADED'
        LIMIT 1`,
       [applicationId]
@@ -469,9 +581,12 @@ async function isStageCompleted(applicationId: string, subtype: string): Promise
     return !!sub;
   }
 
-  if (subtype === "ai_technical_interview" || subtype === "ai_behavioral_interview") {
+  if (
+    subtype === "ai_technical_interview" ||
+    subtype === "ai_behavioral_interview"
+  ) {
     const int = await queryOne(
-      `SELECT id, status FROM ai_interviews 
+      `SELECT id FROM ai_interviews
        WHERE application_id = $1 AND status = 'COMPLETED'
        LIMIT 1`,
       [applicationId]
@@ -479,9 +594,12 @@ async function isStageCompleted(applicationId: string, subtype: string): Promise
     return !!int;
   }
 
-  if (subtype === "f2f_interview" || subtype === "panel_interview") {
+  if (
+    subtype === "f2f_interview" ||
+    subtype === "panel_interview"
+  ) {
     const f2f = await queryOne(
-      `SELECT id, status FROM f2f_interviews 
+      `SELECT id FROM f2f_interviews
        WHERE application_id = $1 AND status = 'COMPLETED'
        LIMIT 1`,
       [applicationId]
@@ -493,9 +611,8 @@ async function isStageCompleted(applicationId: string, subtype: string): Promise
 }
 
 // ==========================================
-// FILTER EVALUATION — ALL SCORES AS PERCENTAGES
+// FILTER EVALUATION
 // ==========================================
-
 async function evaluateFilter(
   filterNode: any,
   applicationId: string,
@@ -504,7 +621,10 @@ async function evaluateFilter(
   const config = filterNode.data?.config || {};
   const subtype = filterNode.data?.subtype;
 
-  const app = await queryOne("SELECT * FROM applications WHERE id = $1", [applicationId]);
+  const app = await queryOne(
+    "SELECT * FROM applications WHERE id = $1",
+    [applicationId]
+  );
   if (!app) {
     console.log("    ❌ Application not found");
     return false;
@@ -520,16 +640,13 @@ async function evaluateFilter(
     [applicationId]
   );
 
-  // ALL scores as PERCENTAGES (0-100)
   const resumeScore = parseFloat(app.resume_score) || 0;
 
-  // Assessment — use percentage, NOT raw score
   let assessmentScore = 0;
   if (submission) {
     const pct = parseFloat(submission.percentage);
     const total = parseFloat(submission.total_score);
     const max = parseFloat(submission.max_score);
-
     if (pct > 0) {
       assessmentScore = pct;
     } else if (max > 0) {
@@ -537,10 +654,10 @@ async function evaluateFilter(
     }
   }
 
-  // Interview — already 0-100
-  const interviewScore = interview ? parseFloat(interview.overall_score) || 0 : 0;
+  const interviewScore = interview
+    ? parseFloat(interview.overall_score) || 0
+    : 0;
 
-  // Choose which score based on config
   let scoreToEvaluate = 0;
 
   if (config.scoreSource === "resume_score") {
@@ -550,16 +667,22 @@ async function evaluateFilter(
   } else if (config.scoreSource === "interview_score") {
     scoreToEvaluate = interviewScore;
   } else {
-    // Default: most recent completed stage percentage
-    scoreToEvaluate = interviewScore || assessmentScore || resumeScore;
+    scoreToEvaluate =
+      interviewScore || assessmentScore || resumeScore;
   }
 
-  console.log("    ┌── FILTER ─────────────────────────────");
+  console.log(
+    "    ┌── FILTER ─────────────────────────────"
+  );
   console.log(`    │ Type: ${subtype}`);
   console.log(`    │ Resume: ${resumeScore}%`);
-  console.log(`    │ Assessment: ${assessmentScore}% (raw: ${submission?.total_score || 0}/${submission?.max_score || 0})`);
+  console.log(
+    `    │ Assessment: ${assessmentScore}% (raw: ${submission?.total_score || 0}/${submission?.max_score || 0})`
+  );
   console.log(`    │ Interview: ${interviewScore}%`);
-  console.log(`    │ Source: ${config.scoreSource || "auto (latest)"}`);
+  console.log(
+    `    │ Source: ${config.scoreSource || "auto (latest)"}`
+  );
   console.log(`    │ Evaluating: ${scoreToEvaluate}%`);
 
   let passed = false;
@@ -568,7 +691,9 @@ async function evaluateFilter(
     case "score_gate": {
       const minScore = parseFloat(config.minScore) || 70;
       passed = scoreToEvaluate >= minScore;
-      console.log(`    │ Gate: ${scoreToEvaluate}% >= ${minScore}% → ${passed ? "✅" : "❌"}`);
+      console.log(
+        `    │ Gate: ${scoreToEvaluate}% >= ${minScore}% → ${passed ? "✅" : "❌"}`
+      );
       break;
     }
 
@@ -578,9 +703,14 @@ async function evaluateFilter(
       const sorted = allScores.sort((a, b) => b.score - a.score);
       const topN = sorted.slice(0, n);
       passed = topN.some((a) => a.id === applicationId);
-      const cutoff = topN.length > 0 ? topN[topN.length - 1].score : 0;
-      console.log(`    │ Top-${n}: ${sorted.length} candidates, cutoff=${cutoff}%`);
-      console.log(`    │ This: ${scoreToEvaluate}% → ${passed ? "✅" : "❌"}`);
+      const cutoff =
+        topN.length > 0 ? topN[topN.length - 1].score : 0;
+      console.log(
+        `    │ Top-${n}: ${sorted.length} candidates, cutoff=${cutoff}%`
+      );
+      console.log(
+        `    │ This: ${scoreToEvaluate}% → ${passed ? "✅" : "❌"}`
+      );
       break;
     }
 
@@ -589,30 +719,49 @@ async function evaluateFilter(
       const sorted = allScores.sort((a, b) => b.score - a.score);
       const pct = parseFloat(config.percentage) || 25;
       const minPass = parseInt(config.minPass) || 1;
-      const n = Math.max(Math.ceil(sorted.length * (pct / 100)), minPass);
-      passed = sorted.slice(0, n).some((a) => a.id === applicationId);
-      console.log(`    │ Top ${pct}%: n=${n} of ${sorted.length} → ${passed ? "✅" : "❌"}`);
+      const n = Math.max(
+        Math.ceil(sorted.length * (pct / 100)),
+        minPass
+      );
+      passed = sorted
+        .slice(0, n)
+        .some((a) => a.id === applicationId);
+      console.log(
+        `    │ Top ${pct}%: n=${n} of ${sorted.length} → ${passed ? "✅" : "❌"}`
+      );
       break;
     }
 
     case "hybrid": {
-      const threshold = parseFloat(config.fastTrackThreshold) || 85;
+      const threshold =
+        parseFloat(config.fastTrackThreshold) || 85;
       if (scoreToEvaluate >= threshold) {
         passed = true;
-        console.log(`    │ Hybrid: Fast-track ${scoreToEvaluate}% >= ${threshold}% → ✅`);
+        console.log(
+          `    │ Hybrid: Fast-track ${scoreToEvaluate}% >= ${threshold}% → ✅`
+        );
       } else {
-        const allScores = await getAllCandidatePercentages(jobId);
-        const sorted = allScores.sort((a, b) => b.score - a.score);
+        const allScores =
+          await getAllCandidatePercentages(jobId);
+        const sorted = allScores.sort(
+          (a, b) => b.score - a.score
+        );
         const batchN = parseInt(config.batchN) || 40;
-        passed = sorted.slice(0, batchN).some((a) => a.id === applicationId);
-        console.log(`    │ Hybrid: Batch top-${batchN} → ${passed ? "✅" : "❌"}`);
+        passed = sorted
+          .slice(0, batchN)
+          .some((a) => a.id === applicationId);
+        console.log(
+          `    │ Hybrid: Batch top-${batchN} → ${passed ? "✅" : "❌"}`
+        );
       }
       break;
     }
 
     case "human_approval":
       passed = true;
-      console.log("    │ Human approval: auto-pass (HR decides)");
+      console.log(
+        "    │ Human approval: auto-pass (HR decides)"
+      );
       break;
 
     case "multi_criteria": {
@@ -626,30 +775,42 @@ async function evaluateFilter(
       const results = rules.map((r: any) => {
         const v = values[r.field] || 0;
         let result = false;
-        if (r.operator === "gte") result = v >= parseFloat(r.value);
-        else if (r.operator === "lte") result = v <= parseFloat(r.value);
+        if (r.operator === "gte")
+          result = v >= parseFloat(r.value);
+        else if (r.operator === "lte")
+          result = v <= parseFloat(r.value);
         else result = v === parseFloat(r.value);
-        console.log(`    │ ${r.field}(${v}%) ${r.operator} ${r.value} = ${result}`);
+        console.log(
+          `    │ ${r.field}(${v}%) ${r.operator} ${r.value} = ${result}`
+        );
         return result;
       });
-      passed = mode === "all" ? results.every(Boolean) : results.some(Boolean);
-      console.log(`    │ Multi (${mode}) → ${passed ? "✅" : "❌"}`);
+      passed =
+        mode === "all"
+          ? results.every(Boolean)
+          : results.some(Boolean);
+      console.log(
+        `    │ Multi (${mode}) → ${passed ? "✅" : "❌"}`
+      );
       break;
     }
 
     default:
       passed = true;
-      console.log(`    │ Unknown: ${subtype} → auto-pass`);
+      console.log(
+        `    │ Unknown: ${subtype} → auto-pass`
+      );
   }
 
-  console.log("    └──────────────────────────────────────");
+  console.log(
+    "    └──────────────────────────────────────"
+  );
   return passed;
 }
 
 // ==========================================
-// GET ALL CANDIDATE PERCENTAGE SCORES
+// GET ALL CANDIDATE PERCENTAGES
 // ==========================================
-
 async function getAllCandidatePercentages(jobId: string) {
   const allApps = await queryMany(
     `SELECT
@@ -663,8 +824,7 @@ async function getAllCandidatePercentages(jobId: string) {
         END
         FROM submissions s
         WHERE s.application_id = a.id AND s.status = 'GRADED'
-        ORDER BY
-          CASE WHEN s.max_score > 0 THEN (s.total_score::float / s.max_score) ELSE 0 END DESC
+        ORDER BY CASE WHEN s.max_score > 0 THEN (s.total_score::float / s.max_score) ELSE 0 END DESC
         LIMIT 1
       ) as assessment_pct,
       (
@@ -691,7 +851,6 @@ async function getAllCandidatePercentages(jobId: string) {
 // ==========================================
 // HELPERS
 // ==========================================
-
 function subtypeToStatus(subtype: string): string | null {
   const map: Record<string, string> = {
     ai_resume_screen: "SCREENING",
@@ -719,30 +878,40 @@ function getStageLabel(subtype: string): string {
 }
 
 async function createNotification(
-  userId: string, type: string, title: string, message: string, link: string
+  userId: string,
+  type: string,
+  title: string,
+  message: string,
+  link: string
 ) {
   try {
-    // In-app notification
     await query(
       `INSERT INTO notifications (user_id, type, title, message, link) VALUES ($1, $2, $3, $4, $5)`,
       [userId, type, title, message, link]
     );
 
-    // Send email
     const user = await queryOne(
       "SELECT email, first_name, last_name FROM users WHERE id = $1",
       [userId]
     );
 
     if (user?.email) {
-      const { sendStageAdvanced, sendRejectionWithFeedback, sendOfferExtended, sendAssessmentReady } = await import("@/lib/email");
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const {
+        sendStageAdvanced,
+        sendRejectionWithFeedback,
+        sendOfferExtended,
+        sendAssessmentReady,
+      } = await import("@/lib/email");
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
       if (type === "REJECTION") {
         await sendRejectionWithFeedback({
           to: user.email,
           candidateName: user.first_name || "there",
-          jobTitle: title.includes("—") ? title.split("—")[1]?.trim() : "the position",
+          jobTitle: title.includes("—")
+            ? title.split("—")[1]?.trim()
+            : "the position",
           companyName: "the hiring team",
           feedbackUrl: `${appUrl}${link}`,
         });
@@ -750,16 +919,22 @@ async function createNotification(
         await sendOfferExtended({
           to: user.email,
           candidateName: user.first_name || "there",
-          jobTitle: message.includes("for ") ? message.split("for ").pop()?.split("!")[0] || "" : "",
+          jobTitle: message.includes("for ")
+            ? message.split("for ").pop()?.split("!")[0] || ""
+            : "",
           companyName: "the hiring team",
         });
       } else if (type === "ASSESSMENT_AVAILABLE") {
         await sendAssessmentReady({
           to: user.email,
           candidateName: user.first_name || "there",
-          jobTitle: message.includes("for ") ? message.split("for ").pop()?.split(" is")[0] || "" : "",
+          jobTitle: message.includes("for ")
+            ? message.split("for ").pop()?.split(" is")[0] || ""
+            : "",
           companyName: "the hiring team",
-          assessmentType: message.includes("quiz") ? "Technical Quiz" : "Coding Challenge",
+          assessmentType: message.includes("quiz")
+            ? "Technical Quiz"
+            : "Coding Challenge",
           duration: 60,
         });
       } else if (type === "STAGE_ADVANCED") {
@@ -768,7 +943,10 @@ async function createNotification(
           candidateName: user.first_name || "there",
           jobTitle: "",
           companyName: "",
-          stageName: title.replace("Next: ", "").replace("🤖 ", "").replace("📅 ", ""),
+          stageName: title
+            .replace("Next: ", "")
+            .replace("🤖 ", "")
+            .replace("📅 ", ""),
           stageDescription: message,
           actionUrl: `${appUrl}${link}`,
         });

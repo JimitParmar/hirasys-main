@@ -114,10 +114,10 @@ export default function CandidateDetailPage() {
         {/* Detailed Tabs */}
         <Tabs defaultValue="resume">
           <TabsList className="bg-white border">
-            <TabsTrigger value="resume">📄 Resume</TabsTrigger>
-            <TabsTrigger value="assessment">💻 Assessment</TabsTrigger>
-            <TabsTrigger value="interview">🤖 AI Interview</TabsTrigger>
-            <TabsTrigger value="f2f">📅 F2F</TabsTrigger>
+            <TabsTrigger value="resume" className="mr-6">📄 Resume</TabsTrigger>
+            <TabsTrigger value="assessment" className="mr-6">💻 Assessment</TabsTrigger>
+            <TabsTrigger value="interview" className="mr-6">🤖 AI Interview</TabsTrigger>
+            <TabsTrigger value="f2f" className="mr-6">📅 F2F</TabsTrigger>
           </TabsList>
 
           {/* Resume Tab */}
@@ -355,7 +355,7 @@ export default function CandidateDetailPage() {
                       {formatDateTime(f2f.scheduled_at)} • {f2f.duration} min
                     </p>
                     {f2f.feedback_score && (
-                      <div className="grid grid-cols-5 gap-2">
+                      <div className="grid grid-cols-5 gap-6">
                         {[
                           { label: "Technical", score: f2f.technical_score },
                           { label: "Communication", score: f2f.communication_score },
