@@ -449,5 +449,39 @@ export async function initializeDatabase() {
     ON CONFLICT (slug) DO NOTHING;
   `);
 
+    // Add to init-db.ts
+  await query(`
+    CREATE TABLE IF NOT EXISTS payment_orders (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      company_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      plan_slug TEXT NOT NULL,
+      billing_cycle TEXT DEFAULT 'MONTHLY',
+      amount DECIMAL(10,2) NOT NULL,
+      currency TEXT DEFAULT 'USD',
+      provider TEXT NOT NULL DEFAULT 'razorpay',
+      provider_order_id TEXT,
+      provider_payment_id TEXT,
+      provider_subscription_id TEXT,
+      status TEXT DEFAULT 'CREATED' CHECK (status IN ('CREATED', 'AUTHORIZED', 'PAID', 'FAILED', 'REFUNDED', 'CANCELLED')),
+      paid_at TIMESTAMP,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_payment_orders_company ON payment_orders(company_id);
+    CREATE INDEX IF NOT EXISTS idx_payment_orders_provider ON payment_orders(provider_order_id);
+    CREATE INDEX IF NOT EXISTS idx_payment_orders_status ON payment_orders(status);
+
+    -- Add razorpay_plan_id to billing_plans
+    DO $$ BEGIN
+      ALTER TABLE billing_plans ADD COLUMN IF NOT EXISTS razorpay_plan_id TEXT;
+      ALTER TABLE billing_plans ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END $$;
+  `);
+
   console.log("Database schema initialized successfully");
 }

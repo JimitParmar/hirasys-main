@@ -1,20 +1,25 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryMany } from "@/lib/db";
+import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { getUserCompanyId } from "@/lib/company";
 import {
   getCompanySubscription,
   getUsageSummary,
   getDailyUsage,
-  upgradePlan,
   getInvoices,
   checkPlanLimits,
   checkFeatureAccess,
   trackUsage,
   NODE_COSTS,
 } from "@/lib/billing";
+import {
+  createRazorpayOrder,
+  verifyRazorpaySignature,
+  activatePlanAfterPayment,
+  cancelRazorpaySubscription,
+} from "@/lib/payment";
 
 // ==========================================
 // GET — Fetch billing data
@@ -30,7 +35,6 @@ export async function GET(req: NextRequest) {
     const companyId = await getUserCompanyId(userId);
 
     if (!companyId) {
-      // Use userId as fallback company ID for solo users
       return NextResponse.json(
         { error: "No company found. Please set up your company first." },
         { status: 404 }
@@ -40,9 +44,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const action = searchParams.get("action");
 
-    // ==========================================
     // GET PLANS
-    // ==========================================
     if (action === "plans") {
       const plans = await queryMany(
         "SELECT * FROM billing_plans WHERE is_active = true ORDER BY price_monthly ASC"
@@ -50,17 +52,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ plans });
     }
 
-    // ==========================================
     // GET INVOICES
-    // ==========================================
     if (action === "invoices") {
       const invoices = await getInvoices(companyId);
       return NextResponse.json({ invoices });
     }
 
-    // ==========================================
     // CHECK LIMITS
-    // ==========================================
     if (action === "check_limits") {
       const check = searchParams.get("check") || "";
       const current = parseInt(searchParams.get("current") || "0");
@@ -68,18 +66,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(result);
     }
 
-    // ==========================================
     // CHECK FEATURE
-    // ==========================================
     if (action === "check_feature") {
       const feature = searchParams.get("feature") || "";
       const result = await checkFeatureAccess(companyId, feature);
       return NextResponse.json(result);
     }
 
-    // ==========================================
-    // DEFAULT — Full billing dashboard data
-    // ==========================================
+    // PAYMENT HISTORY
+    if (action === "payments") {
+      const payments = await queryMany(
+        `SELECT * FROM payment_orders
+         WHERE company_id = $1
+         ORDER BY created_at DESC
+         LIMIT 50`,
+        [companyId]
+      );
+      return NextResponse.json({ payments });
+    }
+
+    // DEFAULT — Full billing dashboard
     const subscription = await getCompanySubscription(companyId);
 
     if (!subscription) {
@@ -108,7 +114,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Parse fields
     const creditsIncluded = parseFloat(subscription.credits_included) || 0;
     const creditsUsed = parseFloat(subscription.credits_used) || 0;
     const creditsRemaining = Math.max(0, creditsIncluded - creditsUsed);
@@ -130,13 +135,19 @@ export async function GET(req: NextRequest) {
       limits = {};
     }
 
-    // Get usage for current period
+    let paymentMethod = subscription.payment_method || null;
+    try {
+      if (typeof paymentMethod === "string")
+        paymentMethod = JSON.parse(paymentMethod);
+    } catch {
+      paymentMethod = null;
+    }
+
     const usage = await getUsageSummary(
       companyId,
       new Date(subscription.current_period_start),
       new Date(subscription.current_period_end)
     );
-
     const dailyUsage = await getDailyUsage(companyId, 30);
     const invoices = await getInvoices(companyId);
 
@@ -157,6 +168,9 @@ export async function GET(req: NextRequest) {
         status: subscription.status,
         features,
         limits,
+        paymentMethod,
+        razorpaySubscriptionId:
+          subscription.razorpay_subscription_id || null,
       },
       usage,
       dailyUsage,
@@ -178,6 +192,7 @@ export async function GET(req: NextRequest) {
           creditsApplied: parseFloat(inv.credits_applied) || 0,
           totalAmount: parseFloat(inv.total_amount) || 0,
           status: inv.status,
+          paymentId: inv.payment_id,
           lineItems,
           createdAt: inv.created_at,
         };
@@ -205,6 +220,10 @@ export async function POST(req: NextRequest) {
 
     const userId = (session.user as any).id;
     const role = (session.user as any).role;
+    const userEmail = (session.user as any).email || "";
+    const userName =
+      `${(session.user as any).firstName || ""} ${(session.user as any).lastName || ""}`.trim() ||
+      "User";
 
     if (role !== "ADMIN" && role !== "HR") {
       return NextResponse.json(
@@ -225,10 +244,10 @@ export async function POST(req: NextRequest) {
     const action = body.action;
 
     // ==========================================
-    // UPGRADE PLAN
+    // CREATE CHECKOUT — Initiates Razorpay order
     // ==========================================
-    if (action === "upgrade") {
-      const { planSlug } = body;
+    if (action === "create_checkout") {
+      const { planSlug, billingCycle = "monthly" } = body;
 
       if (!planSlug) {
         return NextResponse.json(
@@ -237,23 +256,184 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      try {
-        const subscription = await upgradePlan(companyId, planSlug);
+      // Free plan — just switch directly
+      const plan = await queryOne(
+        "SELECT * FROM billing_plans WHERE slug = $1",
+        [planSlug]
+      );
+
+      if (!plan) {
+        return NextResponse.json(
+          { error: "Plan not found" },
+          { status: 404 }
+        );
+      }
+
+      const price =
+        billingCycle === "yearly"
+          ? parseFloat(plan.price_yearly)
+          : parseFloat(plan.price_monthly);
+
+      if (price <= 0) {
+        // Free plan — activate directly
+        await activatePlanAfterPayment({
+          companyId,
+          planSlug,
+          billingCycle,
+          paymentId: "free_plan",
+          orderId: "free_plan",
+        });
+
         return NextResponse.json({
-          message: `Successfully switched to ${subscription?.plan_name || planSlug} plan!`,
-          subscription: {
-            planSlug: subscription?.plan_slug,
-            planName: subscription?.plan_name,
-            creditsIncluded: subscription?.credits_included,
-          },
+          type: "free",
+          message: `Switched to ${plan.name} plan`,
+        });
+      }
+
+      // Create Razorpay order
+      try {
+        const order = await createRazorpayOrder({
+          companyId,
+          planSlug,
+          billingCycle,
+          userId,
+          userEmail,
+          userName,
+        });
+
+        return NextResponse.json({
+          type: "razorpay",
+          order,
         });
       } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 400 });
+        console.error("Razorpay order creation failed:", err);
+        return NextResponse.json(
+          { error: `Payment initialization failed: ${err.message}` },
+          { status: 500 }
+        );
       }
     }
 
     // ==========================================
-    // TRACK USAGE (for testing/manual)
+    // VERIFY PAYMENT — After Razorpay checkout
+    // ==========================================
+    if (action === "verify_payment") {
+      const {
+        razorpay_order_id,
+        razorpay_payment_id,
+        razorpay_signature,
+        planSlug,
+        billingCycle = "monthly",
+      } = body;
+
+      if (
+        !razorpay_order_id ||
+        !razorpay_payment_id ||
+        !razorpay_signature
+      ) {
+        return NextResponse.json(
+          { error: "Missing payment verification parameters" },
+          { status: 400 }
+        );
+      }
+
+      // Verify signature
+      const isValid = verifyRazorpaySignature({
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        signature: razorpay_signature,
+      });
+
+      if (!isValid) {
+        // Mark order as failed
+        await query(
+          `UPDATE payment_orders SET status = 'FAILED', updated_at = NOW()
+           WHERE provider_order_id = $1`,
+          [razorpay_order_id]
+        );
+
+        return NextResponse.json(
+          { error: "Payment verification failed — invalid signature" },
+          { status: 400 }
+        );
+      }
+
+      // Activate plan
+      try {
+        const subscription = await activatePlanAfterPayment({
+          companyId,
+          planSlug,
+          billingCycle,
+          paymentId: razorpay_payment_id,
+          orderId: razorpay_order_id,
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: `Successfully upgraded to ${subscription?.plan_name || planSlug}!`,
+          subscription: {
+            planSlug: subscription?.plan_slug,
+            planName: subscription?.plan_name,
+          },
+        });
+      } catch (err: any) {
+        console.error("Plan activation failed:", err);
+        return NextResponse.json(
+          { error: `Plan activation failed: ${err.message}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ==========================================
+    // CANCEL SUBSCRIPTION
+    // ==========================================
+    if (action === "cancel") {
+      const sub = await getCompanySubscription(companyId);
+      if (!sub) {
+        return NextResponse.json(
+          { error: "No active subscription" },
+          { status: 404 }
+        );
+      }
+
+      if (sub.plan_slug === "free") {
+        return NextResponse.json(
+          { error: "Cannot cancel free plan" },
+          { status: 400 }
+        );
+      }
+
+      // Cancel Razorpay subscription if exists
+      if (sub.razorpay_subscription_id) {
+        await cancelRazorpaySubscription(sub.razorpay_subscription_id);
+      }
+
+      // Downgrade to free at end of period
+      const freePlan = await queryOne(
+        "SELECT id FROM billing_plans WHERE slug = 'free'"
+      );
+
+      if (freePlan) {
+        await query(
+          `UPDATE company_subscriptions
+           SET plan_id = $2, status = 'CANCELLED',
+               razorpay_subscription_id = NULL,
+               updated_at = NOW()
+           WHERE company_id = $1`,
+          [companyId, freePlan.id]
+        );
+      }
+
+      return NextResponse.json({
+        message:
+          "Subscription cancelled. You'll keep access until the end of your billing period, then revert to Free.",
+        periodEnd: sub.current_period_end,
+      });
+    }
+
+    // ==========================================
+    // TRACK USAGE (testing/manual)
     // ==========================================
     if (action === "track_usage") {
       const { nodeType, jobId, applicationId } = body;
