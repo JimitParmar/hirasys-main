@@ -12,76 +12,144 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const jobId = searchParams.get("jobId");
-
     const userId = (session.user as any).id;
     const role = (session.user as any).role;
+    const { searchParams } = new URL(req.url);
+    const jobId = searchParams.get("jobId");
+    const status = searchParams.get("status");
 
     let whereClause = "WHERE 1=1";
     const params: any[] = [];
     let idx = 1;
 
+    // ==========================================
+    // CANDIDATE VIEW — only their own applications
+    // ==========================================
     if (role === "CANDIDATE") {
-      // Candidates see only their own
       whereClause += ` AND a.candidate_id = $${idx}`;
       params.push(userId);
       idx++;
-    } else if (["HR", "ADMIN"].includes(role)) {
-      // HR/Admin see applications for ALL company jobs
+
       if (jobId) {
         whereClause += ` AND a.job_id = $${idx}`;
         params.push(jobId);
         idx++;
-      } else {
-        // All applications for jobs posted by anyone in the company
-        const companyUserIds = await getCompanyUserIds(userId);
-        const placeholders = companyUserIds.map((_, i) => `$${idx + i}`).join(", ");
-        whereClause += ` AND a.job_id IN (SELECT id FROM jobs WHERE posted_by IN (${placeholders}))`;
+      }
+
+      // Lightweight query — no heavy joins
+      const applications = await queryMany(
+        `SELECT
+          a.id, a.job_id, a.status, a.resume_score, a.current_stage,
+          a.applied_at, a.updated_at,
+          j.title as job_title, j.department as job_department,
+          j.location as job_location, j.type as job_type,
+          j.status as job_status
+         FROM applications a
+         JOIN jobs j ON a.job_id = j.id
+         ${whereClause}
+         ORDER BY a.applied_at DESC`,
+        params
+      );
+
+      return NextResponse.json({
+        applications: applications.map((a: any) => ({
+          id: a.id,
+          jobId: a.job_id,
+          status: a.status,
+          resumeScore: parseFloat(a.resume_score) || 0,
+          currentStage: a.current_stage,
+          appliedAt: a.applied_at,
+          updatedAt: a.updated_at,
+          jobTitle: a.job_title,
+          jobDepartment: a.job_department,
+          jobLocation: a.job_location,
+          jobType: a.job_type,
+          jobStatus: a.job_status,
+        })),
+      });
+    }
+
+    // ==========================================
+    // HR VIEW — applications for their jobs
+    // ==========================================
+    if (jobId) {
+      whereClause += ` AND a.job_id = $${idx}`;
+      params.push(jobId);
+      idx++;
+    } else {
+      // Only show applications for jobs posted by this company
+      const { getCompanyUserIds } = await import("@/lib/company");
+      const companyUserIds = await getCompanyUserIds(userId);
+
+      if (companyUserIds.length > 0) {
+        const placeholders = companyUserIds
+          .map((_, i) => `$${idx + i}`)
+          .join(", ");
+        whereClause += ` AND j.posted_by IN (${placeholders})`;
         params.push(...companyUserIds);
         idx += companyUserIds.length;
       }
     }
 
+    if (status) {
+      whereClause += ` AND a.status = $${idx}`;
+      params.push(status);
+      idx++;
+    }
+
     const applications = await queryMany(
-      `SELECT a.*,
+      `SELECT
+        a.id, a.job_id, a.candidate_id, a.status, a.resume_score,
+        a.current_stage, a.applied_at, a.updated_at,
+        a.resume_parsed, a.cover_letter,
         j.title as job_title, j.department as job_department,
-        j.location as job_location, j.type as job_type,
-        ju.company as job_company,
         u.first_name as candidate_first_name,
         u.last_name as candidate_last_name,
         u.email as candidate_email
        FROM applications a
-       LEFT JOIN jobs j ON a.job_id = j.id
-       LEFT JOIN users ju ON j.posted_by = ju.id
+       JOIN jobs j ON a.job_id = j.id
        LEFT JOIN users u ON a.candidate_id = u.id
        ${whereClause}
-       ORDER BY a.applied_at DESC`,
+       ORDER BY a.resume_score DESC NULLS LAST, a.applied_at DESC
+       LIMIT 200`,
       params
     );
 
-    const formatted = applications.map((a) => ({
-      id: a.id,
-      jobId: a.job_id,
-      candidateId: a.candidate_id,
-      status: a.status,
-      resumeScore: a.resume_score,
-      appliedAt: a.applied_at,
-      job: {
-        id: a.job_id, title: a.job_title, department: a.job_department,
-        location: a.job_location, type: a.job_type,
-        poster: { company: a.job_company },
-      },
-      candidate: {
-        id: a.candidate_id, firstName: a.candidate_first_name,
-        lastName: a.candidate_last_name, email: a.candidate_email,
-      },
-    }));
-
-    return NextResponse.json({ applications: formatted, total: formatted.length });
-  } catch (error) {
-    console.error("Applications fetch error:", error);
-    return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });
+    return NextResponse.json({
+      applications: applications.map((a: any) => ({
+        id: a.id,
+        jobId: a.job_id,
+        candidateId: a.candidate_id,
+        status: a.status,
+        resumeScore: parseFloat(a.resume_score) || 0,
+        currentStage: a.current_stage,
+        appliedAt: a.applied_at,
+        updatedAt: a.updated_at,
+        coverLetter: a.cover_letter,
+        candidate: {
+          firstName: a.candidate_first_name,
+          lastName: a.candidate_last_name,
+          email: a.candidate_email,
+        },
+        jobTitle: a.job_title,
+        jobDepartment: a.job_department,
+        resumeParsed: (() => {
+          try {
+            return typeof a.resume_parsed === "string"
+              ? JSON.parse(a.resume_parsed)
+              : a.resume_parsed;
+          } catch {
+            return null;
+          }
+        })(),
+      })),
+    });
+  } catch (error: any) {
+    console.error("Applications GET error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch applications" },
+      { status: 500 }
+    );
   }
 }
 
@@ -97,13 +165,16 @@ export async function POST(req: NextRequest) {
 
     const userId = (session.user as any).id;
     const body = await req.json();
-    const { jobId, resumeUrl, resumeText: rawResumeText, coverLetter } = body;
+    const { jobId, resumeUrl, resumeText, coverLetter } = body;
 
     if (!jobId) {
-      return NextResponse.json({ error: "jobId required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "jobId required" },
+        { status: 400 }
+      );
     }
 
-    // Check for duplicate
+    // Check duplicate
     const existing = await queryOne(
       "SELECT id FROM applications WHERE job_id = $1 AND candidate_id = $2",
       [jobId, userId]
@@ -116,19 +187,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ==========================================
-    // CREATE APPLICATION IMMEDIATELY
-    // Don't wait for resume parsing
-    // ==========================================
+    // Create application immediately
     const application = await queryOne(
       `INSERT INTO applications (job_id, candidate_id, resume_url, resume_text, cover_letter, status)
        VALUES ($1, $2, $3, $4, $5, 'APPLIED')
-       RETURNING *`,
+       RETURNING id, status`,
       [
         jobId,
         userId,
         resumeUrl || null,
-        rawResumeText || null, // Store raw text if provided
+        resumeText || null,
         coverLetter || null,
       ]
     );
@@ -147,7 +215,7 @@ export async function POST(req: NextRequest) {
     );
 
     // ==========================================
-    // RETURN SUCCESS IMMEDIATELY
+    // RETURN IMMEDIATELY — don't wait for parsing
     // ==========================================
     const response = NextResponse.json(
       {
@@ -155,7 +223,6 @@ export async function POST(req: NextRequest) {
         application: {
           id: application.id,
           status: "APPLIED",
-          message: "Application submitted! Resume is being processed.",
         },
       },
       { status: 201 }
@@ -163,37 +230,43 @@ export async function POST(req: NextRequest) {
 
     // ==========================================
     // BACKGROUND: Parse resume + trigger pipeline
-    // Using waitUntil pattern for serverless
+    // Fire-and-forget — errors won't affect the response
     // ==========================================
-    const backgroundWork = async () => {
+    const doBackgroundWork = async () => {
       try {
-        console.log(`[BG] Processing resume for application ${application.id}`);
+        console.log(`[BG] Starting resume processing for ${application.id}`);
+        const startTime = Date.now();
 
-        let parsedResume: any = null;
-        let resumeScore = 0;
-        let finalResumeText = rawResumeText || null;
-
-        // Get job for matching
         const job = await queryOne(
-          "SELECT * FROM jobs WHERE id = $1",
+          "SELECT id, title, description, skills, requirements, posted_by FROM jobs WHERE id = $1",
           [jobId]
         );
 
-        // If we have a resume URL but no text, extract it
+        if (!job) {
+          console.error(`[BG] Job not found: ${jobId}`);
+          return;
+        }
+
+        let finalResumeText = resumeText || null;
+
+        // Extract text from file if needed
         if (resumeUrl && !finalResumeText) {
           try {
             const { extractTextFromResume } = await import("@/lib/resume");
             finalResumeText = await extractTextFromResume(resumeUrl);
             console.log(
-              `[BG] Extracted ${finalResumeText?.length || 0} chars from resume`
+              `[BG] Extracted ${finalResumeText?.length || 0} chars`
             );
           } catch (err) {
             console.error("[BG] Resume extraction failed:", err);
           }
         }
 
-        // AI-parse and score the resume
-        if (finalResumeText && job) {
+        // AI score
+        let parsedResume: any = null;
+        let resumeScore = 0;
+
+        if (finalResumeText) {
           try {
             const { aiJSON } = await import("@/lib/ai");
 
@@ -207,41 +280,40 @@ export async function POST(req: NextRequest) {
               strengths: string[];
               concerns: string[];
             }>(
-              `Analyze this resume against the job requirements.
+              `Analyze this resume against the job requirements. Be fair and practical.
 
 JOB TITLE: ${job.title}
-JOB DESCRIPTION: ${job.description?.substring(0, 1000)}
+JOB DESCRIPTION: ${(job.description || "").substring(0, 800)}
 REQUIRED SKILLS: ${(job.skills || []).join(", ")}
 REQUIREMENTS: ${(job.requirements || []).join(", ")}
 
 RESUME:
-${finalResumeText.substring(0, 4000)}
+${finalResumeText.substring(0, 3000)}
 
-Return JSON with:
+Return JSON:
 - score: 0-100 match percentage
 - matchedSkills: skills from job found in resume
 - missingSkills: required skills NOT in resume
 - experience: brief experience summary
 - education: education summary
 - summary: 2-3 sentence candidate summary
-- strengths: top 3 strengths for this role
-- concerns: top 3 concerns/gaps`,
+- strengths: top 3 strengths
+- concerns: top 3 gaps`,
               "Score this resume"
             );
 
             parsedResume = result;
-            resumeScore = result.score || 0;
+            resumeScore = Math.min(100, Math.max(0, result.score || 0));
 
             console.log(
-              `[BG] Resume scored: ${resumeScore}% for application ${application.id}`
+              `[BG] Resume scored: ${resumeScore}% in ${Date.now() - startTime}ms`
             );
           } catch (err) {
-            console.error("[BG] AI resume scoring failed:", err);
-            resumeScore = 0;
+            console.error("[BG] AI scoring failed:", err);
           }
         }
 
-        // Update the application with parsed data
+        // Update application with results
         await query(
           `UPDATE applications
            SET resume_text = COALESCE($2, resume_text),
@@ -257,18 +329,32 @@ Return JSON with:
           ]
         );
 
-        // Also update user's resume text for future applications
+        // Store resume text on user for future (NOT score — score is per-job)
         if (finalResumeText) {
           await query(
-            "UPDATE users SET resume_text = $2, resume_url = COALESCE($3, resume_url), updated_at = NOW() WHERE id = $1",
+            `UPDATE users
+             SET resume_text = $2,
+                 resume_url = COALESCE($3, resume_url),
+                 updated_at = NOW()
+             WHERE id = $1`,
             [userId, finalResumeText, resumeUrl]
           );
         }
 
-        // Trigger pipeline execution
+        console.log(
+          `[BG] Resume saved in ${Date.now() - startTime}ms. Triggering pipeline...`
+        );
+
+        // Trigger pipeline — use internal function call instead of HTTP fetch
+        // This avoids the self-fetch timeout issue on serverless
         try {
           const appUrl =
             process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+          // Use AbortController with timeout to prevent hanging
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
           await fetch(`${appUrl}/api/pipeline/execute`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -276,54 +362,50 @@ Return JSON with:
               applicationId: application.id,
               trigger: "application_submitted",
             }),
+            signal: controller.signal,
           });
-          console.log(
-            `[BG] Pipeline triggered for application ${application.id}`
-          );
-        } catch (err) {
-          console.error("[BG] Pipeline trigger failed:", err);
+
+          clearTimeout(timeoutId);
+          console.log(`[BG] Pipeline triggered`);
+        } catch (err: any) {
+          if (err.name === "AbortError") {
+            console.warn("[BG] Pipeline trigger timed out (non-critical)");
+          } else {
+            console.error("[BG] Pipeline trigger failed:", err);
+          }
         }
 
         // Track billing
         try {
           const { getUserCompanyId } = await import("@/lib/company");
           const { trackUsage } = await import("@/lib/billing");
-          const jobData = await queryOne(
-            "SELECT posted_by FROM jobs WHERE id = $1",
-            [jobId]
-          );
-          if (jobData?.posted_by) {
-            const companyId = await getUserCompanyId(jobData.posted_by);
-            if (companyId) {
-              await trackUsage({
-                companyId,
-                nodeType: "ai_resume_screen",
-                jobId,
-                applicationId: application.id,
-              });
-            }
+          const companyId = await getUserCompanyId(job.posted_by);
+          if (companyId) {
+            await trackUsage({
+              companyId,
+              nodeType: "ai_resume_screen",
+              jobId,
+              applicationId: application.id,
+            });
           }
         } catch {}
 
         console.log(
-          `[BG] ✅ Resume processing complete for ${application.id}`
+          `[BG] ✅ Complete for ${application.id} in ${Date.now() - startTime}ms`
         );
       } catch (err) {
-        console.error(
-          `[BG] ❌ Background processing failed for ${application.id}:`,
-          err
-        );
+        console.error(`[BG] ❌ Failed for ${application.id}:`, err);
       }
     };
 
     // Fire and forget — don't await
-    backgroundWork().catch((err) =>
-      console.error("[BG] Unhandled error:", err)
+    doBackgroundWork().catch((err) =>
+      console.error("[BG] Unhandled:", err)
     );
 
     return response;
   } catch (error: any) {
-    console.error("Application error:", error);
+    console.error("Application POST error:", error);
     return NextResponse.json(
       { error: error.message || "Application failed" },
       { status: 500 }

@@ -499,5 +499,17 @@ await query(`
   EXCEPTION WHEN OTHERS THEN NULL;
   END $$;
 `);
+
+await query(`
+  -- Performance indexes for application queries
+  CREATE INDEX IF NOT EXISTS idx_applications_job_candidate ON applications(job_id, candidate_id);
+  CREATE INDEX IF NOT EXISTS idx_applications_candidate_status ON applications(candidate_id, status);
+  CREATE INDEX IF NOT EXISTS idx_applications_job_status ON applications(job_id, status);
+  CREATE INDEX IF NOT EXISTS idx_applications_applied_at ON applications(applied_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_submissions_app_status ON submissions(application_id, status);
+  CREATE INDEX IF NOT EXISTS idx_ai_interviews_app_status ON ai_interviews(application_id, status);
+  CREATE INDEX IF NOT EXISTS idx_f2f_app_status ON f2f_interviews(application_id, status);
+  CREATE INDEX IF NOT EXISTS idx_jobs_posted_status ON jobs(posted_by, status);
+`);
   console.log("Database schema initialized successfully");
 }
