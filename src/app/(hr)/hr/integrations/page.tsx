@@ -27,7 +27,7 @@ const PLATFORMS = [
       { key: "accessToken", label: "Access Token", type: "password", help: "Get from LinkedIn Developer Portal → OAuth 2.0" },
       { key: "companyId", label: "Company/Organization ID", type: "text", help: "Found in your LinkedIn company page URL", isConfig: true },
     ],
-    docsUrl: "https://learn.microsoft.com/en-us/linkedin/talent/job-postings",
+    docsUrl: "https://learn.microsoft.com/en-us/linkedin/talent/job-postings/job-posting-overview?view=li-lts-2026-03",
   },
   {
     id: "indeed",
