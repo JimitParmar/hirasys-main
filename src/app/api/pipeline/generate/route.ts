@@ -582,6 +582,8 @@ function convertToReactFlow(steps: CleanStep[]) {
   // ==========================================
   // ALL STEPS
   // ==========================================
+
+  
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     const catalog = catalogMap[step.subtype];
