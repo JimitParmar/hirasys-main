@@ -1069,6 +1069,50 @@ export async function PUT(req: NextRequest) {
         "UPDATE f2f_interviews SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1 RETURNING *",
         [interviewId]
       );
+            // ==========================================
+      // REVERT APPLICATION STATUS
+      // Check if there are any other non-cancelled interviews
+      // If not, move application back to the previous stage
+      // ==========================================
+      const otherActiveInterviews = await queryOne(
+        `SELECT id FROM f2f_interviews
+         WHERE application_id = $1 AND id != $2 AND status NOT IN ('CANCELLED')
+         LIMIT 1`,
+        [interview.application_id, interviewId]
+      );
+
+      if (!otherActiveInterviews) {
+        // No other active interviews — figure out what stage to revert to
+        // Check what the candidate has completed
+        const hasCompletedAIInterview = await queryOne(
+          `SELECT id FROM ai_interviews
+           WHERE application_id = $1 AND status = 'COMPLETED' LIMIT 1`,
+          [interview.application_id]
+        );
+
+        const hasCompletedAssessment = await queryOne(
+          `SELECT id FROM submissions
+           WHERE application_id = $1 AND status = 'GRADED' LIMIT 1`,
+          [interview.application_id]
+        );
+
+        let revertStatus = "SCREENING"; // default fallback
+
+        if (hasCompletedAIInterview) {
+          revertStatus = "UNDER_REVIEW";
+        } else if (hasCompletedAssessment) {
+          revertStatus = "AI_INTERVIEW";
+        }
+
+        await query(
+          "UPDATE applications SET status = $2, updated_at = NOW() WHERE id = $1 AND status = 'F2F_INTERVIEW'",
+          [interview.application_id, revertStatus]
+        );
+
+        console.log(
+          `Application ${interview.application_id} reverted from F2F_INTERVIEW to ${revertStatus}`
+        );
+      }
 
       // Get context
       const application = await queryOne(
