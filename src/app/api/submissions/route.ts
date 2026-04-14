@@ -7,9 +7,10 @@ import { exec } from "child_process";
 import { writeFileSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { promisify } from "util";
+import { tmpdir } from "os";
 
 const execAsync = promisify(exec);
-const TEMP_DIR = join(process.cwd(), ".tmp-exec");
+const TEMP_DIR = join(tmpdir(), ".tmp-exec");
 const TIMEOUT = 15000;
 
 function normalizeOutput(text: string): string {
