@@ -10,6 +10,7 @@ import { NotificationBell } from "@/components/shared/NotificationBell";
 import { ScheduleF2FDialog } from "@/components/shared/ScheduleF2FDialog";
 import { EditF2FDialog } from "@/components/shared/EditF2FDialog";
 import { ShareJobDialog } from "@/components/shared/ShareJobDialog";
+import { F2FScheduledInfo } from "@/components/shared/F2FScheduledInfo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1032,131 +1033,7 @@ function InterviewScores({
 // ==========================================
 // F2F Scheduled Info
 // ==========================================
-function F2FScheduledInfo({
-  applicationId,
-}: {
-  applicationId: string;
-}) {
-  const [interviews, setInterviews] = useState<any[]>([]);
-  const [editingInterview, setEditingInterview] = useState<any>(null);
 
-  useEffect(() => {
-    fetchInterviews();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applicationId]);
-
-  const fetchInterviews = async () => {
-    try {
-      const res = await fetch(
-        `/api/f2f?applicationId=${applicationId}`
-      );
-      const data = await res.json();
-      setInterviews(data.interviews || []);
-    } catch {}
-  };
-
-  if (interviews.length === 0) return null;
-
-  return (
-    <div className="mt-3 space-y-2">
-      {interviews.map((interview) => {
-        const date = new Date(interview.scheduled_at);
-        const isPast = date < new Date();
-        const isToday =
-          date.toDateString() === new Date().toDateString();
-        const isCancelled = interview.status === "CANCELLED";
-
-        return (
-          <div
-            key={interview.id}
-            className={`border rounded-lg p-3 ${
-              isCancelled
-                ? "bg-red-50 border-red-200 opacity-60"
-                : isToday
-                  ? "bg-[#EBF0FF] border-[#A3BDFF]"
-                  : isPast
-                    ? interview.status === "COMPLETED"
-                      ? "bg-emerald-50 border-emerald-200"
-                      : "bg-slate-50 border-slate-200"
-                    : "bg-blue-50 border-blue-200"
-            }`}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-2">
-                <Calendar
-                  className={`w-4 h-4 mt-0.5 shrink-0 ${
-                    isCancelled
-                      ? "text-red-400"
-                      : isToday
-                        ? "text-[#0245EF]"
-                        : "text-slate-400"
-                  }`}
-                />
-                <div>
-                  <span
-                    className={`text-xs font-semibold ${
-                      isCancelled
-                        ? "text-red-600 line-through"
-                        : isToday
-                          ? "text-[#0245EF]"
-                          : "text-slate-600"
-                    }`}
-                  >
-                    {isCancelled
-                      ? "Cancelled"
-                      : isToday
-                        ? "🔴 Today"
-                        : isPast
-                          ? interview.status === "COMPLETED"
-                            ? "✅ Completed"
-                            : "Past"
-                          : "Scheduled"}
-                  </span>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {date.toLocaleDateString("en-US", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                    })}{" "}
-                    at{" "}
-                    {date.toLocaleTimeString("en-US", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true,
-                    })}
-                  </p>
-                </div>
-              </div>
-              {!isCancelled && interview.status !== "COMPLETED" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs h-7 text-[#0245EF] hover:bg-[#EBF0FF]"
-                  onClick={() => setEditingInterview(interview)}
-                >
-                  <Pencil className="w-3 h-3 mr-1" /> Edit
-                </Button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-      {editingInterview && (
-        <EditF2FDialog
-          open={!!editingInterview}
-          onOpenChange={(open) => {
-            if (!open) setEditingInterview(null);
-          }}
-          interview={editingInterview}
-          onUpdated={() => {
-            setEditingInterview(null);
-            fetchInterviews();
-          }}
-        />
-      )}
-    </div>
-  );
-}
 
 // ==========================================
 // Extract Pipeline Stages

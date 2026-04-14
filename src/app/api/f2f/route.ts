@@ -614,214 +614,394 @@ export async function PUT(req: NextRequest) {
     // ==========================================
     // EDIT INTERVIEW
     // ==========================================
-    if (body.action === "edit") {
-      const {
-        interviewId,
-        scheduledAt,
-        duration,
-        meetingLink,
-        interviewType,
-        notes,
+    // ==========================================
+// EDIT INTERVIEW — with email notifications
+// ==========================================
+if (body.action === "edit") {
+  const {
+    interviewId,
+    scheduledAt,
+    duration,
+    meetingLink,
+    interviewType,
+    notes,
+    interviewers,
+  } = body;
+
+  if (!interviewId) {
+    return NextResponse.json(
+      { error: "interviewId required" },
+      { status: 400 }
+    );
+  }
+
+  const existing = await queryOne(
+    "SELECT * FROM f2f_interviews WHERE id = $1",
+    [interviewId]
+  );
+
+  if (!existing) {
+    return NextResponse.json(
+      { error: "Interview not found" },
+      { status: 404 }
+    );
+  }
+
+  // Build dynamic update
+  const updates: string[] = [];
+  const values: any[] = [];
+  let idx = 2;
+
+  if (scheduledAt) {
+    updates.push(`scheduled_at = $${idx}`);
+    values.push(new Date(scheduledAt));
+    idx++;
+  }
+
+  if (duration) {
+    updates.push(`duration = $${idx}`);
+    values.push(duration);
+    idx++;
+  }
+
+  if (meetingLink !== undefined) {
+    updates.push(`meeting_link = $${idx}`);
+    values.push(meetingLink || null);
+    idx++;
+  }
+
+  if (interviewType) {
+    updates.push(`interview_type = $${idx}`);
+    values.push(interviewType);
+    idx++;
+  }
+
+  if (notes !== undefined) {
+    updates.push(`notes = $${idx}`);
+    values.push(notes || null);
+    idx++;
+  }
+
+  if (interviewers) {
+    const primaryInterviewer = interviewers[0];
+    if (primaryInterviewer?.id) {
+      updates.push(`interviewer_id = $${idx}`);
+      values.push(primaryInterviewer.id);
+      idx++;
+    }
+
+    updates.push(`metadata = $${idx}`);
+    values.push(
+      JSON.stringify({
         interviewers,
-      } = body;
+        scheduledBy: userId,
+        panelSize: interviewers.length,
+        lastEditedAt: new Date().toISOString(),
+        lastEditedBy: userId,
+      })
+    );
+    idx++;
+  }
 
-      if (!interviewId) {
-        return NextResponse.json(
-          { error: "interviewId required" },
-          { status: 400 }
-        );
+  updates.push("updated_at = NOW()");
+
+  if (updates.length === 1) {
+    return NextResponse.json(
+      { error: "Nothing to update" },
+      { status: 400 }
+    );
+  }
+
+  const interview = await queryOne(
+    `UPDATE f2f_interviews SET ${updates.join(", ")} WHERE id = $1 RETURNING *`,
+    [interviewId, ...values]
+  );
+
+  if (!interview) {
+    return NextResponse.json(
+      { error: "Failed to update interview" },
+      { status: 500 }
+    );
+  }
+
+  // Get application, candidate, and job info
+  const application = await queryOne(
+    `SELECT a.candidate_id, j.title as job_title, j.department,
+            u.company, u.email as hr_email, u.first_name as hr_first_name, u.last_name as hr_last_name
+     FROM applications a
+     JOIN jobs j ON a.job_id = j.id
+     LEFT JOIN users u ON j.posted_by = u.id
+     WHERE a.id = $1`,
+    [existing.application_id]
+  );
+
+  const candidate = await queryOne(
+    "SELECT email, first_name, last_name, phone, resume_url FROM users WHERE id = $1",
+    [application?.candidate_id]
+  );
+
+  // Get resume info for interviewer emails
+  const appResume = await queryOne(
+    "SELECT resume_url, resume_text, resume_parsed FROM applications WHERE id = $1",
+    [existing.application_id]
+  );
+
+  const candidateName =
+    `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() ||
+    "Candidate";
+  const candidateEmail = candidate?.email || "";
+  const companyName =
+    application?.company || (session.user as any).company || "the team";
+  const hrName =
+    `${application?.hr_first_name || ""} ${application?.hr_last_name || ""}`.trim() ||
+    "HR Team";
+
+  const newScheduledDate = scheduledAt
+    ? new Date(scheduledAt)
+    : new Date(existing.scheduled_at);
+  const newDuration = duration || existing.duration || 60;
+  const newEndDate = new Date(
+    newScheduledDate.getTime() + newDuration * 60 * 1000
+  );
+  const newMeetingLink = meetingLink !== undefined ? meetingLink : existing.meeting_link;
+  const newInterviewType = interviewType || existing.interview_type || "technical";
+  const newNotes = notes !== undefined ? notes : existing.notes;
+  const interviewerList = interviewers || [];
+
+  // Build resume highlights
+  let resumeHighlights = "";
+  const resumeUrl = appResume?.resume_url || candidate?.resume_url || null;
+  if (appResume?.resume_parsed) {
+    let parsed = appResume.resume_parsed;
+    try {
+      if (typeof parsed === "string") parsed = JSON.parse(parsed);
+    } catch {}
+    if (parsed) {
+      const skills = parsed.matchedSkills || parsed.skills || [];
+      if (skills.length > 0) {
+        resumeHighlights += `\n• Skills: ${skills.slice(0, 10).join(", ")}`;
       }
+      if (parsed.experience) resumeHighlights += `\n• Experience: ${parsed.experience}`;
+    }
+  }
 
-      const existing = await queryOne(
-        "SELECT * FROM f2f_interviews WHERE id = $1",
-        [interviewId]
-      );
+  // Detect what changed for the email subject
+  const oldDate = new Date(existing.scheduled_at);
+  const dateChanged = scheduledAt && oldDate.getTime() !== newScheduledDate.getTime();
+  const isReschedule = dateChanged;
 
-      if (!existing) {
-        return NextResponse.json(
-          { error: "Interview not found" },
-          { status: 404 }
-        );
-      }
+  // ==========================================
+  // SEND RESCHEDULE/UPDATE EMAILS
+  // ==========================================
+  const sendUpdateEmail = async (params: {
+    to: string;
+    recipientName: string;
+    isCandidate: boolean;
+  }) => {
+    try {
+      const { Resend } = await import("resend");
+      const resend = process.env.RESEND_API_KEY
+        ? new Resend(process.env.RESEND_API_KEY)
+        : null;
+      if (!resend) return;
 
-      // Build dynamic update
-      const updates: string[] = [];
-      const values: any[] = [];
-      let idx = 2;
-
-      if (scheduledAt) {
-        updates.push(`scheduled_at = $${idx}`);
-        values.push(new Date(scheduledAt));
-        idx++;
-      }
-
-      if (duration) {
-        updates.push(`duration = $${idx}`);
-        values.push(duration);
-        idx++;
-      }
-
-      if (meetingLink !== undefined) {
-        updates.push(`meeting_link = $${idx}`);
-        values.push(meetingLink || null);
-        idx++;
-      }
-
-      if (interviewType) {
-        updates.push(`interview_type = $${idx}`);
-        values.push(interviewType);
-        idx++;
-      }
-
-      if (notes !== undefined) {
-        updates.push(`notes = $${idx}`);
-        values.push(notes || null);
-        idx++;
-      }
-
-      if (interviewers) {
-        const primaryInterviewer = interviewers[0];
-        if (primaryInterviewer?.id) {
-          updates.push(`interviewer_id = $${idx}`);
-          values.push(primaryInterviewer.id);
-          idx++;
-        }
-
-        updates.push(`metadata = $${idx}`);
-        values.push(
-          JSON.stringify({
-            interviewers,
-            scheduledBy: userId,
-            panelSize: interviewers.length,
-            lastEditedAt: new Date().toISOString(),
-            lastEditedBy: userId,
-          })
-        );
-        idx++;
-      }
-
-      updates.push("updated_at = NOW()");
-
-      if (updates.length === 1) {
-        return NextResponse.json(
-          { error: "Nothing to update" },
-          { status: 400 }
-        );
-      }
-
-      const interview = await queryOne(
-        `UPDATE f2f_interviews SET ${updates.join(", ")} WHERE id = $1 RETURNING *`,
-        [interviewId, ...values]
-      );
-
-      if (!interview) {
-        return NextResponse.json(
-          { error: "Failed to update interview" },
-          { status: 500 }
-        );
-      }
-
-      // Get application and candidate info
-      const application = await queryOne(
-        `SELECT a.candidate_id, j.title as job_title, u.company
-         FROM applications a
-         JOIN jobs j ON a.job_id = j.id
-         LEFT JOIN users u ON j.posted_by = u.id
-         WHERE a.id = $1`,
-        [existing.application_id]
-      );
-
-      const candidate = await queryOne(
-        "SELECT email, first_name, last_name FROM users WHERE id = $1",
-        [application?.candidate_id]
-      );
-
-      const candidateName =
-        `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() ||
-        "Candidate";
-
-      // Notify candidate about reschedule
-      if (application?.candidate_id) {
-        const newDate = scheduledAt
-          ? new Date(scheduledAt)
-          : new Date(existing.scheduled_at);
-
-        await query(
-          `INSERT INTO notifications (user_id, type, title, message, link)
-           VALUES ($1, 'INTERVIEW_SCHEDULED', '📅 Interview Updated', $2, '/applications')`,
-          [
-            application.candidate_id,
-            `Your interview for ${application.job_title} has been rescheduled to ${newDate.toLocaleDateString()} at ${newDate.toLocaleTimeString()}.`,
-          ]
-        );
-
-        // Send email
-        if (candidate?.email) {
-          try {
-            const { sendInterviewScheduled } = await import(
-              "@/lib/email"
-            );
-            await sendInterviewScheduled({
-              to: candidate.email,
-              candidateName: candidate.first_name || "there",
-              jobTitle: application.job_title || "",
-              companyName: application.company || "",
-              date: newDate.toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              }),
-              time: newDate.toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: true,
-              }),
-              duration: duration || existing.duration || 60,
-              interviewType:
-                interviewType || existing.interview_type || "technical",
-              meetingLink:
-                meetingLink || existing.meeting_link || undefined,
-              interviewers: (interviewers || []).map(
-                (i: any) => i.name
-              ),
-              notes: notes || existing.notes || undefined,
-            });
-          } catch (emailErr) {
-            console.error("Reschedule email failed:", emailErr);
-          }
-        }
-      }
-
-      // Build change details
-      const changes: Record<string, any> = {};
-      if (scheduledAt && String(existing.scheduled_at) !== String(scheduledAt)) {
-        changes.scheduledAt = { from: existing.scheduled_at, to: scheduledAt };
-      }
-      if (duration && existing.duration !== duration) {
-        changes.duration = { from: existing.duration, to: duration };
-      }
-      if (interviewType && existing.interview_type !== interviewType) {
-        changes.interviewType = { from: existing.interview_type, to: interviewType };
-      }
-
-      // ✅ AUDIT
-      await logAudit({
-        userId,
-        action: "F2F_UPDATED",
-        resourceType: "f2f_interview",
-        resourceId: interviewId,
-        resourceName: `${candidateName} — ${application?.job_title || ""}`,
-        details: {
-          ...(Object.keys(changes).length > 0 ? changes : {}),
-          interviewerCount: interviewers?.length,
-          applicationId: existing.application_id,
-        },
-        req,
+      const dateStr = newScheduledDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+      const timeStr = newScheduledDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+      const endTimeStr = newEndDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
       });
 
-      return NextResponse.json({ success: true, interview });
+      const subject = isReschedule
+        ? `Interview Rescheduled — ${application?.job_title} at ${companyName}`
+        : `Interview Updated — ${application?.job_title} at ${companyName}`;
+
+      // Build change summary
+      let changesSummary = "";
+      if (dateChanged) {
+        changesSummary += `<li>📅 <strong>New date:</strong> ${dateStr} at ${timeStr}</li>`;
+        changesSummary += `<li style="color: #94A3B8; text-decoration: line-through;">Was: ${oldDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${oldDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}</li>`;
+      }
+      if (duration && existing.duration !== duration) {
+        changesSummary += `<li>⏱ <strong>Duration:</strong> ${newDuration} min</li>`;
+      }
+      if (meetingLink !== undefined && existing.meeting_link !== meetingLink) {
+        changesSummary += `<li>🔗 <strong>Meeting link:</strong> ${newMeetingLink ? "updated" : "removed"}</li>`;
+      }
+
+      // Resume section for interviewers
+      let resumeSection = "";
+      if (!params.isCandidate) {
+        resumeSection = `
+          <div style="margin-top: 16px; padding: 12px; background: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0;">
+            <h3 style="margin: 0 0 6px; font-size: 13px; color: #334155;">📄 Candidate: ${candidateName}</h3>
+            <p style="margin: 2px 0; font-size: 12px; color: #64748B;">${candidateEmail}${candidate?.phone ? ` • ${candidate.phone}` : ""}</p>
+            ${resumeHighlights ? `<pre style="margin: 6px 0 0; font-size: 11px; color: #64748B; white-space: pre-wrap; font-family: inherit;">${resumeHighlights}</pre>` : ""}
+            ${resumeUrl ? `<p style="margin-top: 8px;"><a href="${resumeUrl}" style="color: #0245EF; font-size: 12px;">📎 Download Resume</a></p>` : ""}
+          </div>
+        `;
+      }
+
+      await resend.emails.send({
+        from: process.env.FROM_EMAIL || "Hirasys <noreply@hirasys.ai>",
+        to: params.to,
+        subject,
+        html: `
+          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; color: #334155;">
+            <div style="padding: 20px; background: ${isReschedule ? "#FEF3C7" : "#EBF0FF"}; border-radius: 12px 12px 0 0; border-bottom: 2px solid ${isReschedule ? "#F59E0B" : "#0245EF"};">
+              <h1 style="margin: 0; font-size: 18px; color: ${isReschedule ? "#92400E" : "#0245EF"};">
+                ${isReschedule ? "📅 Interview Rescheduled" : "📝 Interview Updated"}
+              </h1>
+              <p style="margin: 4px 0 0; font-size: 13px; color: ${isReschedule ? "#B45309" : "#4775FF"};">${companyName}</p>
+            </div>
+
+            <div style="padding: 20px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
+              <p style="margin: 0 0 12px; font-size: 14px;">Hi ${params.recipientName},</p>
+
+              <p style="margin: 0 0 16px; font-size: 13px; color: #64748B;">
+                ${params.isCandidate
+                  ? `Your interview for <strong>${application?.job_title}</strong> has been ${isReschedule ? "rescheduled" : "updated"}.`
+                  : `The interview with <strong>${candidateName}</strong> for <strong>${application?.job_title}</strong> has been ${isReschedule ? "rescheduled" : "updated"}.`
+                }
+              </p>
+
+              ${changesSummary ? `<div style="padding: 10px; background: #FFFBEB; border-radius: 8px; border: 1px solid #FDE68A; margin-bottom: 16px;"><p style="margin: 0 0 6px; font-size: 12px; font-weight: 600; color: #92400E;">What changed:</p><ul style="margin: 0; padding-left: 16px; font-size: 12px; color: #92400E;">${changesSummary}</ul></div>` : ""}
+
+              <div style="padding: 12px; background: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0; margin-bottom: 16px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr><td style="padding: 4px 0; font-size: 12px; color: #94A3B8; width: 80px;">📆 Date</td><td style="padding: 4px 0; font-size: 12px; font-weight: 600; color: #334155;">${dateStr}</td></tr>
+                  <tr><td style="padding: 4px 0; font-size: 12px; color: #94A3B8;">🕐 Time</td><td style="padding: 4px 0; font-size: 12px; font-weight: 600; color: #334155;">${timeStr} — ${endTimeStr} (${newDuration} min)</td></tr>
+                  <tr><td style="padding: 4px 0; font-size: 12px; color: #94A3B8;">🎯 Type</td><td style="padding: 4px 0; font-size: 12px; color: #334155; text-transform: capitalize;">${newInterviewType}</td></tr>
+                  <tr><td style="padding: 4px 0; font-size: 12px; color: #94A3B8;">👥 Panel</td><td style="padding: 4px 0; font-size: 12px; color: #334155;">${interviewerList.map((i: any) => i.name).join(", ") || "TBD"}</td></tr>
+                  ${newMeetingLink ? `<tr><td style="padding: 4px 0; font-size: 12px; color: #94A3B8;">🔗 Link</td><td style="padding: 4px 0; font-size: 12px;"><a href="${newMeetingLink}" style="color: #0245EF;">Join Meeting</a></td></tr>` : ""}
+                </table>
+              </div>
+
+              ${newMeetingLink ? `<a href="${newMeetingLink}" style="display: inline-block; padding: 10px 20px; background: #0245EF; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 13px; margin-bottom: 12px;">🔗 Join Meeting</a>` : ""}
+
+              ${newNotes ? `<div style="margin: 12px 0; padding: 10px; background: #F0FFF4; border-radius: 8px; border: 1px solid #BBF7D0;"><p style="margin: 0; font-size: 12px; color: #166534;">📝 ${newNotes}</p></div>` : ""}
+
+              ${resumeSection}
+
+              <p style="margin-top: 16px; font-size: 11px; color: #94A3B8;">
+                Updated by ${hrName} at ${companyName}.
+              </p>
+            </div>
+          </div>
+        `,
+      });
+
+      console.log(`✅ Reschedule email sent to ${params.to}`);
+    } catch (err) {
+      console.error(`❌ Reschedule email to ${params.to} failed:`, err);
     }
+  };
+
+  // ==========================================
+  // SEND TO ALL PARTICIPANTS
+  // ==========================================
+
+  // 1. Candidate
+  if (candidateEmail && application?.candidate_id) {
+    await sendUpdateEmail({
+      to: candidateEmail,
+      recipientName: candidate?.first_name || "there",
+      isCandidate: true,
+    });
+
+    // In-app notification
+    await query(
+      `INSERT INTO notifications (user_id, type, title, message, link)
+       VALUES ($1, 'INTERVIEW_SCHEDULED', '📅 Interview ${isReschedule ? "Rescheduled" : "Updated"}', $2, '/applications')`,
+      [
+        application.candidate_id,
+        `Your interview for ${application.job_title} has been ${isReschedule ? "rescheduled to" : "updated —"} ${newScheduledDate.toLocaleDateString()} at ${newScheduledDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}.`,
+      ]
+    );
+  }
+
+  // 2. All interviewers
+  for (const interviewer of interviewerList) {
+    let interviewerEmail = interviewer.email;
+    let interviewerFirstName =
+      interviewer.name?.split(" ")[0] || interviewer.name;
+
+    // System user — fetch email
+    if (interviewer.id) {
+      const systemUser = await queryOne(
+        "SELECT email, first_name FROM users WHERE id = $1",
+        [interviewer.id]
+      );
+      if (systemUser) {
+        interviewerEmail = systemUser.email;
+        interviewerFirstName =
+          systemUser.first_name || interviewerFirstName;
+      }
+
+      // In-app notification
+      await query(
+        `INSERT INTO notifications (user_id, type, title, message, link)
+         VALUES ($1, 'INTERVIEW_SCHEDULED', '📅 Interview ${isReschedule ? "Rescheduled" : "Updated"}', $2, '/hr/dashboard')`,
+        [
+          interviewer.id,
+          `Interview with ${candidateName} for ${application?.job_title} has been ${isReschedule ? "rescheduled" : "updated"}.`,
+        ]
+      );
+    }
+
+    if (interviewerEmail) {
+      await sendUpdateEmail({
+        to: interviewerEmail,
+        recipientName: interviewerFirstName,
+        isCandidate: false,
+      });
+    }
+  }
+
+  // Audit
+  const changes: Record<string, any> = {};
+  if (dateChanged) {
+    changes.scheduledAt = {
+      from: existing.scheduled_at,
+      to: scheduledAt,
+    };
+  }
+  if (duration && existing.duration !== duration) {
+    changes.duration = { from: existing.duration, to: duration };
+  }
+  if (interviewType && existing.interview_type !== interviewType) {
+    changes.interviewType = {
+      from: existing.interview_type,
+      to: interviewType,
+    };
+  }
+
+  await logAudit({
+    userId,
+    action: isReschedule ? "F2F_RESCHEDULED" : "F2F_UPDATED",
+    resourceType: "f2f_interview",
+    resourceId: interviewId,
+    resourceName: `${candidateName} — ${application?.job_title || ""}`,
+    details: {
+      ...(Object.keys(changes).length > 0 ? changes : {}),
+      interviewerCount: interviewerList.length,
+      emailsSent: true,
+    },
+    req,
+  });
+
+  return NextResponse.json({ success: true, interview });
+}
 
     // ==========================================
     // CANCEL INTERVIEW

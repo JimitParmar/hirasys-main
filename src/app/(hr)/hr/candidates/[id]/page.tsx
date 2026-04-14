@@ -4,6 +4,9 @@ import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+// Add these imports at the top:
+import { F2FScheduledInfo } from "@/components/shared/F2FScheduledInfo";
+import { Calendar } from "lucide-react"; // add Calendar to the existing import
 import { Badge } from "@/components/ui/badge";
 import { ProctoringReport } from "@/components/shared/ProctoringReport";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -764,96 +767,186 @@ export default function CandidateDetailPage() {
           </TabsContent>
 
           {/* F2F Tab */}
+                    {/* F2F Tab — with scheduled info + feedback */}
           <TabsContent value="f2f">
-            {f2fInterviews.length === 0 ? (
+            <div className="space-y-4">
+              {/* Scheduled Interviews — interactive component */}
               <Card>
-                <CardContent className="p-8 text-center text-slate-400">
-                  No F2F interviews yet
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-[#0245EF]" />
+                    Scheduled Interviews
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <F2FScheduledInfo
+                    applicationId={application.id}
+                    showActions={true}
+                  />
+                  {f2fInterviews.length === 0 && (
+                    <div className="text-center py-6">
+                      <Calendar className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                      <p className="text-sm text-slate-400">
+                        No interviews scheduled yet
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            ) : (
-              f2fInterviews.map((f2f: any) => (
-                <Card key={f2f.id} className="mb-4">
+
+              {/* Completed Interview Feedback */}
+              {f2fInterviews.some(
+                (f: any) => f.feedback_score
+              ) && (
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center justify-between">
-                      <span className="flex items-center gap-2">
-                        <Video className="w-5 h-5 text-[#0245EF]" />{" "}
-                        {f2f.interview_type} Interview
-                      </span>
-                      <Badge variant="outline">
-                        {f2f.status}
-                      </Badge>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Award className="w-5 h-5 text-[#0245EF]" />
+                      Interview Feedback
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-xs text-slate-500">
-                      {formatDateTime(f2f.scheduled_at)} •{" "}
-                      {f2f.duration} min
-                    </p>
-                    {f2f.feedback_score && (
-                      <div className="grid grid-cols-5 gap-6">
-                        {[
-                          {
-                            label: "Technical",
-                            score: f2f.technical_score,
-                          },
-                          {
-                            label: "Communication",
-                            score: f2f.communication_score,
-                          },
-                          {
-                            label: "Problem Solving",
-                            score:
-                              f2f.problem_solving_score,
-                          },
-                          {
-                            label: "Culture Fit",
-                            score: f2f.culture_fit_score,
-                          },
-                          {
-                            label: "Overall",
-                            score: f2f.feedback_score,
-                          },
-                        ].map((s) => (
-                          <div
-                            key={s.label}
-                            className="bg-slate-50 rounded p-2 text-center"
-                          >
-                            <p className="text-lg font-bold text-slate-700">
-                              {s.score || 0}
-                            </p>
-                            <p className="text-[9px] text-slate-400">
-                              {s.label}
-                            </p>
+                  <CardContent className="space-y-4">
+                    {f2fInterviews
+                      .filter((f2f: any) => f2f.feedback_score)
+                      .map((f2f: any) => (
+                        <div
+                          key={f2f.id}
+                          className="border rounded-lg p-4 space-y-3"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className="capitalize"
+                              >
+                                {f2f.interview_type || "technical"}
+                              </Badge>
+                              <span className="text-xs text-slate-400">
+                                {formatDateTime(f2f.scheduled_at)}
+                              </span>
+                              <Badge
+                                className={
+                                  f2f.status === "COMPLETED"
+                                    ? "bg-emerald-100 text-emerald-700 text-[10px]"
+                                    : "bg-slate-100 text-slate-600 text-[10px]"
+                                }
+                              >
+                                {f2f.status}
+                              </Badge>
+                            </div>
+                            <Badge
+                              className={
+                                f2f.feedback_score >= 70
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : f2f.feedback_score >= 40
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-red-100 text-red-700"
+                              }
+                            >
+                              {f2f.feedback_score}/100
+                            </Badge>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {f2f.recommendation && (
-                      <p className="text-xs text-slate-600">
-                        Recommendation:{" "}
-                        <strong>{f2f.recommendation}</strong>
-                      </p>
-                    )}
-                    {f2f.feedback_strengths && (
-                      <p className="text-xs text-emerald-600">
-                        💪 {f2f.feedback_strengths}
-                      </p>
-                    )}
-                    {f2f.concerns && (
-                      <p className="text-xs text-amber-600">
-                        ⚠️ {f2f.concerns}
-                      </p>
-                    )}
-                    {f2f.feedback_notes && (
-                      <p className="text-xs text-slate-500">
-                        📝 {f2f.feedback_notes}
-                      </p>
-                    )}
+
+                          {/* Score Grid */}
+                          <div className="grid grid-cols-5 gap-3">
+                            {[
+                              {
+                                label: "Technical",
+                                score: f2f.technical_score,
+                              },
+                              {
+                                label: "Communication",
+                                score: f2f.communication_score,
+                              },
+                              {
+                                label: "Problem Solving",
+                                score: f2f.problem_solving_score,
+                              },
+                              {
+                                label: "Culture Fit",
+                                score: f2f.culture_fit_score,
+                              },
+                              {
+                                label: "Overall",
+                                score: f2f.feedback_score,
+                              },
+                            ].map((s) => (
+                              <div
+                                key={s.label}
+                                className="text-center bg-slate-50 rounded-lg p-2"
+                              >
+                                <p
+                                  className={`text-lg font-bold ${
+                                    (s.score || 0) >= 70
+                                      ? "text-emerald-600"
+                                      : (s.score || 0) >= 40
+                                        ? "text-amber-600"
+                                        : "text-red-500"
+                                  }`}
+                                >
+                                  {s.score || 0}
+                                </p>
+                                <p className="text-[9px] text-slate-400">
+                                  {s.label}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {f2f.recommendation && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-slate-500">
+                                Recommendation:
+                              </span>
+                              <Badge
+                                className={
+                                  f2f.recommendation === "strong_hire"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : f2f.recommendation === "hire"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : f2f.recommendation === "no_hire"
+                                        ? "bg-red-100 text-red-700"
+                                        : "bg-amber-100 text-amber-700"
+                                }
+                              >
+                                {f2f.recommendation
+                                  .replace(/_/g, " ")
+                                  .replace(/\b\w/g, (c: string) =>
+                                    c.toUpperCase()
+                                  )}
+                              </Badge>
+                            </div>
+                          )}
+
+                          {f2f.feedback_strengths && (
+                            <div className="bg-emerald-50 rounded-lg p-2.5">
+                              <p className="text-xs text-emerald-700">
+                                💪 <strong>Strengths:</strong>{" "}
+                                {f2f.feedback_strengths}
+                              </p>
+                            </div>
+                          )}
+                          {f2f.concerns && (
+                            <div className="bg-amber-50 rounded-lg p-2.5">
+                              <p className="text-xs text-amber-700">
+                                ⚠️ <strong>Concerns:</strong>{" "}
+                                {f2f.concerns}
+                              </p>
+                            </div>
+                          )}
+                          {f2f.feedback_notes && (
+                            <div className="bg-slate-50 rounded-lg p-2.5">
+                              <p className="text-xs text-slate-500">
+                                📝 {f2f.feedback_notes}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                   </CardContent>
                 </Card>
-              ))
-            )}
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
