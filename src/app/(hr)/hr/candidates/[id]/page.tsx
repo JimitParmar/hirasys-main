@@ -215,9 +215,9 @@ export default function CandidateDetailPage() {
     <CardContent>
       <ResumeViewer
         resumeText={application.resumeText}
-        resumeUrl={application.resumeUrl}
-        resumeParsed={application.resumeParsed}
-        resumeScore={application.resumeScore}
+        resumeUrl={application.resumeUrl || application.resume_url}
+        resumeParsed={application.resumeParsed || application.resume_parsed}
+        resumeScore={application.resumeScore || application.resume_score}
       />
     </CardContent>
   </Card>
