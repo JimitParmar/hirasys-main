@@ -80,8 +80,8 @@ export function ProctoringReport({ submissionId }: ProctoringReportProps) {
     },
   };
 
-  const level =
-    levelConfig[summary.suspicionLevel] || levelConfig.low;
+  const suspicionKey = (summary.suspicionLevel || "low") as keyof typeof levelConfig;
+const level = levelConfig[suspicionKey] || levelConfig.low;
   const LevelIcon = level.icon;
 
   return (
