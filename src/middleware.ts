@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
+
+const SECRET = new TextEncoder().encode(
+  process.env.NEXTAUTH_SECRET || ""
+);
 
 const ROUTE_RULES: {
   prefix: string;
@@ -26,53 +31,49 @@ const ROUTE_RULES: {
   { prefix: "/profile", roles: "auth" },
 ];
 
-function getSessionFromCookie(
+async function getSessionFromCookie(
   req: NextRequest
-): { id: string; role: string; email: string } | null {
-  const allCookies = req.cookies.getAll();
+): Promise<{ id: string; role: string; email: string } | null> {
+  // Find the session cookie
+  const cookieNames = [
+    "__Secure-authjs.session-token",
+    "authjs.session-token",
+    "__Secure-next-auth.session-token",
+    "next-auth.session-token",
+  ];
 
-  // LOG: See all cookies
-  console.log(
-    "[MW] Cookies:",
-    allCookies.map((c) => `${c.name} (${c.value.length} chars)`)
-  );
-
-  for (const cookie of allCookies) {
-    const value = cookie.value;
-    const parts = value.split(".");
-
-    // LOG: Check each cookie
-    console.log(
-      `[MW] Checking ${cookie.name}: parts=${parts.length}, length=${value.length}`
-    );
-
-    if (parts.length === 3) {
-      try {
-        const payload = JSON.parse(
-          atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-        );
-        console.log(`[MW] Decoded ${cookie.name}:`, JSON.stringify(payload).substring(0, 200));
-
-        if (payload.role || payload.id || payload.sub || payload.email) {
-          console.log(`[MW] ✅ Found session in ${cookie.name}: role=${payload.role}`);
-          return {
-            id: (payload.id || payload.sub || "") as string,
-            role: (payload.role || "CANDIDATE") as string,
-            email: (payload.email || "") as string,
-          };
-        }
-      } catch (err) {
-        console.log(`[MW] Failed to decode ${cookie.name}:`, (err as any).message);
-        continue;
-      }
+  let token: string | null = null;
+  for (const name of cookieNames) {
+    const cookie = req.cookies.get(name);
+    if (cookie?.value) {
+      token = cookie.value;
+      break;
     }
   }
 
-  console.log("[MW] ❌ No session found in any cookie");
-  return null;
+  if (!token) return null;
+
+  // After the auth.ts change, token will be a plain JWT (HS256)
+  // Verify and decode it
+  try {
+    const { payload } = await jwtVerify(token, SECRET, {
+      algorithms: ["HS256"],
+    });
+
+    return {
+      id: (payload.id || payload.sub || "") as string,
+      role: (payload.role || "CANDIDATE") as string,
+      email: (payload.email || "") as string,
+    };
+  } catch {
+    // If verification fails, token might still be old encrypted format
+    // Let them through — page-level auth will handle it
+    // They'll need to re-login to get the new JWT format
+    return null;
+  }
 }
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Skip static/API
@@ -94,22 +95,24 @@ export function middleware(req: NextRequest) {
   }
 
   // Get session
-  const session = getSessionFromCookie(req);
+  const session = await getSessionFromCookie(req);
 
   // Not logged in
   if (!session) {
-    // Don't redirect on every page — only on clearly protected ones
-    // This prevents redirect loops
-    if (pathname.startsWith("/hr") || pathname.startsWith("/candidate")) {
+    if (
+      pathname.startsWith("/hr") ||
+      pathname.startsWith("/candidate") ||
+      pathname.startsWith("/applications")
+    ) {
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("redirect", pathname);
       return NextResponse.redirect(loginUrl);
     }
-    // For other paths, let the page handle auth
+    // For other paths, let page handle it
     return NextResponse.next();
   }
 
-  // Any authenticated user
+  // Any authenticated
   if (rule.roles === "auth") {
     return NextResponse.next();
   }
@@ -140,5 +143,7 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.).*)"],
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.).*)",
+  ],
 };

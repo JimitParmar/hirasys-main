@@ -75,6 +75,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "jwt",
     maxAge: 7 * 24 * 60 * 60,
   },
+  
+  jwt: {
+    async encode({ token, secret }) {
+      const { SignJWT } = await import("jose");
+      const key = new TextEncoder().encode(secret as string);
+      return new SignJWT(token as Record<string, unknown>)
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt()
+        .setExpirationTime("7d")
+        .sign(key);
+    },
+    async decode({ token, secret }) {
+      const { jwtVerify } = await import("jose");
+      const key = new TextEncoder().encode(secret as string);
+      try {
+        const { payload } = await jwtVerify(token!, key);
+        return payload as any;
+      } catch {
+        return null;
+      }
+    },
+  },
+
 
   secret: process.env.NEXTAUTH_SECRET,
 });
