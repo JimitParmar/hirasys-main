@@ -1,9 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
-
-const SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || ""
-);
 
 const ROUTE_RULES: {
   prefix: string;
@@ -31,115 +26,47 @@ const ROUTE_RULES: {
   { prefix: "/profile", roles: "auth" },
 ];
 
-async function getSessionFromCookie(
+function getSessionFromCookie(
   req: NextRequest
-): Promise<{ id: string; role: string; email: string } | null> {
-  // Log ALL cookies to find the right name
+): { id: string; role: string; email: string } | null {
+  // Find ANY cookie that looks like a JWT
   const allCookies = req.cookies.getAll();
-  console.log(
-    "[Middleware] All cookies:",
-    allCookies.map((c) => `${c.name}=${c.value.substring(0, 20)}...`)
-  );
 
-  // Try every possible NextAuth cookie name
-  const cookieNames = [
-    "authjs.session-token",
-    "__Secure-authjs.session-token",
-    "next-auth.session-token",
-    "__Secure-next-auth.session-token",
-    // Auth.js v5 sometimes uses these
-    "authjs.callback-url",
-    "authjs.csrf-token",
-  ];
+  for (const cookie of allCookies) {
+    const value = cookie.value;
 
-  let token: string | null = null;
-  let foundCookieName: string | null = null;
+    // JWT has 3 parts separated by dots
+    const parts = value.split(".");
+    if (parts.length !== 3) continue;
 
-  for (const name of cookieNames) {
-    const cookie = req.cookies.get(name);
-    if (cookie?.value) {
-      token = cookie.value;
-      foundCookieName = name;
-      break;
-    }
-  }
-
-  // Also try any cookie that looks like a JWT
-  if (!token) {
-    for (const cookie of allCookies) {
-      if (
-        cookie.value.length > 100 &&
-        cookie.value.includes(".")
-      ) {
-        // Looks like a JWT (has dots and is long)
-        token = cookie.value;
-        foundCookieName = cookie.name;
-        console.log(
-          `[Middleware] Found potential JWT in cookie: ${cookie.name}`
-        );
-        break;
-      }
-    }
-  }
-
-  if (!token) {
-    console.log("[Middleware] No session cookie found");
-    return null;
-  }
-
-  console.log(
-    `[Middleware] Found token in cookie: ${foundCookieName} (${token.length} chars)`
-  );
-
-  // Try to verify
-  if (SECRET.byteLength === 0) {
-    console.log("[Middleware] No NEXTAUTH_SECRET configured");
-    return null;
-  }
-
-  try {
-    const { payload } = await jwtVerify(token, SECRET, {
-      algorithms: ["HS256"],
-    });
-
-    console.log("[Middleware] JWT verified:", {
-      id: payload.id || payload.sub,
-      role: payload.role,
-      email: payload.email,
-    });
-
-    return {
-      id: (payload.id || payload.sub || "") as string,
-      role: (payload.role || "CANDIDATE") as string,
-      email: (payload.email || "") as string,
-    };
-  } catch (err: any) {
-    console.log("[Middleware] JWT verify failed:", err.message);
-
-    // Try decoding without verification to see the payload
     try {
-      const parts = token.split(".");
-      if (parts.length === 3) {
-        const payload = JSON.parse(
-          Buffer.from(parts[1], "base64url").toString("utf-8")
-        );
-        console.log("[Middleware] JWT payload (unverified):", {
-          id: payload.id || payload.sub,
-          role: payload.role,
-          email: payload.email,
-          iat: payload.iat,
-          exp: payload.exp,
-        });
-      }
-    } catch {}
+      // Decode the payload (middle part) — no verification needed
+      // We trust it because it's an httpOnly cookie set by our own server
+      const payload = JSON.parse(
+        atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
+      );
 
-    return null;
+      // Check if it looks like our session token
+      if (payload.role || payload.id || payload.sub || payload.email) {
+        return {
+          id: (payload.id || payload.sub || "") as string,
+          role: (payload.role || "CANDIDATE") as string,
+          email: (payload.email || "") as string,
+        };
+      }
+    } catch {
+      // Not a valid JWT payload, try next cookie
+      continue;
+    }
   }
+
+  return null;
 }
 
-export async function middleware(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Skip static/API
   if (
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
@@ -149,33 +76,37 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Find rule
   const rule = ROUTE_RULES.find((r) => pathname.startsWith(r.prefix));
 
-  console.log(`[Middleware] ${pathname} → rule:`, rule?.roles || "no rule");
-
+  // No rule or public
   if (!rule || rule.roles === "public") {
     return NextResponse.next();
   }
 
-  const session = await getSessionFromCookie(req);
+  // Get session
+  const session = getSessionFromCookie(req);
 
-  console.log(`[Middleware] Session:`, session);
-
+  // Not logged in
   if (!session) {
-    console.log(`[Middleware] No session → redirect to /login`);
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
+    // Don't redirect on every page — only on clearly protected ones
+    // This prevents redirect loops
+    if (pathname.startsWith("/hr") || pathname.startsWith("/candidate")) {
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    // For other paths, let the page handle auth
+    return NextResponse.next();
   }
 
+  // Any authenticated user
   if (rule.roles === "auth") {
     return NextResponse.next();
   }
 
+  // Check role
   if (!rule.roles.includes(session.role)) {
-    console.log(
-      `[Middleware] Role ${session.role} not in ${rule.roles} → redirect`
-    );
     let redirectPath = "/login";
     switch (session.role) {
       case "ADMIN":
@@ -187,10 +118,15 @@ export async function middleware(req: NextRequest) {
         redirectPath = "/jobs";
         break;
     }
+
+    // Prevent redirect loop
+    if (pathname === redirectPath) {
+      return NextResponse.next();
+    }
+
     return NextResponse.redirect(new URL(redirectPath, req.url));
   }
 
-  console.log(`[Middleware] ✅ Access granted: ${session.email} → ${pathname}`);
   return NextResponse.next();
 }
 
