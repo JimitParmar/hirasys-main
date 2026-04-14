@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryOne } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { logAudit, getAuditUser } from "@/lib/audit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   req: NextRequest,
@@ -46,7 +46,10 @@ export async function GET(
       },
     });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch job" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch job" },
+      { status: 500 }
+    );
   }
 }
 
@@ -54,22 +57,21 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-
   try {
     const session = await getSession();
     if (!session || !["HR", "ADMIN"].includes((session.user as any).role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
+
+    const userId = (session.user as any).id;
     const { id } = await params;
     const body = await req.json();
-      await logAudit({
-  ...getAuditUser(session),
-  action: "JOB_UPDATED",
-  resourceType: "job",
-  resourceId: id,
-  details: body,
-});
+
+    // Fetch old job for change comparison
+    const oldJob = await queryOne("SELECT * FROM jobs WHERE id = $1", [id]);
+    if (!oldJob) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
 
     // Build dynamic update query
     const fields: string[] = [];
@@ -113,7 +115,10 @@ export async function PUT(
     }
 
     if (fields.length === 0) {
-      return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Nothing to update" },
+        { status: 400 }
+      );
     }
 
     fields.push("updated_at = NOW()");
@@ -127,9 +132,63 @@ export async function PUT(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    // ==========================================
+    // AUDIT — log after successful update
+    // ==========================================
+    const changes: Record<string, any> = {};
+    const trackFields = [
+      "title",
+      "description",
+      "department",
+      "location",
+      "type",
+      "status",
+      "experience_min",
+      "experience_max",
+      "salary_min",
+      "salary_max",
+      "pipeline_id",
+    ];
+
+    for (const field of trackFields) {
+      if (
+        oldJob[field] !== undefined &&
+        job[field] !== undefined &&
+        String(oldJob[field]) !== String(job[field])
+      ) {
+        changes[field] = { from: oldJob[field], to: job[field] };
+      }
+    }
+
+    // Determine specific action
+    let action = "JOB_UPDATED";
+    if (body.status === "PUBLISHED" && oldJob.status !== "PUBLISHED") {
+      action = "JOB_PUBLISHED";
+    } else if (body.status === "CLOSED" && oldJob.status !== "CLOSED") {
+      action = "JOB_CLOSED";
+    } else if (body.status === "ARCHIVED" && oldJob.status !== "ARCHIVED") {
+      action = "JOB_UPDATED";
+    }
+
+    await logAudit({
+      userId,
+      action,
+      resourceType: "job",
+      resourceId: id,
+      resourceName: job.title,
+      details:
+        Object.keys(changes).length > 0
+          ? changes
+          : { fieldsUpdated: fields.length - 1 }, // -1 for updated_at
+      req,
+    });
+
     return NextResponse.json({ success: true, job });
   } catch (error: any) {
     console.error("Job update error:", error);
-    return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to update" },
+      { status: 500 }
+    );
   }
 }

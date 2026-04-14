@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryOne, queryMany, query } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { getAuditUser, logAudit } from "@/lib/audit";
+import { logAudit } from "@/lib/audit";
 import { getCompanyUserIds } from "@/lib/company";
 
 export async function GET(req: NextRequest) {
@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
     let params: any[];
 
     if (companyUserIds.length > 1) {
-      const placeholders = companyUserIds.map((_, i) => `$${i + 1}`).join(", ");
+      const placeholders = companyUserIds
+        .map((_, i) => `$${i + 1}`)
+        .join(", ");
       whereClause = `WHERE p.created_by IN (${placeholders}) OR p.is_template = true`;
       params = companyUserIds;
     } else {
@@ -70,13 +72,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
     const body = await req.json();
-
 
     // Handle both single linkedJobId (old) and linkedJobIds array (new)
     let jobIds: string[] = [];
     if (body.linkedJobIds && Array.isArray(body.linkedJobIds)) {
-      jobIds = body.linkedJobIds.filter((id: string) => id && id !== "none");
+      jobIds = body.linkedJobIds.filter(
+        (id: string) => id && id !== "none"
+      );
     } else if (body.linkedJobId && body.linkedJobId !== "none") {
       jobIds = [body.linkedJobId];
     }
@@ -84,9 +88,19 @@ export async function POST(req: NextRequest) {
     const linkedJobId = jobIds.length > 0 ? jobIds[0] : null;
     const hasNodes = Array.isArray(body.nodes) && body.nodes.length > 0;
     const status = hasNodes ? "ACTIVE" : "DRAFT";
+    const nodeCount = (body.nodes || []).length;
+    const edgeCount = (body.edges || []).length;
 
+    // ==========================================
+    // UPDATE EXISTING
+    // ==========================================
     if (body.id) {
-      // Update existing
+      // Fetch old pipeline for change comparison
+      const oldPipeline = await queryOne(
+        "SELECT * FROM pipelines WHERE id = $1",
+        [body.id]
+      );
+
       const pipeline = await queryOne(
         `UPDATE pipelines
          SET name = COALESCE($2, name),
@@ -99,38 +113,80 @@ export async function POST(req: NextRequest) {
          WHERE id = $1 AND created_by = $8
          RETURNING *`,
         [
-          body.id, body.name,
+          body.id,
+          body.name,
           JSON.stringify(body.nodes || []),
           JSON.stringify(body.edges || []),
           body.estimatedCost || 0,
           linkedJobId,
           status,
-          (session.user as any).id,
+          userId,
         ]
       );
-      
-      // Update ALL job linkages
-      // First unlink all jobs from this pipeline
-      await query("UPDATE jobs SET pipeline_id = NULL WHERE pipeline_id = $1", [body.id]);
 
-      // Then link all selected jobs
-      for (const jobId of jobIds) {
-        await query("UPDATE jobs SET pipeline_id = $1 WHERE id = $2", [body.id, jobId]);
+      if (!pipeline) {
+        return NextResponse.json(
+          { error: "Pipeline not found or unauthorized" },
+          { status: 404 }
+        );
       }
-          await logAudit({
-  ...getAuditUser(session),
-  action: body.id ? "PIPELINE_UPDATED" : "PIPELINE_CREATED",
-  resourceType: "pipeline",
-  resourceId: body.id || pipeline.id,
-  resourceName: body.name,
-  details: { nodeCount: (body.nodes || []).length, linkedJobs: body.linkedJobIds?.length || 0 },
-});
 
+      // Update ALL job linkages
+      await query(
+        "UPDATE jobs SET pipeline_id = NULL WHERE pipeline_id = $1",
+        [body.id]
+      );
+
+      for (const jobId of jobIds) {
+        await query(
+          "UPDATE jobs SET pipeline_id = $1 WHERE id = $2",
+          [body.id, jobId]
+        );
+      }
+
+      // ✅ AUDIT — after successful update
+      let oldNodeCount = 0;
+      try {
+        const oldNodes =
+          typeof oldPipeline?.nodes === "string"
+            ? JSON.parse(oldPipeline.nodes)
+            : oldPipeline?.nodes || [];
+        oldNodeCount = oldNodes.length;
+      } catch {}
+
+      const changes: Record<string, any> = {};
+      if (oldPipeline?.name !== body.name) {
+        changes.name = { from: oldPipeline?.name, to: body.name };
+      }
+      if (oldNodeCount !== nodeCount) {
+        changes.nodeCount = { from: oldNodeCount, to: nodeCount };
+      }
+      if (oldPipeline?.status !== status) {
+        changes.status = { from: oldPipeline?.status, to: status };
+      }
+
+      await logAudit({
+        userId,
+        action: "PIPELINE_UPDATED",
+        resourceType: "pipeline",
+        resourceId: body.id,
+        resourceName: pipeline.name,
+        details: {
+          ...(Object.keys(changes).length > 0 ? changes : {}),
+          nodeCount,
+          edgeCount,
+          linkedJobs: jobIds.length,
+          estimatedCost: body.estimatedCost || 0,
+        },
+        req,
+      });
 
       return NextResponse.json({ success: true, pipeline });
     }
 
-    // Create new
+    // ==========================================
+    // CREATE NEW
+    // ==========================================
     const pipeline = await queryOne(
       `INSERT INTO pipelines (name, status, nodes, edges, estimated_cost, linked_job_id, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -142,16 +198,41 @@ export async function POST(req: NextRequest) {
         JSON.stringify(body.edges || []),
         body.estimatedCost || 0,
         linkedJobId,
-        (session.user as any).id,
+        userId,
       ]
     );
 
-    // Link all selected jobs
-    if (pipeline) {
-      for (const jobId of jobIds) {
-        await query("UPDATE jobs SET pipeline_id = $1 WHERE id = $2", [pipeline.id, jobId]);
-      }
+    if (!pipeline) {
+      return NextResponse.json(
+        { error: "Failed to create pipeline" },
+        { status: 500 }
+      );
     }
+
+    // Link all selected jobs
+    for (const jobId of jobIds) {
+      await query(
+        "UPDATE jobs SET pipeline_id = $1 WHERE id = $2",
+        [pipeline.id, jobId]
+      );
+    }
+
+    // ✅ AUDIT — after successful create
+    await logAudit({
+      userId,
+      action: "PIPELINE_CREATED",
+      resourceType: "pipeline",
+      resourceId: pipeline.id,
+      resourceName: pipeline.name,
+      details: {
+        nodeCount,
+        edgeCount,
+        linkedJobs: jobIds.length,
+        status,
+        estimatedCost: body.estimatedCost || 0,
+      },
+      req,
+    });
 
     return NextResponse.json({ success: true, pipeline }, { status: 201 });
   } catch (error: any) {

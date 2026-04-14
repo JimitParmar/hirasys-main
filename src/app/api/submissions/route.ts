@@ -599,20 +599,21 @@ export async function POST(req: NextRequest) {
             earnedPoints: score,
           };
         } else if (question.type === "mcq" || answer.type === "mcq") {
-          const selected = answer.selectedOption;
-          const correct = question.correctAnswer;
+  const selected = answer.selectedOption;
+  const correct = question.correctAnswer;
 
-          console.log(`  MCQ: selected="${selected}" correct="${correct}"`);
+  if (selected && correct && String(selected).trim().toLowerCase() === String(correct).trim().toLowerCase()) {
+    score = qMaxScore;
+  }
 
-          if (selected && correct && String(selected).trim().toLowerCase() === String(correct).trim().toLowerCase()) {
-            score = qMaxScore;
-          }
-
-          grading = {
-            correct: score > 0,
-            selected: selected,
-            correctAnswer: correct,
-          };
+  grading = {
+    correct: score > 0,
+    selected: selected,
+    correctAnswer: correct,
+    // ✅ Include options so HR can see the full question
+    options: question.options || [],
+    explanation: question.explanation || null,
+  };
 
           console.log(`  MCQ Result: ${score > 0 ? "✅ CORRECT" : "❌ WRONG"}`);
         }

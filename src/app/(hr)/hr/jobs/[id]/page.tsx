@@ -43,7 +43,6 @@ import { formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
 import toast from "react-hot-toast";
 
-// Generic status list (fallback when no pipeline)
 const ALL_STATUSES = [
   {
     value: "APPLIED",
@@ -101,74 +100,37 @@ const ALL_STATUSES = [
   },
 ];
 
-// Map subtypes to their icon and color
-const SUBTYPE_META: Record<
-  string,
-  { icon: any; color: string; parentStatus: string }
-> = {
-  job_posting: {
-    icon: Briefcase,
-    color: "bg-blue-100 text-blue-700",
-    parentStatus: "APPLIED",
-  },
-  ai_resume_screen: {
-    icon: FileSearch,
-    color: "bg-[#EBF0FF] text-[#0245EF]",
-    parentStatus: "SCREENING",
-  },
-  coding_assessment: {
-    icon: Code,
-    color: "bg-purple-100 text-purple-700",
-    parentStatus: "ASSESSMENT",
-  },
-  mcq_assessment: {
-    icon: HelpCircle,
-    color: "bg-indigo-100 text-indigo-700",
-    parentStatus: "ASSESSMENT",
-  },
-  ai_technical_interview: {
-    icon: Bot,
-    color: "bg-violet-100 text-violet-700",
-    parentStatus: "AI_INTERVIEW",
-  },
-  ai_behavioral_interview: {
-    icon: Bot,
-    color: "bg-fuchsia-100 text-fuchsia-700",
-    parentStatus: "AI_INTERVIEW",
-  },
-  f2f_interview: {
-    icon: Video,
-    color: "bg-pink-100 text-pink-700",
-    parentStatus: "F2F_INTERVIEW",
-  },
-  panel_interview: {
-    icon: Video,
-    color: "bg-rose-100 text-rose-700",
-    parentStatus: "F2F_INTERVIEW",
-  },
-  offer: {
-    icon: Award,
-    color: "bg-emerald-100 text-emerald-700",
-    parentStatus: "OFFERED",
-  },
-  onboarding: {
-    icon: CheckCircle,
-    color: "bg-green-100 text-green-700",
-    parentStatus: "HIRED",
-  },
+const SUBTYPE_ICONS: Record<string, any> = {
+  job_posting: Briefcase,
+  ai_resume_screen: FileSearch,
+  coding_assessment: Code,
+  mcq_assessment: HelpCircle,
+  ai_technical_interview: Bot,
+  ai_behavioral_interview: Bot,
+  f2f_interview: Video,
+  panel_interview: Video,
+  offer: Award,
+  onboarding: CheckCircle,
 };
 
-// A pipeline stage with granular info
+const SUBTYPE_COLORS: Record<string, string> = {
+  job_posting: "bg-blue-100 text-blue-700",
+  ai_resume_screen: "bg-[#EBF0FF] text-[#0245EF]",
+  coding_assessment: "bg-purple-100 text-purple-700",
+  mcq_assessment: "bg-indigo-100 text-indigo-700",
+  ai_technical_interview: "bg-violet-100 text-violet-700",
+  ai_behavioral_interview: "bg-fuchsia-100 text-fuchsia-700",
+  f2f_interview: "bg-pink-100 text-pink-700",
+  panel_interview: "bg-rose-100 text-rose-700",
+  offer: "bg-emerald-100 text-emerald-700",
+  onboarding: "bg-green-100 text-green-700",
+};
+
 interface PipelineStage {
-  // Unique key — e.g. "coding_assessment_abc123" or "APPLIED"
   stageKey: string;
-  // The DB status value — what we write to applications.status
   status: string;
-  // Human-readable label from the pipeline node
   label: string;
-  // The node subtype (if from pipeline)
   subtype?: string;
-  // The pipeline node ID
   nodeId?: string;
   icon: any;
   color: string;
@@ -181,7 +143,8 @@ export default function HRJobDetailPage() {
   const [job, setJob] = useState<any>(null);
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState("all");
+  // filterKey can be "all", a status like "SCREENING", or a stageKey like "mcq_assessment_node123"
+  const [filterKey, setFilterKey] = useState("all");
   const [scheduleApp, setScheduleApp] = useState<any>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
@@ -209,7 +172,6 @@ export default function HRJobDetailPage() {
       const apps = appsData.applications || [];
       setApplications(apps);
 
-      // Fetch pipeline stages
       if (jobData.job?.pipeline_id) {
         try {
           const pRes = await fetch(
@@ -222,7 +184,6 @@ export default function HRJobDetailPage() {
         } catch {}
       }
 
-      // Fetch scores for each application
       const scores: Record<string, any> = {};
       for (const app of apps) {
         try {
@@ -231,20 +192,17 @@ export default function HRJobDetailPage() {
           scores[app.id] = {
             resume: sData.application?.resumeScore || 0,
             resumeCompleted: (sData.application?.resumeScore || 0) > 0,
-            assessment:
-              sData.submissions?.[0]?.percentage || 0,
+            assessment: sData.submissions?.[0]?.percentage || 0,
             assessmentCompleted:
               sData.submissions?.some(
                 (s: any) => s.status === "GRADED"
               ) || false,
-            interview:
-              sData.interviews?.[0]?.overallScore || 0,
+            interview: sData.interviews?.[0]?.overallScore || 0,
             interviewCompleted:
               sData.interviews?.some(
                 (i: any) => i.status === "COMPLETED"
               ) || false,
-            f2f:
-              sData.f2fInterviews?.[0]?.feedback_score || 0,
+            f2f: sData.f2fInterviews?.[0]?.feedback_score || 0,
             f2fCompleted:
               sData.f2fInterviews?.some(
                 (f: any) => f.status === "COMPLETED"
@@ -263,10 +221,11 @@ export default function HRJobDetailPage() {
     }
   };
 
-  // Update application to a new status.
-  // If the stage has a nodeId, we also store it so the candidate
-  // is routed to the correct pipeline node.
-  const updateStatus = async (appId: string, newStatus: string, stage?: PipelineStage) => {
+  const updateStatus = async (
+    appId: string,
+    newStatus: string,
+    stage?: PipelineStage
+  ) => {
     setUpdating(appId);
     try {
       const res = await fetch(`/api/applications/${appId}`, {
@@ -274,7 +233,6 @@ export default function HRJobDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: newStatus,
-          // Pass the node details so the backend can route correctly
           ...(stage?.nodeId && { currentNodeId: stage.nodeId }),
           ...(stage?.subtype && { currentNodeSubtype: stage.subtype }),
         }),
@@ -294,10 +252,8 @@ export default function HRJobDetailPage() {
     }
   };
 
-  // Get the next stage in the pipeline for a given application
   const getNextStage = (currentStatus: string): PipelineStage | null => {
     if (pipelineStages.length > 0) {
-      // Find the current stage by status
       const idx = pipelineStages.findIndex(
         (s) => s.status === currentStatus
       );
@@ -305,7 +261,6 @@ export default function HRJobDetailPage() {
       return pipelineStages[idx + 1];
     }
 
-    // Fallback to generic order
     const order = [
       "APPLIED",
       "SCREENING",
@@ -332,17 +287,27 @@ export default function HRJobDetailPage() {
   const getStatusInfo = (status: string) =>
     ALL_STATUSES.find((s) => s.value === status) || ALL_STATUSES[0];
 
-  // Get the label to show for an application's current position.
-  // If we have pipeline stages, find the matching one by status and
-  // return its pipeline-specific label (e.g. "Coding Challenge" vs "MCQ Quiz").
   const getDisplayStage = (
-    appStatus: string
+    app: any
   ): { label: string; icon: any; color: string } => {
-    if (pipelineStages.length > 0) {
-      const match = pipelineStages.find((s) => s.status === appStatus);
+    // If we have pipeline stages AND the app has current_stage (subtype),
+    // find the specific node
+    if (pipelineStages.length > 0 && app.current_stage) {
+      const match = pipelineStages.find(
+        (s) => s.subtype === app.current_stage
+      );
       if (match) return { label: match.label, icon: match.icon, color: match.color };
     }
-    const info = getStatusInfo(appStatus);
+
+    // Fallback: match by status
+    if (pipelineStages.length > 0) {
+      const match = pipelineStages.find(
+        (s) => s.status === app.status
+      );
+      if (match) return { label: match.label, icon: match.icon, color: match.color };
+    }
+
+    const info = getStatusInfo(app.status);
     return { label: info.label, icon: info.icon, color: info.color };
   };
 
@@ -365,19 +330,66 @@ export default function HRJobDetailPage() {
   const sorted = [...applications].sort(
     (a, b) => (b.resumeScore || 0) - (a.resumeScore || 0)
   );
-  const filtered =
-    filterStatus === "all"
-      ? sorted
-      : sorted.filter((a) => a.status === filterStatus);
 
-  // Count applications per status
+  // ==========================================
+  // FILTERING — supports both status and stageKey (subtype)
+  // ==========================================
+  const filtered = (() => {
+    if (filterKey === "all") return sorted;
+
+    // Check if filterKey matches a pipeline stage's stageKey
+    const matchedStage = pipelineStages.find(
+      (s) => s.stageKey === filterKey
+    );
+
+    if (matchedStage && matchedStage.subtype) {
+      // Filter by BOTH status AND current_stage (subtype)
+      // This distinguishes coding_assessment from mcq_assessment
+      return sorted.filter(
+        (a) =>
+          a.status === matchedStage.status &&
+          (a.current_stage === matchedStage.subtype ||
+            // If current_stage not set, still show if status matches
+            // and there's only one stage with this status
+            (!a.current_stage &&
+              pipelineStages.filter(
+                (s) => s.status === matchedStage.status
+              ).length === 1))
+      );
+    }
+
+    // Fallback: direct status match
+    return sorted.filter((a) => a.status === filterKey);
+  })();
+
+  // Count applications per stageKey (granular)
+  const stageCounts: Record<string, number> = {};
+  if (pipelineStages.length > 0) {
+    for (const stage of pipelineStages) {
+      if (stage.subtype) {
+        stageCounts[stage.stageKey] = sorted.filter(
+          (a) =>
+            a.status === stage.status &&
+            (a.current_stage === stage.subtype ||
+              (!a.current_stage &&
+                pipelineStages.filter(
+                  (s) => s.status === stage.status
+                ).length === 1))
+        ).length;
+      } else {
+        stageCounts[stage.stageKey] = sorted.filter(
+          (a) => a.status === stage.status
+        ).length;
+      }
+    }
+  }
+
+  // Fallback: status-based counts
   const statusCounts: Record<string, number> = {};
   applications.forEach((a) => {
     statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
   });
 
-  // Build the stage list for filter tabs and dropdowns
-  // Use pipeline stages if available, otherwise fall back to ALL_STATUSES
   const stagesForUI: PipelineStage[] =
     pipelineStages.length > 0
       ? pipelineStages
@@ -438,50 +450,52 @@ export default function HRJobDetailPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Filter tabs — shows each pipeline stage with its label */}
+        {/* Filter tabs */}
         <div className="flex items-center gap-2 mb-6 flex-wrap">
           <Button
-            variant={filterStatus === "all" ? "default" : "outline"}
+            variant={filterKey === "all" ? "default" : "outline"}
             size="sm"
-            onClick={() => setFilterStatus("all")}
-            className={filterStatus === "all" ? "bg-[#0245EF]" : ""}
+            onClick={() => setFilterKey("all")}
+            className={filterKey === "all" ? "bg-[#0245EF]" : ""}
           >
             All ({applications.length})
           </Button>
 
-          {stagesForUI
-            .filter((s) => statusCounts[s.status])
-            .map((stage) => {
-              const StageIcon = stage.icon;
-              const count = statusCounts[stage.status] || 0;
-              return (
-                <Button
-                  key={stage.stageKey}
-                  variant={
-                    filterStatus === stage.status ? "default" : "outline"
-                  }
-                  size="sm"
-                  onClick={() => setFilterStatus(stage.status)}
-                  className={
-                    filterStatus === stage.status ? "bg-[#0245EF]" : ""
-                  }
-                >
-                  <StageIcon className="w-3 h-3 mr-1" />
-                  {stage.label} ({count})
-                </Button>
-              );
-            })}
+          {stagesForUI.map((stage) => {
+            const count =
+              pipelineStages.length > 0
+                ? stageCounts[stage.stageKey] || 0
+                : statusCounts[stage.status] || 0;
+
+            if (count === 0) return null;
+
+            const StageIcon = stage.icon;
+            const isActive = filterKey === stage.stageKey;
+
+            return (
+              <Button
+                key={stage.stageKey}
+                variant={isActive ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilterKey(stage.stageKey)}
+                className={isActive ? "bg-[#0245EF]" : ""}
+              >
+                <StageIcon className="w-3 h-3 mr-1" />
+                {stage.label} ({count})
+              </Button>
+            );
+          })}
 
           {statusCounts["REJECTED"] &&
             !stagesForUI.some((s) => s.status === "REJECTED") && (
               <Button
-                variant={
-                  filterStatus === "REJECTED" ? "default" : "outline"
-                }
+                variant={filterKey === "REJECTED" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setFilterStatus("REJECTED")}
+                onClick={() => setFilterKey("REJECTED")}
                 className={
-                  filterStatus === "REJECTED" ? "bg-red-600" : "text-red-600"
+                  filterKey === "REJECTED"
+                    ? "bg-red-600"
+                    : "text-red-600"
                 }
               >
                 <XCircle className="w-3 h-3 mr-1" />
@@ -495,15 +509,15 @@ export default function HRJobDetailPage() {
           <div className="text-center py-16">
             <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-slate-600">
-              {filterStatus === "all"
+              {filterKey === "all"
                 ? "No applications yet"
-                : `No ${getDisplayStage(filterStatus).label.toLowerCase()} candidates`}
+                : "No candidates in this stage"}
             </h3>
           </div>
         ) : (
           <div className="space-y-3">
             {filtered.map((app, index) => {
-              const displayStage = getDisplayStage(app.status);
+              const displayStage = getDisplayStage(app);
               const StatusIcon = displayStage.icon;
               const nextStage = getNextStage(app.status);
               const isUpdating = updating === app.id;
@@ -513,7 +527,7 @@ export default function HRJobDetailPage() {
                 <Card
                   key={app.id}
                   className={`hover:shadow-md transition-all ${
-                    index === 0 && filterStatus === "all"
+                    index === 0 && filterKey === "all"
                       ? "border-[#A3BDFF] bg-[#EBF0FF]/20"
                       : ""
                   }`}
@@ -533,7 +547,7 @@ export default function HRJobDetailPage() {
                                   : "bg-slate-100 text-slate-500"
                           }`}
                         >
-                          {filterStatus === "all" && index < 3
+                          {filterKey === "all" && index < 3
                             ? ["🥇", "🥈", "🥉"][index]
                             : `#${index + 1}`}
                         </div>
@@ -618,18 +632,17 @@ export default function HRJobDetailPage() {
                       </div>
                     )}
 
-                    {/* Interview Scores Expandable */}
+                    {/* Interview Scores */}
                     <InterviewScores
                       applicationId={app.id}
                       status={app.status}
                     />
 
-                    {/* F2F Scheduled */}
+                    {/* F2F Info */}
                     <F2FScheduledInfo applicationId={app.id} />
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 flex-wrap">
-                      {/* View Details */}
                       <Link href={`/hr/candidates/${app.id}`}>
                         <Button
                           variant="outline"
@@ -640,14 +653,17 @@ export default function HRJobDetailPage() {
                         </Button>
                       </Link>
 
-                      {/* Next stage — uses pipeline-aware label */}
                       {nextStage &&
                         app.status !== "REJECTED" &&
                         app.status !== "HIRED" && (
                           <Button
                             size="sm"
                             onClick={() =>
-                              updateStatus(app.id, nextStage.status, nextStage)
+                              updateStatus(
+                                app.id,
+                                nextStage.status,
+                                nextStage
+                              )
                             }
                             disabled={isUpdating}
                             className="bg-[#0245EF] hover:bg-[#0237BF]"
@@ -661,7 +677,6 @@ export default function HRJobDetailPage() {
                           </Button>
                         )}
 
-                      {/* Change stage — granular dropdown with pipeline labels */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -669,14 +684,20 @@ export default function HRJobDetailPage() {
                             size="sm"
                             className="text-xs"
                           >
-                            <ChevronDown className="w-3 h-3 mr-1" /> Change
-                            Stage
+                            <ChevronDown className="w-3 h-3 mr-1" />{" "}
+                            Change Stage
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-56">
+                        <DropdownMenuContent
+                          align="start"
+                          className="w-56"
+                        >
                           {stagesForUI.map((stage) => {
                             const Icon = stage.icon;
-                            const isCurrent = app.status === stage.status;
+                            const isCurrent =
+                              app.status === stage.status &&
+                              (!stage.subtype ||
+                                app.current_stage === stage.subtype);
                             return (
                               <DropdownMenuItem
                                 key={stage.stageKey}
@@ -690,16 +711,21 @@ export default function HRJobDetailPage() {
                                 }}
                                 disabled={isCurrent}
                                 className={
-                                  isCurrent ? "opacity-50 bg-[#EBF0FF]" : ""
+                                  isCurrent
+                                    ? "opacity-50 bg-[#EBF0FF]"
+                                    : ""
                                 }
                               >
                                 <Icon className="w-4 h-4 mr-2" />
                                 <div className="flex-1">
                                   <span>{stage.label}</span>
-                                  {/* Show parent status if label differs */}
                                   {stage.subtype && (
                                     <span className="text-[10px] text-slate-400 ml-1">
-                                      ({stage.status.replace(/_/g, " ").toLowerCase()})
+                                      (
+                                      {stage.status
+                                        .replace(/_/g, " ")
+                                        .toLowerCase()}
+                                      )
                                     </span>
                                   )}
                                 </div>
@@ -721,13 +747,13 @@ export default function HRJobDetailPage() {
                                 updateStatus(app.id, "REJECTED")
                               }
                             >
-                              <XCircle className="w-4 h-4 mr-2" /> Reject
+                              <XCircle className="w-4 h-4 mr-2" />{" "}
+                              Reject
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
 
-                      {/* Schedule F2F */}
                       {!["REJECTED", "HIRED", "APPLIED"].includes(
                         app.status
                       ) && (
@@ -737,11 +763,11 @@ export default function HRJobDetailPage() {
                           className="text-xs"
                           onClick={() => setScheduleApp(app)}
                         >
-                          <Calendar className="w-3 h-3 mr-1" /> Schedule F2F
+                          <Calendar className="w-3 h-3 mr-1" />{" "}
+                          Schedule F2F
                         </Button>
                       )}
 
-                      {/* Reject */}
                       {app.status !== "REJECTED" &&
                         app.status !== "HIRED" && (
                           <Button
@@ -766,7 +792,8 @@ export default function HRJobDetailPage() {
                           disabled={isUpdating}
                           className="bg-emerald-600 hover:bg-emerald-700 ml-auto"
                         >
-                          <Award className="w-3 h-3 mr-1" /> Mark as Hired
+                          <Award className="w-3 h-3 mr-1" /> Mark as
+                          Hired
                         </Button>
                       )}
                     </div>
@@ -850,7 +877,7 @@ function NodeScoreBadge({
 }
 
 // ==========================================
-// Interview Scores (expandable)
+// Interview Scores
 // ==========================================
 function InterviewScores({
   applicationId,
@@ -991,33 +1018,11 @@ function InterviewScores({
               <p className="text-xs font-semibold text-slate-600 mb-1">
                 AI Analysis
               </p>
-              <p className="text-xs text-slate-500">{scores.analysis}</p>
+              <p className="text-xs text-slate-500">
+                {scores.analysis}
+              </p>
             </div>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full text-xs"
-            onClick={() => {
-              const msgs =
-                typeof scores.messages === "string"
-                  ? JSON.parse(scores.messages)
-                  : scores.messages || [];
-              const transcript = msgs
-                .map(
-                  (m: any) =>
-                    `${m.role === "user" ? "📝 Candidate" : "🤖 Interviewer"}:\n${m.content}`
-                )
-                .join("\n\n---\n\n");
-              const win = window.open("", "_blank");
-              if (win)
-                win.document.write(
-                  `<html><head><title>Transcript</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6;color:#334155}h1{color:#0245EF}pre{white-space:pre-wrap;background:#F8FAFC;padding:20px;border-radius:12px;border:1px solid #E2E8F0}</style></head><body><h1>AI Interview Transcript</h1><p>Score: ${scores.overall_score}/100</p>${scores.analysis ? `<p>${scores.analysis}</p>` : ""}<hr/><pre>${transcript}</pre></body></html>`
-                );
-            }}
-          >
-            📄 View Transcript
-          </Button>
         </div>
       )}
     </div>
@@ -1060,14 +1065,6 @@ function F2FScheduledInfo({
         const isToday =
           date.toDateString() === new Date().toDateString();
         const isCancelled = interview.status === "CANCELLED";
-        let metadata = interview.metadata || {};
-        try {
-          if (typeof metadata === "string")
-            metadata = JSON.parse(metadata);
-        } catch {
-          metadata = {};
-        }
-        const interviewerList = metadata.interviewers || [];
 
         return (
           <div
@@ -1092,40 +1089,29 @@ function F2FScheduledInfo({
                       ? "text-red-400"
                       : isToday
                         ? "text-[#0245EF]"
-                        : isPast
-                          ? "text-slate-400"
-                          : "text-blue-500"
+                        : "text-slate-400"
                   }`}
                 />
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`text-xs font-semibold ${
-                        isCancelled
-                          ? "text-red-600 line-through"
-                          : isToday
-                            ? "text-[#0245EF]"
-                            : isPast
-                              ? interview.status === "COMPLETED"
-                                ? "text-emerald-600"
-                                : "text-slate-600"
-                              : "text-blue-700"
-                      }`}
-                    >
-                      {isCancelled
-                        ? "Cancelled"
+                  <span
+                    className={`text-xs font-semibold ${
+                      isCancelled
+                        ? "text-red-600 line-through"
                         : isToday
-                          ? "🔴 Today"
-                          : isPast
-                            ? interview.status === "COMPLETED"
-                              ? "✅ Completed"
-                              : "Past"
-                            : "Scheduled"}
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 capitalize">
-                      {interview.interview_type}
-                    </span>
-                  </div>
+                          ? "text-[#0245EF]"
+                          : "text-slate-600"
+                    }`}
+                  >
+                    {isCancelled
+                      ? "Cancelled"
+                      : isToday
+                        ? "🔴 Today"
+                        : isPast
+                          ? interview.status === "COMPLETED"
+                            ? "✅ Completed"
+                            : "Past"
+                          : "Scheduled"}
+                  </span>
                   <p className="text-xs text-slate-500 mt-1">
                     {date.toLocaleDateString("en-US", {
                       weekday: "short",
@@ -1138,38 +1124,7 @@ function F2FScheduledInfo({
                       minute: "2-digit",
                       hour12: true,
                     })}
-                    {interview.duration && ` • ${interview.duration} min`}
                   </p>
-                  {interviewerList.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                      <span className="text-[10px] text-slate-400">
-                        Panel:
-                      </span>
-                      {interviewerList.map((p: any, i: number) => (
-                        <span
-                          key={i}
-                          className="text-[10px] bg-white border border-slate-200 rounded-full px-2 py-0.5 text-slate-600"
-                        >
-                          {p.name}
-                          {p.role && (
-                            <span className="text-slate-400 ml-0.5">
-                              • {p.role}
-                            </span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {interview.meeting_link && (
-                    <a
-                      href={interview.meeting_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[10px] text-[#0245EF] hover:underline mt-1 inline-flex items-center gap-1"
-                    >
-                      <Video className="w-3 h-3" /> Meeting link
-                    </a>
-                  )}
                 </div>
               </div>
               {!isCancelled && interview.status !== "COMPLETED" && (
@@ -1204,8 +1159,7 @@ function F2FScheduledInfo({
 }
 
 // ==========================================
-// Extract Pipeline Stages — GRANULAR version
-// Each node gets its own entry with its label from the pipeline
+// Extract Pipeline Stages
 // ==========================================
 function extractPipelineStages(pipeline: any): PipelineStage[] {
   let nodes: any[] = [];
@@ -1223,7 +1177,6 @@ function extractPipelineStages(pipeline: any): PipelineStage[] {
     return [];
   }
 
-  // Build adjacency map (only "pass" / default edges)
   const adjMap = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
   for (const node of nodes) {
@@ -1242,10 +1195,9 @@ function extractPipelineStages(pipeline: any): PipelineStage[] {
     }
   }
 
-  // Topological sort
   const queue: string[] = [];
-  for (const [id, deg] of inDegree.entries()) {
-    if (deg === 0) queue.push(id);
+  for (const [nodeId, deg] of inDegree.entries()) {
+    if (deg === 0) queue.push(nodeId);
   }
   const ordered: any[] = [];
   while (queue.length > 0) {
@@ -1259,7 +1211,6 @@ function extractPipelineStages(pipeline: any): PipelineStage[] {
     }
   }
 
-  // Map subtype → parent DB status
   const subtypeToStatus: Record<string, string> = {
     job_posting: "APPLIED",
     ai_resume_screen: "SCREENING",
@@ -1273,35 +1224,7 @@ function extractPipelineStages(pipeline: any): PipelineStage[] {
     onboarding: "HIRED",
   };
 
-  // Default icon per subtype
-  const subtypeToIcon: Record<string, any> = {
-    job_posting: Briefcase,
-    ai_resume_screen: FileSearch,
-    coding_assessment: Code,
-    mcq_assessment: HelpCircle,
-    ai_technical_interview: Bot,
-    ai_behavioral_interview: Bot,
-    f2f_interview: Video,
-    panel_interview: Video,
-    offer: Award,
-    onboarding: CheckCircle,
-  };
-
-  const subtypeToColor: Record<string, string> = {
-    job_posting: "bg-blue-100 text-blue-700",
-    ai_resume_screen: "bg-[#EBF0FF] text-[#0245EF]",
-    coding_assessment: "bg-purple-100 text-purple-700",
-    mcq_assessment: "bg-indigo-100 text-indigo-700",
-    ai_technical_interview: "bg-violet-100 text-violet-700",
-    ai_behavioral_interview: "bg-fuchsia-100 text-fuchsia-700",
-    f2f_interview: "bg-pink-100 text-pink-700",
-    panel_interview: "bg-rose-100 text-rose-700",
-    offer: "bg-emerald-100 text-emerald-700",
-    onboarding: "bg-green-100 text-green-700",
-  };
-
   const stages: PipelineStage[] = [];
-  const seenStatuses = new Set<string>();
 
   for (const node of ordered) {
     const subtype = node.data?.subtype;
@@ -1315,7 +1238,6 @@ function extractPipelineStages(pipeline: any): PipelineStage[] {
     const parentStatus = subtypeToStatus[subtype];
     if (!parentStatus) continue;
 
-    // Use the pipeline node label (what HR typed) — fall back to a readable default
     const label =
       node.data?.label ||
       node.data?.config?.title ||
@@ -1323,23 +1245,18 @@ function extractPipelineStages(pipeline: any): PipelineStage[] {
         .replace(/_/g, " ")
         .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-    // For stages that share a DB status (e.g. two assessments),
-    // we still add them both but they share the same `status` value.
-    // The stageKey is unique per node so we can tell them apart.
     stages.push({
       stageKey: `${subtype}_${node.id}`,
       status: parentStatus,
       label,
       subtype,
       nodeId: node.id,
-      icon: subtypeToIcon[subtype] || Code,
-      color: subtypeToColor[subtype] || "bg-slate-100 text-slate-700",
+      icon: SUBTYPE_ICONS[subtype] || Code,
+      color: SUBTYPE_COLORS[subtype] || "bg-slate-100 text-slate-700",
     });
-
-    seenStatuses.add(parentStatus);
   }
 
-  // Append default tail stages if not present
+  const seenStatuses = new Set(stages.map((s) => s.status));
   if (!seenStatuses.has("UNDER_REVIEW")) {
     stages.push({
       stageKey: "UNDER_REVIEW",

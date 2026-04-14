@@ -10,11 +10,17 @@ export async function POST(req: NextRequest) {
     const { token, firstName, lastName, password } = await req.json();
 
     if (!token || !firstName || !lastName || !password) {
-      return NextResponse.json({ error: "All fields are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "All fields are required" },
+        { status: 400 }
+      );
     }
 
     if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters" },
+        { status: 400 }
+      );
     }
 
     const invitation = await queryOne(
@@ -26,7 +32,10 @@ export async function POST(req: NextRequest) {
     );
 
     if (!invitation) {
-      return NextResponse.json({ error: "Invalid or expired invitation" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid or expired invitation" },
+        { status: 400 }
+      );
     }
 
     // Check if email already exists
@@ -35,28 +44,52 @@ export async function POST(req: NextRequest) {
       [invitation.email]
     );
 
+    let acceptedUserId: string;
+
     if (existing) {
       if (existing.company_id === invitation.company_id) {
-        return NextResponse.json({ error: "You're already a member of this company. Try signing in." }, { status: 409 });
+        return NextResponse.json(
+          {
+            error:
+              "You're already a member of this company. Try signing in.",
+          },
+          { status: 409 }
+        );
       }
 
-      if (existing.company_id && existing.company_id !== invitation.company_id) {
-        return NextResponse.json({
-          error: "This email is already associated with another company. Use a different email or contact support.",
-        }, { status: 409 });
+      if (
+        existing.company_id &&
+        existing.company_id !== invitation.company_id
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "This email is already associated with another company. Use a different email or contact support.",
+          },
+          { status: 409 }
+        );
       }
 
       // User exists but not in any company — link them
       await query(
-        `UPDATE users SET company_id = $1, role = $2, invited_by = $3, is_active = true, updated_at = NOW()
+        `UPDATE users SET company_id = $1, role = $2, invited_by = $3,
+         is_active = true, updated_at = NOW()
          WHERE id = $4`,
-        [invitation.company_id, invitation.role, invitation.invited_by, existing.id]
+        [
+          invitation.company_id,
+          invitation.role,
+          invitation.invited_by,
+          existing.id,
+        ]
       );
+
+      acceptedUserId = existing.id;
     } else {
       // Create new user
       const passwordHash = await bcrypt.hash(password, 12);
-      await queryOne(
-        `INSERT INTO users (email, password_hash, first_name, last_name, role, company_id, invited_by, is_active, company)
+      const newUser = await queryOne(
+        `INSERT INTO users (email, password_hash, first_name, last_name, role,
+         company_id, invited_by, is_active, company)
          VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)
          RETURNING id`,
         [
@@ -70,6 +103,8 @@ export async function POST(req: NextRequest) {
           invitation.company_name,
         ]
       );
+
+      acceptedUserId = newUser?.id || invitation.invited_by;
     }
 
     // Mark invitation as accepted
@@ -78,19 +113,32 @@ export async function POST(req: NextRequest) {
       [invitation.id]
     );
 
+    // ✅ AUDIT — log as the new user who accepted
     await logAudit({
-      userId: invitation.invited_by,
-      companyId: invitation.company_id,
+      userId: acceptedUserId,
       action: "INVITATION_ACCEPTED",
-      resourceType: "invitation",
+      resourceType: "team",
       resourceId: invitation.id,
       resourceName: invitation.email,
-      details: { role: invitation.role },
+      details: {
+        email: invitation.email,
+        role: invitation.role,
+        companyId: invitation.company_id,
+        companyName: invitation.company_name,
+        invitedBy: invitation.invited_by,
+      },
+      req,
     });
 
-    return NextResponse.json({ success: true, message: "Account created! You can now sign in." });
+    return NextResponse.json({
+      success: true,
+      message: "Account created! You can now sign in.",
+    });
   } catch (error: any) {
     console.error("Invite accept error:", error);
-    return NextResponse.json({ error: error.message || "Failed to accept invitation" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Failed to accept invitation" },
+      { status: 500 }
+    );
   }
 }

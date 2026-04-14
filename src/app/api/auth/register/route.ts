@@ -7,28 +7,50 @@ import { logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password, firstName, lastName, role, company, phone } = await req.json();
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      role,
+      company,
+      phone,
+    } = await req.json();
 
     // ==========================================
     // VALIDATION
     // ==========================================
 
     if (!email || !password || !firstName || !lastName) {
-      return NextResponse.json({ error: "All fields are required: email, password, first name, last name" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            "All fields are required: email, password, first name, last name",
+        },
+        { status: 400 }
+      );
     }
 
-    // Email format check
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: "Please enter a valid email address" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please enter a valid email address" },
+        { status: 400 }
+      );
     }
 
     if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters" },
+        { status: 400 }
+      );
     }
 
     if (firstName.trim().length < 1 || lastName.trim().length < 1) {
-      return NextResponse.json({ error: "First name and last name are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "First name and last name are required" },
+        { status: 400 }
+      );
     }
 
     // ==========================================
@@ -41,13 +63,21 @@ export async function POST(req: NextRequest) {
 
     if (existingUser) {
       if (!existingUser.is_active) {
-        return NextResponse.json({
-          error: "This email was previously deactivated. Contact your company admin to reactivate.",
-        }, { status: 409 });
+        return NextResponse.json(
+          {
+            error:
+              "This email was previously deactivated. Contact your company admin to reactivate.",
+          },
+          { status: 409 }
+        );
       }
-      return NextResponse.json({
-        error: "An account with this email already exists. Try signing in instead.",
-      }, { status: 409 });
+      return NextResponse.json(
+        {
+          error:
+            "An account with this email already exists. Try signing in instead.",
+        },
+        { status: 409 }
+      );
     }
 
     // ==========================================
@@ -58,9 +88,13 @@ export async function POST(req: NextRequest) {
 
     if (isHRRole) {
       if (!company || company.trim().length < 2) {
-        return NextResponse.json({
-          error: "Company name is required for HR accounts (minimum 2 characters)",
-        }, { status: 400 });
+        return NextResponse.json(
+          {
+            error:
+              "Company name is required for HR accounts (minimum 2 characters)",
+          },
+          { status: 400 }
+        );
       }
 
       // Check for duplicate company name
@@ -70,7 +104,6 @@ export async function POST(req: NextRequest) {
       );
 
       if (existingCompany) {
-        // Find the admin of that company
         const companyAdmin = await queryOne(
           "SELECT first_name, last_name, email FROM users WHERE id = $1",
           [existingCompany.created_by]
@@ -80,12 +113,15 @@ export async function POST(req: NextRequest) {
           ? `Contact ${companyAdmin.first_name} ${companyAdmin.last_name} (${companyAdmin.email})`
           : "Contact your company administrator";
 
-        return NextResponse.json({
-          error: `"${existingCompany.name}" is already registered on Hirasys. ${adminInfo} to get an invite link.`,
-        }, { status: 409 });
+        return NextResponse.json(
+          {
+            error: `"${existingCompany.name}" is already registered on Hirasys. ${adminInfo} to get an invite link.`,
+          },
+          { status: 409 }
+        );
       }
 
-      // Also check for similar company names (fuzzy match)
+      // Check for similar company names (fuzzy match)
       const similarCompanies = await queryOne(
         `SELECT id, name FROM companies
          WHERE LOWER(TRIM(name)) LIKE LOWER(TRIM($1))
@@ -95,15 +131,27 @@ export async function POST(req: NextRequest) {
       );
 
       if (similarCompanies) {
-        return NextResponse.json({
-          error: `A similar company "${similarCompanies.name}" already exists. Did you mean that? If so, ask their admin for an invite link.`,
-          suggestion: similarCompanies.name,
-        }, { status: 409 });
+        return NextResponse.json(
+          {
+            error: `A similar company "${similarCompanies.name}" already exists. Did you mean that? If so, ask their admin for an invite link.`,
+            suggestion: similarCompanies.name,
+          },
+          { status: 409 }
+        );
       }
 
-      // Check email domain — if another company has users with same domain, warn
+      // Check email domain
       const emailDomain = email.split("@")[1]?.toLowerCase();
-      if (emailDomain && !["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"].includes(emailDomain)) {
+      if (
+        emailDomain &&
+        ![
+          "gmail.com",
+          "yahoo.com",
+          "hotmail.com",
+          "outlook.com",
+          "icloud.com",
+        ].includes(emailDomain)
+      ) {
         const existingDomainCompany = await queryOne(
           `SELECT c.id, c.name FROM companies c
            JOIN users u ON u.company_id = c.id
@@ -113,10 +161,13 @@ export async function POST(req: NextRequest) {
         );
 
         if (existingDomainCompany) {
-          return NextResponse.json({
-            error: `Someone from @${emailDomain} already has a company "${existingDomainCompany.name}" on Hirasys. Ask them for an invite link instead of creating a duplicate.`,
-            suggestion: existingDomainCompany.name,
-          }, { status: 409 });
+          return NextResponse.json(
+            {
+              error: `Someone from @${emailDomain} already has a company "${existingDomainCompany.name}" on Hirasys. Ask them for an invite link instead of creating a duplicate.`,
+              suggestion: existingDomainCompany.name,
+            },
+            { status: 409 }
+          );
         }
       }
 
@@ -137,7 +188,8 @@ export async function POST(req: NextRequest) {
     const passwordHash = await bcrypt.hash(password, 12);
 
     const user = await queryOne(
-      `INSERT INTO users (email, password_hash, first_name, last_name, role, company, company_id, phone, is_active, is_verified)
+      `INSERT INTO users (email, password_hash, first_name, last_name, role,
+       company, company_id, phone, is_active, is_verified)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, false)
        RETURNING id, email, first_name, last_name, role, company, company_id`,
       [
@@ -145,53 +197,78 @@ export async function POST(req: NextRequest) {
         passwordHash,
         firstName.trim(),
         lastName.trim(),
-        companyId ? "ADMIN" : (role || "CANDIDATE"),
+        companyId ? "ADMIN" : role || "CANDIDATE",
         company?.trim() || null,
         companyId,
         phone || null,
       ]
     );
 
-    // Update company created_by
-    if (companyId) {
-      await query("UPDATE companies SET created_by = $1 WHERE id = $2", [user.id, companyId]);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Failed to create account" },
+        { status: 500 }
+      );
+    }
 
+    // Update company created_by now that we have the user ID
+    if (companyId) {
+      await query(
+        "UPDATE companies SET created_by = $1 WHERE id = $2",
+        [user.id, companyId]
+      );
+
+      // ✅ AUDIT — company created
       await logAudit({
         userId: user.id,
-        userName: `${firstName} ${lastName}`,
-        userEmail: email,
-        companyId,
         action: "COMPANY_CREATED",
         resourceType: "company",
         resourceId: companyId,
-        resourceName: company,
+        resourceName: company?.trim(),
+        details: {
+          domain: email.split("@")[1]?.toLowerCase() || null,
+          founderEmail: email.trim().toLowerCase(),
+        },
+        req,
       });
 
+      // ✅ AUDIT — HR user registered as founder
       await logAudit({
         userId: user.id,
-        userName: `${firstName} ${lastName}`,
-        userEmail: email,
-        companyId,
         action: "USER_REGISTERED",
         resourceType: "user",
         resourceId: user.id,
-        details: { role: "ADMIN", isFounder: true },
+        resourceName: `${firstName.trim()} ${lastName.trim()}`,
+        details: {
+          email: email.trim().toLowerCase(),
+          role: "ADMIN",
+          isFounder: true,
+          companyName: company?.trim(),
+        },
+        req,
       });
     } else {
+      // ✅ AUDIT — candidate or standalone user registered
       await logAudit({
         userId: user.id,
-        userName: `${firstName} ${lastName}`,
-        userEmail: email,
         action: "USER_REGISTERED",
         resourceType: "user",
         resourceId: user.id,
-        details: { role: role || "CANDIDATE" },
+        resourceName: `${firstName.trim()} ${lastName.trim()}`,
+        details: {
+          email: email.trim().toLowerCase(),
+          role: role || "CANDIDATE",
+        },
+        req,
       });
     }
 
     return NextResponse.json({ success: true, user }, { status: 201 });
   } catch (error: any) {
     console.error("Registration error:", error);
-    return NextResponse.json({ error: "Registration failed. Please try again." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Registration failed. Please try again." },
+      { status: 500 }
+    );
   }
 }

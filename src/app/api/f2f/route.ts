@@ -4,7 +4,7 @@ export const fetchCache = "force-no-store";
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { logAudit, getAuditUser } from "@/lib/audit";
+import { logAudit } from "@/lib/audit";
 
 // ==========================================
 // GET — Fetch F2F interviews
@@ -63,18 +63,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
     const body = await req.json();
     const {
-      applicationId, scheduledAt, duration, meetingLink,
-      interviewType, notes, interviewers,
+      applicationId,
+      scheduledAt,
+      duration,
+      meetingLink,
+      interviewType,
+      notes,
+      interviewers,
     } = body;
 
     if (!applicationId || !scheduledAt) {
-      return NextResponse.json({ error: "applicationId and scheduledAt required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "applicationId and scheduledAt required" },
+        { status: 400 }
+      );
     }
 
     if (!interviewers || interviewers.length === 0) {
-      return NextResponse.json({ error: "At least one interviewer required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "At least one interviewer required" },
+        { status: 400 }
+      );
     }
 
     // Get application info
@@ -88,7 +100,10 @@ export async function POST(req: NextRequest) {
     );
 
     if (!application) {
-      return NextResponse.json({ error: "Application not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Application not found" },
+        { status: 404 }
+      );
     }
 
     // Get candidate info
@@ -99,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     // Use first interviewer as primary
     const primaryInterviewer = interviewers[0];
-    const interviewerId = primaryInterviewer.id || (session.user as any).id;
+    const interviewerId = primaryInterviewer.id || userId;
 
     const interview = await queryOne(
       `INSERT INTO f2f_interviews (
@@ -119,11 +134,18 @@ export async function POST(req: NextRequest) {
         notes || null,
         JSON.stringify({
           interviewers,
-          scheduledBy: (session.user as any).id,
+          scheduledBy: userId,
           panelSize: interviewers.length,
         }),
       ]
     );
+
+    if (!interview) {
+      return NextResponse.json(
+        { error: "Failed to create interview" },
+        { status: 500 }
+      );
+    }
 
     // Update application status
     await query(
@@ -131,9 +153,16 @@ export async function POST(req: NextRequest) {
       [applicationId]
     );
 
-    const interviewerNames = interviewers.map((i: any) => i.name).join(", ");
+    const interviewerNames = interviewers
+      .map((i: any) => i.name)
+      .join(", ");
     const scheduledDate = new Date(scheduledAt);
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+    const candidateName =
+      `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() ||
+      "Candidate";
 
     // In-app notification for candidate
     await query(
@@ -153,12 +182,20 @@ export async function POST(req: NextRequest) {
           to: candidate.email,
           candidateName: candidate.first_name || "there",
           jobTitle: application.job_title,
-          companyName: application.company || (session.user as any).company || "",
+          companyName:
+            application.company ||
+            (session.user as any).company ||
+            "",
           date: scheduledDate.toLocaleDateString("en-US", {
-            weekday: "long", month: "long", day: "numeric", year: "numeric",
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
           }),
           time: scheduledDate.toLocaleTimeString("en-US", {
-            hour: "2-digit", minute: "2-digit", hour12: true,
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
           }),
           duration: duration || 60,
           interviewType: interviewType || "technical",
@@ -180,25 +217,35 @@ export async function POST(req: NextRequest) {
            VALUES ($1, 'INTERVIEW_SCHEDULED', '📅 Interview Assigned', $2, '/hr/dashboard')`,
           [
             interviewer.id,
-            `You've been assigned to interview ${candidate?.first_name || "a candidate"} for ${application.job_title} on ${scheduledDate.toLocaleDateString()} at ${scheduledDate.toLocaleTimeString()}.`,
+            `You've been assigned to interview ${candidateName} for ${application.job_title} on ${scheduledDate.toLocaleDateString()} at ${scheduledDate.toLocaleTimeString()}.`,
           ]
         );
 
         // Email to interviewer
         try {
-          const interviewerUser = await queryOne("SELECT email, first_name FROM users WHERE id = $1", [interviewer.id]);
+          const interviewerUser = await queryOne(
+            "SELECT email, first_name FROM users WHERE id = $1",
+            [interviewer.id]
+          );
           if (interviewerUser?.email) {
-            const { sendInterviewScheduled } = await import("@/lib/email");
+            const { sendInterviewScheduled } = await import(
+              "@/lib/email"
+            );
             await sendInterviewScheduled({
               to: interviewerUser.email,
-              candidateName: `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() || "Candidate",
+              candidateName,
               jobTitle: application.job_title,
               companyName: application.company || "",
               date: scheduledDate.toLocaleDateString("en-US", {
-                weekday: "long", month: "long", day: "numeric", year: "numeric",
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
               }),
               time: scheduledDate.toLocaleTimeString("en-US", {
-                hour: "2-digit", minute: "2-digit", hour12: true,
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
               }),
               duration: duration || 60,
               interviewType: interviewType || "technical",
@@ -208,33 +255,48 @@ export async function POST(req: NextRequest) {
             });
           }
         } catch (emailErr) {
-          console.error(`Interview email to interviewer ${interviewer.name} failed:`, emailErr);
+          console.error(
+            `Interview email to interviewer ${interviewer.name} failed:`,
+            emailErr
+          );
         }
       }
     }
 
-    // Audit log
+    // ✅ AUDIT — after successful scheduling
     await logAudit({
-      ...getAuditUser(session),
+      userId,
       action: "F2F_SCHEDULED",
       resourceType: "f2f_interview",
       resourceId: interview.id,
+      resourceName: `${candidateName} — ${application.job_title}`,
       details: {
         applicationId,
-        candidateName: `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim(),
+        candidateName,
+        candidateEmail: candidate?.email,
         jobTitle: application.job_title,
         scheduledAt,
-        duration,
-        interviewType,
-        interviewers: interviewers.map((i: any) => ({ name: i.name, role: i.role })),
+        duration: duration || 60,
+        interviewType: interviewType || "technical",
+        interviewers: interviewers.map((i: any) => ({
+          name: i.name,
+          role: i.role,
+        })),
         meetingLink: meetingLink ? "provided" : "none",
       },
+      req,
     });
 
-    return NextResponse.json({ success: true, interview }, { status: 201 });
+    return NextResponse.json(
+      { success: true, interview },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error("F2F scheduling error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }
 
@@ -248,21 +310,30 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
     const body = await req.json();
-    const user = session.user as any;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
     // ==========================================
     // EDIT INTERVIEW
     // ==========================================
     if (body.action === "edit") {
       const {
-        interviewId, scheduledAt, duration, meetingLink,
-        interviewType, notes, interviewers,
+        interviewId,
+        scheduledAt,
+        duration,
+        meetingLink,
+        interviewType,
+        notes,
+        interviewers,
       } = body;
 
       if (!interviewId) {
-        return NextResponse.json({ error: "interviewId required" }, { status: 400 });
+        return NextResponse.json(
+          { error: "interviewId required" },
+          { status: 400 }
+        );
       }
 
       const existing = await queryOne(
@@ -271,7 +342,10 @@ export async function PUT(req: NextRequest) {
       );
 
       if (!existing) {
-        return NextResponse.json({ error: "Interview not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Interview not found" },
+          { status: 404 }
+        );
       }
 
       // Build dynamic update
@@ -318,26 +392,38 @@ export async function PUT(req: NextRequest) {
         }
 
         updates.push(`metadata = $${idx}`);
-        values.push(JSON.stringify({
-          interviewers,
-          scheduledBy: user.id,
-          panelSize: interviewers.length,
-          lastEditedAt: new Date().toISOString(),
-          lastEditedBy: user.id,
-        }));
+        values.push(
+          JSON.stringify({
+            interviewers,
+            scheduledBy: userId,
+            panelSize: interviewers.length,
+            lastEditedAt: new Date().toISOString(),
+            lastEditedBy: userId,
+          })
+        );
         idx++;
       }
 
       updates.push("updated_at = NOW()");
 
       if (updates.length === 1) {
-        return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Nothing to update" },
+          { status: 400 }
+        );
       }
 
       const interview = await queryOne(
         `UPDATE f2f_interviews SET ${updates.join(", ")} WHERE id = $1 RETURNING *`,
         [interviewId, ...values]
       );
+
+      if (!interview) {
+        return NextResponse.json(
+          { error: "Failed to update interview" },
+          { status: 500 }
+        );
+      }
 
       // Get application and candidate info
       const application = await queryOne(
@@ -354,9 +440,15 @@ export async function PUT(req: NextRequest) {
         [application?.candidate_id]
       );
 
+      const candidateName =
+        `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() ||
+        "Candidate";
+
       // Notify candidate about reschedule
       if (application?.candidate_id) {
-        const newDate = scheduledAt ? new Date(scheduledAt) : new Date(existing.scheduled_at);
+        const newDate = scheduledAt
+          ? new Date(scheduledAt)
+          : new Date(existing.scheduled_at);
 
         await query(
           `INSERT INTO notifications (user_id, type, title, message, link)
@@ -370,18 +462,33 @@ export async function PUT(req: NextRequest) {
         // Send email
         if (candidate?.email) {
           try {
-            const { sendInterviewScheduled } = await import("@/lib/email");
+            const { sendInterviewScheduled } = await import(
+              "@/lib/email"
+            );
             await sendInterviewScheduled({
               to: candidate.email,
               candidateName: candidate.first_name || "there",
               jobTitle: application.job_title || "",
               companyName: application.company || "",
-              date: newDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
-              time: newDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }),
+              date: newDate.toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              }),
+              time: newDate.toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              }),
               duration: duration || existing.duration || 60,
-              interviewType: interviewType || existing.interview_type || "technical",
-              meetingLink: meetingLink || existing.meeting_link || undefined,
-              interviewers: (interviewers || []).map((i: any) => i.name),
+              interviewType:
+                interviewType || existing.interview_type || "technical",
+              meetingLink:
+                meetingLink || existing.meeting_link || undefined,
+              interviewers: (interviewers || []).map(
+                (i: any) => i.name
+              ),
               notes: notes || existing.notes || undefined,
             });
           } catch (emailErr) {
@@ -390,12 +497,31 @@ export async function PUT(req: NextRequest) {
         }
       }
 
+      // Build change details
+      const changes: Record<string, any> = {};
+      if (scheduledAt && String(existing.scheduled_at) !== String(scheduledAt)) {
+        changes.scheduledAt = { from: existing.scheduled_at, to: scheduledAt };
+      }
+      if (duration && existing.duration !== duration) {
+        changes.duration = { from: existing.duration, to: duration };
+      }
+      if (interviewType && existing.interview_type !== interviewType) {
+        changes.interviewType = { from: existing.interview_type, to: interviewType };
+      }
+
+      // ✅ AUDIT
       await logAudit({
-        ...getAuditUser(session),
+        userId,
         action: "F2F_UPDATED",
         resourceType: "f2f_interview",
         resourceId: interviewId,
-        details: { scheduledAt, duration, interviewType, interviewerCount: interviewers?.length },
+        resourceName: `${candidateName} — ${application?.job_title || ""}`,
+        details: {
+          ...(Object.keys(changes).length > 0 ? changes : {}),
+          interviewerCount: interviewers?.length,
+          applicationId: existing.application_id,
+        },
+        req,
       });
 
       return NextResponse.json({ success: true, interview });
@@ -408,17 +534,36 @@ export async function PUT(req: NextRequest) {
       const { interviewId } = body;
 
       if (!interviewId) {
-        return NextResponse.json({ error: "interviewId required" }, { status: 400 });
+        return NextResponse.json(
+          { error: "interviewId required" },
+          { status: 400 }
+        );
+      }
+
+      // Fetch before updating so we have the old data
+      const existing = await queryOne(
+        "SELECT * FROM f2f_interviews WHERE id = $1",
+        [interviewId]
+      );
+
+      if (!existing) {
+        return NextResponse.json(
+          { error: "Interview not found" },
+          { status: 404 }
+        );
+      }
+
+      if (existing.status === "CANCELLED") {
+        return NextResponse.json(
+          { error: "Interview is already cancelled" },
+          { status: 400 }
+        );
       }
 
       const interview = await queryOne(
         "UPDATE f2f_interviews SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1 RETURNING *",
         [interviewId]
       );
-
-      if (!interview) {
-        return NextResponse.json({ error: "Interview not found" }, { status: 404 });
-      }
 
       // Get candidate info
       const application = await queryOne(
@@ -431,9 +576,13 @@ export async function PUT(req: NextRequest) {
       );
 
       const candidate = await queryOne(
-        "SELECT email, first_name FROM users WHERE id = $1",
+        "SELECT email, first_name, last_name FROM users WHERE id = $1",
         [application?.candidate_id]
       );
+
+      const candidateName =
+        `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() ||
+        "Candidate";
 
       // Notify candidate
       if (application?.candidate_id) {
@@ -450,10 +599,14 @@ export async function PUT(req: NextRequest) {
         if (candidate?.email) {
           try {
             const { Resend } = await import("resend");
-            const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+            const resend = process.env.RESEND_API_KEY
+              ? new Resend(process.env.RESEND_API_KEY)
+              : null;
             if (resend) {
               await resend.emails.send({
-                from: process.env.FROM_EMAIL || "Hirasys <noreply@hirasys.ai>",
+                from:
+                  process.env.FROM_EMAIL ||
+                  "Hirasys <noreply@hirasys.ai>",
                 to: candidate.email,
                 subject: `Interview Cancelled — ${application.job_title}`,
                 html: `<p>Hi ${candidate.first_name || "there"},</p>
@@ -468,15 +621,21 @@ export async function PUT(req: NextRequest) {
         }
       }
 
+      // ✅ AUDIT
       await logAudit({
-        ...getAuditUser(session),
+        userId,
         action: "F2F_CANCELLED",
         resourceType: "f2f_interview",
         resourceId: interviewId,
+        resourceName: `${candidateName} — ${application?.job_title || ""}`,
         details: {
           applicationId: interview.application_id,
-          scheduledAt: interview.scheduled_at,
+          candidateName,
+          candidateEmail: candidate?.email,
+          jobTitle: application?.job_title,
+          originalScheduledAt: interview.scheduled_at,
         },
+        req,
       });
 
       return NextResponse.json({ success: true, interview });
@@ -487,18 +646,42 @@ export async function PUT(req: NextRequest) {
     // ==========================================
     if (body.action === "feedback") {
       const {
-        interviewId, technicalScore, communicationScore,
-        problemSolvingScore, cultureFitScore, recommendation,
-        strengths, concerns, notes: feedbackNotes,
+        interviewId,
+        technicalScore,
+        communicationScore,
+        problemSolvingScore,
+        cultureFitScore,
+        recommendation,
+        strengths,
+        concerns,
+        notes: feedbackNotes,
       } = body;
 
       if (!interviewId) {
-        return NextResponse.json({ error: "interviewId required" }, { status: 400 });
+        return NextResponse.json(
+          { error: "interviewId required" },
+          { status: 400 }
+        );
+      }
+
+      const existing = await queryOne(
+        "SELECT * FROM f2f_interviews WHERE id = $1",
+        [interviewId]
+      );
+
+      if (!existing) {
+        return NextResponse.json(
+          { error: "Interview not found" },
+          { status: 404 }
+        );
       }
 
       const overallScore = Math.round(
-        ((technicalScore || 0) + (communicationScore || 0) +
-         (problemSolvingScore || 0) + (cultureFitScore || 0)) / 4
+        ((technicalScore || 0) +
+          (communicationScore || 0) +
+          (problemSolvingScore || 0) +
+          (cultureFitScore || 0)) /
+          4
       );
 
       // Mark interview as completed
@@ -517,7 +700,7 @@ export async function PUT(req: NextRequest) {
         RETURNING *`,
         [
           interviewId,
-          user.id,
+          userId,
           technicalScore || 0,
           communicationScore || 0,
           problemSolvingScore || 0,
@@ -530,21 +713,32 @@ export async function PUT(req: NextRequest) {
         ]
       );
 
-      // Get interview to find application
-      const interview = await queryOne(
-        "SELECT * FROM f2f_interviews WHERE id = $1",
-        [interviewId]
+      // Get context for audit
+      const application = await queryOne(
+        `SELECT a.candidate_id, j.title as job_title
+         FROM applications a
+         JOIN jobs j ON a.job_id = j.id
+         WHERE a.id = $1`,
+        [existing.application_id]
       );
 
+      const candidate = await queryOne(
+        "SELECT first_name, last_name, email FROM users WHERE id = $1",
+        [application?.candidate_id]
+      );
+
+      const candidateName =
+        `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() ||
+        "Candidate";
+
       // Trigger pipeline execution
-      if (interview?.application_id) {
+      if (existing.application_id) {
         try {
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
           await fetch(`${appUrl}/api/pipeline/execute`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              applicationId: interview.application_id,
+              applicationId: existing.application_id,
               trigger: "f2f_completed",
             }),
           });
@@ -553,12 +747,16 @@ export async function PUT(req: NextRequest) {
         }
       }
 
+      // ✅ AUDIT
       await logAudit({
-        ...getAuditUser(session),
+        userId,
         action: "F2F_FEEDBACK_SUBMITTED",
         resourceType: "f2f_interview",
         resourceId: interviewId,
+        resourceName: `${candidateName} — ${application?.job_title || ""}`,
         details: {
+          candidateName,
+          jobTitle: application?.job_title,
           overallScore,
           recommendation,
           technicalScore,
@@ -566,14 +764,21 @@ export async function PUT(req: NextRequest) {
           problemSolvingScore,
           cultureFitScore,
         },
+        req,
       });
 
       return NextResponse.json({ success: true, feedback });
     }
 
-    return NextResponse.json({ error: "Invalid action. Use 'edit', 'cancel', or 'feedback'" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid action. Use 'edit', 'cancel', or 'feedback'" },
+      { status: 400 }
+    );
   } catch (error: any) {
     console.error("F2F update error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }

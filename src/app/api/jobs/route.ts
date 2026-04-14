@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { getCompanyUserIds } from "@/lib/company";
-import { logAudit, getAuditUser } from "@/lib/audit";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   try {
@@ -32,7 +32,9 @@ export async function GET(req: NextRequest) {
       const companyUserIds = await getCompanyUserIds(userId);
 
       if (companyUserIds.length > 0) {
-        const placeholders = companyUserIds.map((_, i) => `$${paramIndex + i}`).join(", ");
+        const placeholders = companyUserIds
+          .map((_, i) => `$${paramIndex + i}`)
+          .join(", ");
         whereClause += ` AND j.posted_by IN (${placeholders})`;
         params.push(...companyUserIds);
         paramIndex += companyUserIds.length;
@@ -106,7 +108,10 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Jobs fetch error:", error);
-    return NextResponse.json({ error: "Failed to fetch jobs" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch jobs" },
+      { status: 500 }
+    );
   }
 }
 
@@ -117,14 +122,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userId = (session.user as any).id;
     const body = await req.json();
 
-    if (!body.title || !body.description || !body.department || !body.location) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (
+      !body.title ||
+      !body.description ||
+      !body.department ||
+      !body.location
+    ) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 }
+      );
     }
 
     if (body.status === "PUBLISHED" && !body.pipelineId) {
-      return NextResponse.json({ error: "A pipeline must be linked before publishing" }, { status: 400 });
+      return NextResponse.json(
+        { error: "A pipeline must be linked before publishing" },
+        { status: 400 }
+      );
     }
 
     const job = await queryOne(
@@ -135,28 +152,55 @@ export async function POST(req: NextRequest) {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING *`,
       [
-        body.title, body.description, body.requirements || [], body.skills || [],
-        body.department, body.location, body.type || "full_time",
-        body.experienceMin || 0, body.experienceMax || 99,
-        body.salaryMin || null, body.salaryMax || null,
-        body.salaryCurrency || "USD", body.status || "DRAFT",
-        body.pipelineId || null, (session.user as any).id,
+        body.title,
+        body.description,
+        body.requirements || [],
+        body.skills || [],
+        body.department,
+        body.location,
+        body.type || "full_time",
+        body.experienceMin || 0,
+        body.experienceMax || 99,
+        body.salaryMin || null,
+        body.salaryMax || null,
+        body.salaryCurrency || "USD",
+        body.status || "DRAFT",
+        body.pipelineId || null,
+        userId,
         body.closingDate ? new Date(body.closingDate) : null,
       ]
     );
 
+    if (!job) {
+      return NextResponse.json(
+        { error: "Failed to create job" },
+        { status: 500 }
+      );
+    }
+
+    // ✅ AUDIT — after successful creation
     await logAudit({
-      ...getAuditUser(session),
-      action: "JOB_CREATED",
+      userId,
+      action: body.status === "PUBLISHED" ? "JOB_PUBLISHED" : "JOB_CREATED",
       resourceType: "job",
       resourceId: job.id,
-      resourceName: body.title,
-      details: { status: body.status, department: body.department },
+      resourceName: job.title,
+      details: {
+        status: job.status,
+        department: job.department,
+        location: job.location,
+        type: job.type,
+        pipelineId: job.pipeline_id || null,
+      },
+      req,
     });
 
     return NextResponse.json({ success: true, job }, { status: 201 });
   } catch (error: any) {
     console.error("Job creation error:", error);
-    return NextResponse.json({ error: "Failed to create job" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create job" },
+      { status: 500 }
+    );
   }
 }

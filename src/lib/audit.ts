@@ -1,21 +1,57 @@
 import { query } from "./db";
+import { getUserCompanyId } from "./company";
 
-export interface AuditEntry {
+/**
+ * Log an audit event. Call this from any API route after a mutation.
+ *
+ * Example:
+ *   await logAudit({
+ *     userId: session.user.id,
+ *     action: "JOB_CREATED",
+ *     resourceType: "job",
+ *     resourceId: job.id,
+ *     resourceName: job.title,
+ *     details: { status: "DRAFT" },
+ *     req,  // optional — extracts IP + user agent
+ *   });
+ */
+export async function logAudit(params: {
   userId: string;
-  userName?: string;
-  userEmail?: string;
-  companyId?: string;
   action: string;
   resourceType: string;
   resourceId?: string;
   resourceName?: string;
   details?: Record<string, any>;
-  ipAddress?: string;
-  userAgent?: string;
-}
-
-export async function logAudit(entry: AuditEntry) {
+  req?: Request | null;
+}) {
   try {
+    // Resolve company, name, email
+    const { queryOne } = await import("./db");
+
+    const user = await queryOne(
+      "SELECT first_name, last_name, email, company_id FROM users WHERE id = $1",
+      [params.userId]
+    );
+
+    const companyId = user?.company_id || (await getUserCompanyId(params.userId));
+    const userName = user
+      ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
+      : null;
+    const userEmail = user?.email || null;
+
+    // Extract IP + UA from request if provided
+    let ipAddress: string | null = null;
+    let userAgent: string | null = null;
+
+    if (params.req) {
+      const headers = params.req.headers;
+      ipAddress =
+        (headers as any).get?.("x-forwarded-for")?.split(",")[0]?.trim() ||
+        (headers as any).get?.("x-real-ip") ||
+        null;
+      userAgent = (headers as any).get?.("user-agent") || null;
+    }
+
     await query(
       `INSERT INTO audit_logs (
         company_id, user_id, user_name, user_email,
@@ -23,32 +59,21 @@ export async function logAudit(entry: AuditEntry) {
         details, ip_address, user_agent
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
-        entry.companyId || null,
-        entry.userId,
-        entry.userName || null,
-        entry.userEmail || null,
-        entry.action,
-        entry.resourceType,
-        entry.resourceId || null,
-        entry.resourceName || null,
-        JSON.stringify(entry.details || {}),
-        entry.ipAddress || null,
-        entry.userAgent || null,
+        companyId || null,
+        params.userId,
+        userName,
+        userEmail,
+        params.action,
+        params.resourceType,
+        params.resourceId || null,
+        params.resourceName || null,
+        JSON.stringify(params.details || {}),
+        ipAddress,
+        userAgent,
       ]
     );
   } catch (err) {
-    console.error("Audit log failed:", err);
-    // Never throw — audit should never break the main flow
+    // Audit logging should never break the main flow
+    console.error("Audit log failed (non-critical):", err);
   }
-}
-
-// Helper to extract audit info from session
-export function getAuditUser(session: any) {
-  const user = session?.user as any;
-  return {
-    userId: user?.id || "unknown",
-    userName: user ? `${user.firstName} ${user.lastName}` : "Unknown",
-    userEmail: user?.email || "unknown",
-    companyId: user?.companyId || null,
-  };
 }
