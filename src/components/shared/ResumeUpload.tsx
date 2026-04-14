@@ -181,7 +181,7 @@ export function ResumeUpload({
                   className="h-7 text-xs text-slate-400"
                   onClick={handleRemove}
                 >
-                  <X className="w-3 h-3 mr-1" /> Remove
+                  <X className="w-3 h-3 mr-1" /> 
                 </Button>
               </div>
 
