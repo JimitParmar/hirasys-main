@@ -28,6 +28,7 @@ import {
   X,
   Users,
   Mail,
+  Globe,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -47,6 +48,164 @@ interface Interviewer {
   isExternal: boolean;
 }
 
+// ==========================================
+// Common timezones grouped by region
+// ==========================================
+const TIMEZONE_GROUPS = [
+  {
+    label: "Americas",
+    zones: [
+      { value: "America/New_York", label: "Eastern Time (ET)", offset: "UTC-5/4" },
+      { value: "America/Chicago", label: "Central Time (CT)", offset: "UTC-6/5" },
+      { value: "America/Denver", label: "Mountain Time (MT)", offset: "UTC-7/6" },
+      { value: "America/Los_Angeles", label: "Pacific Time (PT)", offset: "UTC-8/7" },
+      { value: "America/Anchorage", label: "Alaska (AKT)", offset: "UTC-9/8" },
+      { value: "Pacific/Honolulu", label: "Hawaii (HST)", offset: "UTC-10" },
+      { value: "America/Toronto", label: "Toronto (ET)", offset: "UTC-5/4" },
+      { value: "America/Vancouver", label: "Vancouver (PT)", offset: "UTC-8/7" },
+      { value: "America/Sao_Paulo", label: "São Paulo (BRT)", offset: "UTC-3" },
+      { value: "America/Mexico_City", label: "Mexico City (CST)", offset: "UTC-6" },
+      { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires (ART)", offset: "UTC-3" },
+    ],
+  },
+  {
+    label: "Europe & Africa",
+    zones: [
+      { value: "Europe/London", label: "London (GMT/BST)", offset: "UTC+0/1" },
+      { value: "Europe/Paris", label: "Paris (CET/CEST)", offset: "UTC+1/2" },
+      { value: "Europe/Berlin", label: "Berlin (CET/CEST)", offset: "UTC+1/2" },
+      { value: "Europe/Amsterdam", label: "Amsterdam (CET)", offset: "UTC+1/2" },
+      { value: "Europe/Madrid", label: "Madrid (CET)", offset: "UTC+1/2" },
+      { value: "Europe/Rome", label: "Rome (CET)", offset: "UTC+1/2" },
+      { value: "Europe/Zurich", label: "Zurich (CET)", offset: "UTC+1/2" },
+      { value: "Europe/Stockholm", label: "Stockholm (CET)", offset: "UTC+1/2" },
+      { value: "Europe/Helsinki", label: "Helsinki (EET)", offset: "UTC+2/3" },
+      { value: "Europe/Moscow", label: "Moscow (MSK)", offset: "UTC+3" },
+      { value: "Europe/Istanbul", label: "Istanbul (TRT)", offset: "UTC+3" },
+      { value: "Africa/Cairo", label: "Cairo (EET)", offset: "UTC+2" },
+      { value: "Africa/Lagos", label: "Lagos (WAT)", offset: "UTC+1" },
+      { value: "Africa/Johannesburg", label: "Johannesburg (SAST)", offset: "UTC+2" },
+      { value: "Africa/Nairobi", label: "Nairobi (EAT)", offset: "UTC+3" },
+    ],
+  },
+  {
+    label: "Asia & Pacific",
+    zones: [
+      { value: "Asia/Dubai", label: "Dubai (GST)", offset: "UTC+4" },
+      { value: "Asia/Karachi", label: "Karachi (PKT)", offset: "UTC+5" },
+      { value: "Asia/Kolkata", label: "India (IST)", offset: "UTC+5:30" },
+      { value: "Asia/Colombo", label: "Sri Lanka (IST)", offset: "UTC+5:30" },
+      { value: "Asia/Dhaka", label: "Dhaka (BST)", offset: "UTC+6" },
+      { value: "Asia/Bangkok", label: "Bangkok (ICT)", offset: "UTC+7" },
+      { value: "Asia/Jakarta", label: "Jakarta (WIB)", offset: "UTC+7" },
+      { value: "Asia/Singapore", label: "Singapore (SGT)", offset: "UTC+8" },
+      { value: "Asia/Hong_Kong", label: "Hong Kong (HKT)", offset: "UTC+8" },
+      { value: "Asia/Shanghai", label: "Shanghai (CST)", offset: "UTC+8" },
+      { value: "Asia/Taipei", label: "Taipei (CST)", offset: "UTC+8" },
+      { value: "Asia/Seoul", label: "Seoul (KST)", offset: "UTC+9" },
+      { value: "Asia/Tokyo", label: "Tokyo (JST)", offset: "UTC+9" },
+      { value: "Australia/Sydney", label: "Sydney (AEST)", offset: "UTC+10/11" },
+      { value: "Australia/Melbourne", label: "Melbourne (AEST)", offset: "UTC+10/11" },
+      { value: "Australia/Perth", label: "Perth (AWST)", offset: "UTC+8" },
+      { value: "Pacific/Auckland", label: "Auckland (NZST)", offset: "UTC+12/13" },
+    ],
+  },
+];
+
+// Detect user's timezone
+function detectTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "UTC";
+  }
+}
+
+// Convert local date+time in a specific timezone to UTC ISO string
+function toUTCISOString(
+  date: string,
+  time: string,
+  timezone: string
+): string {
+  // Create a date string that we'll interpret in the given timezone
+  const dateTimeStr = `${date}T${time}:00`;
+
+  // Use Intl to figure out the offset
+  try {
+    // Create a Date object (JS will interpret this as local time)
+    const localDate = new Date(dateTimeStr);
+
+    // Get the offset for the target timezone
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+
+    // Format current time in target timezone to find offset
+    const now = new Date();
+    const utcNow = now.getTime();
+
+    // Get the parts in the target timezone
+    const parts = formatter.formatToParts(now);
+    const tzYear = parseInt(
+      parts.find((p) => p.type === "year")?.value || "0"
+    );
+    const tzMonth = parseInt(
+      parts.find((p) => p.type === "month")?.value || "0"
+    );
+    const tzDay = parseInt(
+      parts.find((p) => p.type === "day")?.value || "0"
+    );
+    const tzHour = parseInt(
+      parts.find((p) => p.type === "hour")?.value || "0"
+    );
+    const tzMinute = parseInt(
+      parts.find((p) => p.type === "minute")?.value || "0"
+    );
+    const tzSecond = parseInt(
+      parts.find((p) => p.type === "second")?.value || "0"
+    );
+
+    // Reconstruct the timezone's current time as a UTC date
+    const tzDate = new Date(
+      Date.UTC(tzYear, tzMonth - 1, tzDay, tzHour, tzMinute, tzSecond)
+    );
+
+    // Offset = tzDate - utcNow
+    const offsetMs = tzDate.getTime() - utcNow;
+
+    // Apply offset to the desired date/time
+    // The user entered dateTimeStr meaning "this time in timezone X"
+    // So UTC = localInterpretation - offset
+    const naiveDate = new Date(dateTimeStr);
+    const utcDate = new Date(naiveDate.getTime() - offsetMs);
+
+    return utcDate.toISOString();
+  } catch {
+    // Fallback: treat as UTC
+    return new Date(`${date}T${time}:00Z`).toISOString();
+  }
+}
+
+// Format a UTC date in a specific timezone for display
+function formatInTimezone(
+  isoDate: string | Date,
+  timezone: string,
+  options?: Intl.DateTimeFormatOptions
+): string {
+  const date = typeof isoDate === "string" ? new Date(isoDate) : isoDate;
+  return date.toLocaleString("en-US", {
+    timeZone: timezone,
+    ...options,
+  });
+}
+
 export function ScheduleF2FDialog({
   open,
   onOpenChange,
@@ -56,6 +215,7 @@ export function ScheduleF2FDialog({
 }: Props) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("10:00");
+  const [timezone, setTimezone] = useState(detectTimezone());
   const [duration, setDuration] = useState("60");
   const [meetingLink, setMeetingLink] = useState("");
   const [interviewType, setInterviewType] = useState("technical");
@@ -70,6 +230,7 @@ export function ScheduleF2FDialog({
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState("Tech Lead");
   const [selectedTeamMember, setSelectedTeamMember] = useState("none");
+  const [tzSearch, setTzSearch] = useState("");
 
   useEffect(() => {
     if (open) fetchTeamMembers();
@@ -112,7 +273,6 @@ export function ScheduleF2FDialog({
       return;
     }
 
-    // Validate email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newEmail.trim())) {
       toast.error("Please enter a valid email");
@@ -157,19 +317,21 @@ export function ScheduleF2FDialog({
 
     setSaving(true);
     try {
-      const scheduledAt = new Date(`${date}T${time || "10:00"}`);
+      // Convert to UTC using the selected timezone
+      const scheduledAtUTC = toUTCISOString(date, time || "10:00", timezone);
 
       const res = await fetch("/api/f2f", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           applicationId,
-          scheduledAt: scheduledAt.toISOString(),
+          scheduledAt: scheduledAtUTC,
           duration: parseInt(duration),
           meetingLink: meetingLink || null,
           interviewType,
           notes: notes || null,
           interviewers,
+          timezone, // Send timezone so emails can show local time
         }),
       });
 
@@ -199,15 +361,35 @@ export function ScheduleF2FDialog({
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minDate = tomorrow.toISOString().split("T")[0];
 
-  // Preview formatted date
-  const previewDate =
+  // Preview: what the selected time looks like in UTC and other timezones
+  const previewUTC =
     date && time
-      ? new Date(`${date}T${time}`).toLocaleDateString("en-US", {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        })
+      ? (() => {
+          try {
+            const utc = toUTCISOString(date, time, timezone);
+            return new Date(utc);
+          } catch {
+            return null;
+          }
+        })()
       : null;
+
+  // Find the selected timezone's display label
+  const selectedTzInfo = TIMEZONE_GROUPS.flatMap((g) => g.zones).find(
+    (z) => z.value === timezone
+  );
+
+  // Filtered timezone list for search
+  const searchLower = tzSearch.toLowerCase();
+  const filteredGroups = TIMEZONE_GROUPS.map((group) => ({
+    ...group,
+    zones: group.zones.filter(
+      (z) =>
+        z.label.toLowerCase().includes(searchLower) ||
+        z.value.toLowerCase().includes(searchLower) ||
+        z.offset.toLowerCase().includes(searchLower)
+    ),
+  })).filter((g) => g.zones.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -248,6 +430,112 @@ export function ScheduleF2FDialog({
             </div>
           </div>
 
+          {/* Timezone Selector */}
+          <div className="space-y-2">
+            <Label className="text-sm flex items-center gap-1">
+              <Globe className="w-4 h-4" /> Timezone
+            </Label>
+            <Select value={timezone} onValueChange={setTimezone}>
+              <SelectTrigger className="h-9">
+                <SelectValue>
+                  {selectedTzInfo
+                    ? `${selectedTzInfo.label} (${selectedTzInfo.offset})`
+                    : timezone}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {/* Search */}
+                <div className="px-2 pb-2 sticky top-0 bg-white z-10">
+                  <Input
+                    placeholder="Search timezone..."
+                    value={tzSearch}
+                    onChange={(e) => setTzSearch(e.target.value)}
+                    className="h-8 text-xs"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+
+                {filteredGroups.map((group) => (
+                  <div key={group.label}>
+                    <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      {group.label}
+                    </div>
+                    {group.zones.map((tz) => (
+                      <SelectItem
+                        key={tz.value}
+                        value={tz.value}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span>{tz.label}</span>
+                          <span className="text-[10px] text-slate-400 ml-2">
+                            {tz.offset}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </div>
+                ))}
+
+                {filteredGroups.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-3">
+                    No matching timezones
+                  </p>
+                )}
+              </SelectContent>
+            </Select>
+
+            {/* UTC preview */}
+            {previewUTC && date && (
+              <div className="bg-slate-50 rounded-lg p-2 text-[11px] text-slate-500 space-y-0.5">
+                <p>
+                  🕐 <strong>Local ({selectedTzInfo?.label || timezone}):</strong>{" "}
+                  {formatInTimezone(previewUTC, timezone, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                </p>
+                <p>
+                  🌍 <strong>UTC:</strong>{" "}
+                  {previewUTC.toUTCString().replace(" GMT", "")}
+                </p>
+                {timezone !== "Asia/Kolkata" && (
+                  <p>
+                    🇮🇳 <strong>IST:</strong>{" "}
+                    {formatInTimezone(previewUTC, "Asia/Kolkata", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: true,
+                    })}
+                  </p>
+                )}
+                {timezone !== "America/New_York" && (
+                  <p>
+                    🇺🇸 <strong>ET:</strong>{" "}
+                    {formatInTimezone(
+                      previewUTC,
+                      "America/New_York",
+                      {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                      }
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Duration & Type */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -261,6 +549,7 @@ export function ScheduleF2FDialog({
                   <SelectItem value="45">45 min</SelectItem>
                   <SelectItem value="60">60 min</SelectItem>
                   <SelectItem value="90">90 min</SelectItem>
+                  <SelectItem value="120">120 min</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -275,14 +564,18 @@ export function ScheduleF2FDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="technical">Technical</SelectItem>
-                  <SelectItem value="behavioral">Behavioral</SelectItem>
+                  <SelectItem value="behavioral">
+                    Behavioral
+                  </SelectItem>
                   <SelectItem value="hiring_manager">
                     Hiring Manager
                   </SelectItem>
                   <SelectItem value="culture_fit">
                     Culture Fit
                   </SelectItem>
-                  <SelectItem value="panel">Panel Interview</SelectItem>
+                  <SelectItem value="panel">
+                    Panel Interview
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -301,16 +594,13 @@ export function ScheduleF2FDialog({
             />
           </div>
 
-          {/* ==========================================
-              INTERVIEWERS SECTION
-              ========================================== */}
+          {/* Interviewers */}
           <div className="space-y-3">
             <Label className="text-sm font-semibold flex items-center gap-2">
               <Users className="w-4 h-4 text-[#0245EF]" />
               Interviewers *
             </Label>
 
-            {/* Added interviewers */}
             {interviewers.length > 0 && (
               <div className="space-y-2">
                 {interviewers.map((person, i) => (
@@ -333,7 +623,8 @@ export function ScheduleF2FDialog({
                           {person.name}
                         </p>
                         <p className="text-xs text-slate-400 flex items-center gap-1">
-                          <Mail className="w-3 h-3" /> {person.email}
+                          <Mail className="w-3 h-3" />{" "}
+                          {person.email}
                         </p>
                       </div>
                       <Badge
@@ -363,9 +654,8 @@ export function ScheduleF2FDialog({
 
             {interviewers.length === 0 && (
               <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg">
-                ⚠️ Add at least one interviewer. All interviewers will
-                receive an email with calendar invite and candidate
-                resume.
+                ⚠️ Add at least one interviewer. All will receive
+                email with calendar invite and candidate resume.
               </p>
             )}
 
@@ -390,10 +680,7 @@ export function ScheduleF2FDialog({
                         (i) => i.id === m.id
                       )}
                     >
-                      {m.first_name} {m.last_name}
-                      <span className="text-slate-400 ml-1">
-                        ({m.email})
-                      </span>
+                      {m.first_name} {m.last_name} ({m.email})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -409,7 +696,7 @@ export function ScheduleF2FDialog({
               </Button>
             </div>
 
-            {/* Add external person */}
+            {/* Add external */}
             {!showAddForm ? (
               <Button
                 variant="ghost"
@@ -418,7 +705,7 @@ export function ScheduleF2FDialog({
                 onClick={() => setShowAddForm(true)}
               >
                 <UserPlus className="w-3 h-3 mr-1" />
-                Add external person (tech lead, manager, etc.)
+                Add external person
               </Button>
             ) : (
               <div className="bg-slate-50 rounded-lg p-3 space-y-2">
@@ -443,7 +730,7 @@ export function ScheduleF2FDialog({
                 <Input
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value)}
-                  placeholder="Role (e.g. Tech Lead, VP Engineering)"
+                  placeholder="Role (e.g. Tech Lead)"
                   className="h-8 text-sm"
                 />
                 <p className="text-[10px] text-slate-400">
@@ -479,7 +766,7 @@ export function ScheduleF2FDialog({
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Interview agenda, preparation notes, areas to evaluate..."
+              placeholder="Interview agenda, preparation notes..."
               rows={2}
               className="text-sm"
             />
@@ -489,7 +776,23 @@ export function ScheduleF2FDialog({
           {interviewers.length > 0 && date && (
             <div className="bg-[#EBF0FF] rounded-lg p-3 text-xs text-[#0237BF] space-y-1">
               <p className="font-semibold">Summary</p>
-              <p>📅 {previewDate} at {time || "10:00"}</p>
+              {previewUTC && (
+                <p>
+                  📅{" "}
+                  {formatInTimezone(previewUTC, timezone, {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })}{" "}
+                  at{" "}
+                  {formatInTimezone(previewUTC, timezone, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}{" "}
+                  ({selectedTzInfo?.label || timezone})
+                </p>
+              )}
               <p>👤 Candidate: {candidateName}</p>
               <p>
                 👥 Interviewers:{" "}
@@ -500,11 +803,8 @@ export function ScheduleF2FDialog({
               </p>
               {meetingLink && <p>🔗 {meetingLink}</p>}
               <p className="text-[10px] text-[#0245EF]/60 mt-1">
-                📧 All participants will receive email invites with
+                📧 All participants receive email invites with
                 calendar attachments
-                {interviewers.some((i) => !i.isExternal)
-                  ? " and candidate resume"
-                  : ""}
               </p>
             </div>
           )}
