@@ -56,6 +56,9 @@ export async function GET(req: NextRequest) {
 // ==========================================
 // POST — Schedule F2F interview
 // ==========================================
+// ==========================================
+// POST — Schedule F2F interview
+// ==========================================
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
@@ -89,9 +92,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get application info
+    // Get application + job info
     const application = await queryOne(
-      `SELECT a.*, j.title as job_title, u.company
+      `SELECT a.*, j.title as job_title, j.department, j.description as job_description,
+              u.company, u.first_name as hr_first_name, u.last_name as hr_last_name, u.email as hr_email
        FROM applications a
        JOIN jobs j ON a.job_id = j.id
        LEFT JOIN users u ON j.posted_by = u.id
@@ -100,17 +104,52 @@ export async function POST(req: NextRequest) {
     );
 
     if (!application) {
-      return NextResponse.json(
-        { error: "Application not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
 
-    // Get candidate info
+    // Get candidate info + resume
     const candidate = await queryOne(
-      "SELECT id, email, first_name, last_name FROM users WHERE id = $1",
+      "SELECT id, email, first_name, last_name, resume_url, resume_text, phone FROM users WHERE id = $1",
       [application.candidate_id]
     );
+
+    // Get candidate's resume from application (might have application-specific resume)
+    const appResume = await queryOne(
+      "SELECT resume_url, resume_text, resume_parsed FROM applications WHERE id = $1",
+      [applicationId]
+    );
+
+    const candidateName =
+      `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() ||
+      "Candidate";
+    const candidateEmail = candidate?.email || "";
+    const resumeUrl = appResume?.resume_url || candidate?.resume_url || null;
+    const resumeText = appResume?.resume_text || candidate?.resume_text || null;
+
+    // Parse resume highlights for email
+    let resumeHighlights = "";
+    if (appResume?.resume_parsed) {
+      let parsed = appResume.resume_parsed;
+      try {
+        if (typeof parsed === "string") parsed = JSON.parse(parsed);
+      } catch {}
+
+      if (parsed) {
+        const skills = parsed.matchedSkills || parsed.skills || [];
+        const experience = parsed.experience || parsed.yearsOfExperience || "";
+        const education = parsed.education || "";
+
+        if (skills.length > 0) {
+          resumeHighlights += `\n• Skills: ${skills.slice(0, 10).join(", ")}`;
+        }
+        if (experience) {
+          resumeHighlights += `\n• Experience: ${experience}`;
+        }
+        if (education) {
+          resumeHighlights += `\n• Education: ${education}`;
+        }
+      }
+    }
 
     // Use first interviewer as primary
     const primaryInterviewer = interviewers[0];
@@ -153,16 +192,360 @@ export async function POST(req: NextRequest) {
       [applicationId]
     );
 
+    const scheduledDate = new Date(scheduledAt);
+    const endDate = new Date(
+      scheduledDate.getTime() + (duration || 60) * 60 * 1000
+    );
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const companyName =
+      application.company ||
+      (session.user as any).company ||
+      "the hiring team";
+    const hrName =
+      `${application.hr_first_name || ""} ${application.hr_last_name || ""}`.trim() ||
+      "HR Team";
+
     const interviewerNames = interviewers
       .map((i: any) => i.name)
       .join(", ");
-    const scheduledDate = new Date(scheduledAt);
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    const candidateName =
-      `${candidate?.first_name || ""} ${candidate?.last_name || ""}`.trim() ||
-      "Candidate";
+    // ==========================================
+    // BUILD RICH EMAIL CONTENT
+    // ==========================================
+    const buildInterviewEmailHtml = (params: {
+      recipientName: string;
+      isCandidate: boolean;
+      isExternal: boolean;
+    }) => {
+      const { recipientName, isCandidate, isExternal } = params;
+
+      // Calendar details
+      const dateStr = scheduledDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+      const timeStr = scheduledDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+      const endTimeStr = endDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      // Build resume section for interviewers
+      let resumeSection = "";
+      if (!isCandidate) {
+        resumeSection = `
+          <div style="margin-top: 20px; padding: 16px; background: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0;">
+            <h3 style="margin: 0 0 8px 0; font-size: 14px; color: #334155;">📄 Candidate Profile: ${candidateName}</h3>
+            <p style="margin: 4px 0; font-size: 13px; color: #64748B;">Email: ${candidateEmail}</p>
+            ${candidate?.phone ? `<p style="margin: 4px 0; font-size: 13px; color: #64748B;">Phone: ${candidate.phone}</p>` : ""}
+            ${
+              resumeHighlights
+                ? `<div style="margin-top: 8px; padding: 10px; background: white; border-radius: 6px; border: 1px solid #E2E8F0;">
+                     <p style="margin: 0; font-size: 12px; font-weight: 600; color: #475569;">Key Highlights:</p>
+                     <pre style="margin: 4px 0 0 0; font-size: 12px; color: #64748B; white-space: pre-wrap; font-family: inherit;">${resumeHighlights}</pre>
+                   </div>`
+                : ""
+            }
+            ${
+              resumeUrl
+                ? `<p style="margin-top: 10px;"><a href="${resumeUrl}" style="color: #0245EF; text-decoration: none; font-size: 13px;">📎 Download Full Resume</a></p>`
+                : ""
+            }
+            ${
+              resumeText && !resumeUrl
+                ? `<details style="margin-top: 10px;">
+                     <summary style="cursor: pointer; color: #0245EF; font-size: 13px;">📄 View Resume Text</summary>
+                     <pre style="margin-top: 8px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #E2E8F0; font-size: 11px; color: #475569; white-space: pre-wrap; max-height: 400px; overflow-y: auto; font-family: inherit;">${resumeText.substring(0, 3000)}${resumeText.length > 3000 ? "\n\n... (truncated)" : ""}</pre>
+                   </details>`
+                : ""
+            }
+          </div>
+        `;
+      }
+
+      // Job context for interviewers
+      let jobSection = "";
+      if (!isCandidate) {
+        jobSection = `
+          <div style="margin-top: 16px; padding: 12px; background: #EBF0FF; border-radius: 8px; border: 1px solid #A3BDFF;">
+            <p style="margin: 0; font-size: 13px; color: #0245EF; font-weight: 600;">💼 Position: ${application.job_title}</p>
+            ${application.department ? `<p style="margin: 4px 0 0; font-size: 12px; color: #4775FF;">Department: ${application.department}</p>` : ""}
+          </div>
+        `;
+      }
+
+      return `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; color: #334155;">
+          <div style="padding: 24px; background: linear-gradient(135deg, #0245EF, #0237BF); border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 20px; color: white;">📅 Interview ${isCandidate ? "Scheduled" : "Assignment"}</h1>
+            <p style="margin: 4px 0 0; font-size: 14px; color: rgba(255,255,255,0.8);">${companyName}</p>
+          </div>
+
+          <div style="padding: 24px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
+            <p style="margin: 0 0 16px; font-size: 15px; color: #334155;">Hi ${recipientName},</p>
+
+            <p style="margin: 0 0 20px; font-size: 14px; color: #64748B;">
+              ${
+                isCandidate
+                  ? `Your <strong>${interviewType || "technical"}</strong> interview for <strong>${application.job_title}</strong> has been scheduled.`
+                  : `You've been assigned to interview <strong>${candidateName}</strong> for the <strong>${application.job_title}</strong> position.`
+              }
+            </p>
+
+            <!-- Calendar Card -->
+            <div style="padding: 16px; background: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0; margin-bottom: 16px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94A3B8; width: 100px;">📆 Date</td>
+                  <td style="padding: 6px 0; font-size: 13px; color: #334155; font-weight: 600;">${dateStr}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94A3B8;">🕐 Time</td>
+                  <td style="padding: 6px 0; font-size: 13px; color: #334155; font-weight: 600;">${timeStr} — ${endTimeStr} (${duration || 60} min)</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94A3B8;">🎯 Type</td>
+                  <td style="padding: 6px 0; font-size: 13px; color: #334155; text-transform: capitalize;">${interviewType || "Technical"}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94A3B8;">👥 Panel</td>
+                  <td style="padding: 6px 0; font-size: 13px; color: #334155;">${interviewerNames}</td>
+                </tr>
+                ${
+                  meetingLink
+                    ? `<tr>
+                        <td style="padding: 6px 0; font-size: 13px; color: #94A3B8;">🔗 Meeting</td>
+                        <td style="padding: 6px 0; font-size: 13px;"><a href="${meetingLink}" style="color: #0245EF; text-decoration: none; font-weight: 600;">Join Meeting</a></td>
+                      </tr>`
+                    : ""
+                }
+              </table>
+            </div>
+
+            ${
+              meetingLink
+                ? `<a href="${meetingLink}" style="display: inline-block; padding: 12px 24px; background: #0245EF; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; margin-bottom: 16px;">🔗 Join Meeting</a>`
+                : ""
+            }
+
+            ${notes ? `<div style="margin: 16px 0; padding: 12px; background: #FFFBEB; border-radius: 8px; border: 1px solid #FDE68A;"><p style="margin: 0; font-size: 13px; color: #92400E;">📝 <strong>Notes:</strong> ${notes}</p></div>` : ""}
+
+            ${jobSection}
+            ${resumeSection}
+
+            <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 20px 0;" />
+
+            <p style="margin: 0; font-size: 12px; color: #94A3B8;">
+              ${
+                isCandidate
+                  ? `Track your application at <a href="${appUrl}/applications" style="color: #0245EF;">your dashboard</a>.`
+                  : isExternal
+                    ? `This interview was scheduled by ${hrName} at ${companyName}.`
+                    : `View candidate details on your <a href="${appUrl}/hr/dashboard" style="color: #0245EF;">HR dashboard</a>.`
+              }
+            </p>
+          </div>
+        </div>
+      `;
+    };
+
+    // ==========================================
+    // Generate ICS calendar attachment
+    // ==========================================
+    const generateICS = (params: {
+      summary: string;
+      description: string;
+      location: string;
+      startDate: Date;
+      endDate: Date;
+      organizerEmail: string;
+      attendees: { email: string; name: string }[];
+    }) => {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const formatDate = (d: Date) =>
+        `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+
+      const uid = `${interview.id}@hirasys.ai`;
+      const now = formatDate(new Date());
+      const start = formatDate(params.startDate);
+      const end = formatDate(params.endDate);
+
+      const attendeeLines = params.attendees
+        .map(
+          (a) =>
+            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;CN=${a.name};X-NUM-GUESTS=0:mailto:${a.email}`
+        )
+        .join("\r\n");
+
+      // Escape special chars for ICS
+      const escapeICS = (text: string) =>
+        text
+          .replace(/\\/g, "\\\\")
+          .replace(/;/g, "\\;")
+          .replace(/,/g, "\\,")
+          .replace(/\n/g, "\\n");
+
+      return [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Hirasys//Interview//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:REQUEST",
+        "BEGIN:VEVENT",
+        `UID:${uid}`,
+        `DTSTAMP:${now}`,
+        `DTSTART:${start}`,
+        `DTEND:${end}`,
+        `SUMMARY:${escapeICS(params.summary)}`,
+        `DESCRIPTION:${escapeICS(params.description)}`,
+        `LOCATION:${escapeICS(params.location)}`,
+        `ORGANIZER;CN=${companyName}:mailto:${params.organizerEmail}`,
+        attendeeLines,
+        "STATUS:CONFIRMED",
+        `SEQUENCE:0`,
+        "BEGIN:VALARM",
+        "TRIGGER:-PT15M",
+        "ACTION:DISPLAY",
+        "DESCRIPTION:Interview in 15 minutes",
+        "END:VALARM",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n");
+    };
+
+    // Build attendee list for ICS
+    const allAttendees = [
+      { email: candidateEmail, name: candidateName },
+      ...interviewers.map((i: any) => ({
+        email: i.email || `${i.name.toLowerCase().replace(/\s+/g, ".")}@unknown.com`,
+        name: i.name,
+      })),
+    ];
+
+    const icsContent = generateICS({
+      summary: `Interview: ${candidateName} — ${application.job_title}`,
+      description: `${interviewType || "Technical"} interview for ${application.job_title} at ${companyName}.\n\nCandidate: ${candidateName} (${candidateEmail})\nInterviewers: ${interviewerNames}\n\n${notes || ""}${resumeHighlights ? `\n\nCandidate Highlights:${resumeHighlights}` : ""}${resumeUrl ? `\n\nResume: ${resumeUrl}` : ""}`,
+      location: meetingLink || "To be confirmed",
+      startDate: scheduledDate,
+      endDate,
+      organizerEmail:
+        application.hr_email ||
+        (session.user as any).email ||
+        "noreply@hirasys.ai",
+      attendees: allAttendees,
+    });
+
+    // ==========================================
+    // SEND EMAILS TO ALL PARTICIPANTS
+    // ==========================================
+    const sendInterviewEmail = async (params: {
+      to: string;
+      recipientName: string;
+      isCandidate: boolean;
+      isExternal: boolean;
+    }) => {
+      try {
+        const { Resend } = await import("resend");
+        const resend = process.env.RESEND_API_KEY
+          ? new Resend(process.env.RESEND_API_KEY)
+          : null;
+
+        if (!resend) {
+          console.warn("No RESEND_API_KEY — skipping email to", params.to);
+          return;
+        }
+
+        const subject = params.isCandidate
+          ? `Interview Scheduled — ${application.job_title} at ${companyName}`
+          : `Interview Assignment: ${candidateName} — ${application.job_title}`;
+
+        await resend.emails.send({
+          from:
+            process.env.FROM_EMAIL || "Hirasys <noreply@hirasys.ai>",
+          to: params.to,
+          subject,
+          html: buildInterviewEmailHtml({
+            recipientName: params.recipientName,
+            isCandidate: params.isCandidate,
+            isExternal: params.isExternal,
+          }),
+          attachments: [
+            {
+              filename: "interview.ics",
+              content: Buffer.from(icsContent).toString("base64"),
+              contentType: "text/calendar; method=REQUEST",
+            },
+          ],
+        });
+
+        console.log(`✅ Interview email sent to ${params.to}`);
+      } catch (err) {
+        console.error(`❌ Email to ${params.to} failed:`, err);
+      }
+    };
+
+    // 1. Email to candidate
+    if (candidateEmail) {
+      await sendInterviewEmail({
+        to: candidateEmail,
+        recipientName: candidate?.first_name || "there",
+        isCandidate: true,
+        isExternal: false,
+      });
+    }
+
+    // 2. Email to EVERY interviewer (system users AND external)
+    for (const interviewer of interviewers) {
+      let interviewerEmail = interviewer.email;
+      let interviewerFirstName = interviewer.name?.split(" ")[0] || interviewer.name;
+      let isSystemUser = false;
+
+      // If interviewer has an ID, they're a system user — fetch their email
+      if (interviewer.id) {
+        const systemUser = await queryOne(
+          "SELECT email, first_name FROM users WHERE id = $1",
+          [interviewer.id]
+        );
+        if (systemUser) {
+          interviewerEmail = systemUser.email;
+          interviewerFirstName = systemUser.first_name || interviewerFirstName;
+          isSystemUser = true;
+        }
+      }
+
+      if (interviewerEmail) {
+        await sendInterviewEmail({
+          to: interviewerEmail,
+          recipientName: interviewerFirstName,
+          isCandidate: false,
+          isExternal: !isSystemUser,
+        });
+      } else {
+        console.warn(
+          `⚠️ No email for interviewer: ${interviewer.name} — skipping`
+        );
+      }
+
+      // In-app notification for system users
+      if (interviewer.id) {
+        await query(
+          `INSERT INTO notifications (user_id, type, title, message, link)
+           VALUES ($1, 'INTERVIEW_SCHEDULED', '📅 Interview Assigned', $2, '/hr/dashboard')`,
+          [
+            interviewer.id,
+            `You've been assigned to interview ${candidateName} for ${application.job_title} on ${scheduledDate.toLocaleDateString()} at ${scheduledDate.toLocaleTimeString()}.`,
+          ]
+        );
+      }
+    }
 
     // In-app notification for candidate
     await query(
@@ -174,96 +557,7 @@ export async function POST(req: NextRequest) {
       ]
     );
 
-    // Send email to candidate
-    if (candidate?.email) {
-      try {
-        const { sendInterviewScheduled } = await import("@/lib/email");
-        await sendInterviewScheduled({
-          to: candidate.email,
-          candidateName: candidate.first_name || "there",
-          jobTitle: application.job_title,
-          companyName:
-            application.company ||
-            (session.user as any).company ||
-            "",
-          date: scheduledDate.toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          }),
-          time: scheduledDate.toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          }),
-          duration: duration || 60,
-          interviewType: interviewType || "technical",
-          meetingLink: meetingLink || undefined,
-          interviewers: interviewers.map((i: any) => i.name),
-          notes: notes || undefined,
-        });
-      } catch (emailErr) {
-        console.error("Interview email to candidate failed:", emailErr);
-      }
-    }
-
-    // Notify each interviewer who is in the system
-    for (const interviewer of interviewers) {
-      if (interviewer.id) {
-        // In-app notification
-        await query(
-          `INSERT INTO notifications (user_id, type, title, message, link)
-           VALUES ($1, 'INTERVIEW_SCHEDULED', '📅 Interview Assigned', $2, '/hr/dashboard')`,
-          [
-            interviewer.id,
-            `You've been assigned to interview ${candidateName} for ${application.job_title} on ${scheduledDate.toLocaleDateString()} at ${scheduledDate.toLocaleTimeString()}.`,
-          ]
-        );
-
-        // Email to interviewer
-        try {
-          const interviewerUser = await queryOne(
-            "SELECT email, first_name FROM users WHERE id = $1",
-            [interviewer.id]
-          );
-          if (interviewerUser?.email) {
-            const { sendInterviewScheduled } = await import(
-              "@/lib/email"
-            );
-            await sendInterviewScheduled({
-              to: interviewerUser.email,
-              candidateName,
-              jobTitle: application.job_title,
-              companyName: application.company || "",
-              date: scheduledDate.toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              }),
-              time: scheduledDate.toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: true,
-              }),
-              duration: duration || 60,
-              interviewType: interviewType || "technical",
-              meetingLink: meetingLink || undefined,
-              interviewers: interviewers.map((i: any) => i.name),
-              notes: notes || undefined,
-            });
-          }
-        } catch (emailErr) {
-          console.error(
-            `Interview email to interviewer ${interviewer.name} failed:`,
-            emailErr
-          );
-        }
-      }
-    }
-
-    // ✅ AUDIT — after successful scheduling
+    // ✅ AUDIT
     await logAudit({
       userId,
       action: "F2F_SCHEDULED",
@@ -273,16 +567,18 @@ export async function POST(req: NextRequest) {
       details: {
         applicationId,
         candidateName,
-        candidateEmail: candidate?.email,
+        candidateEmail,
         jobTitle: application.job_title,
         scheduledAt,
         duration: duration || 60,
         interviewType: interviewType || "technical",
         interviewers: interviewers.map((i: any) => ({
           name: i.name,
+          email: i.email || "system user",
           role: i.role,
         })),
         meetingLink: meetingLink ? "provided" : "none",
+        resumeAttached: !!(resumeUrl || resumeText),
       },
       req,
     });

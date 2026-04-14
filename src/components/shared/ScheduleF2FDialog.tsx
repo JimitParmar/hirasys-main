@@ -7,12 +7,28 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { Calendar, Loader2, Video, UserPlus, X, Users, Mail } from "lucide-react";
+import {
+  Calendar,
+  Loader2,
+  Video,
+  UserPlus,
+  X,
+  Users,
+  Mail,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -31,7 +47,13 @@ interface Interviewer {
   isExternal: boolean;
 }
 
-export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidateName, onScheduled }: Props) {
+export function ScheduleF2FDialog({
+  open,
+  onOpenChange,
+  applicationId,
+  candidateName,
+  onScheduled,
+}: Props) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("10:00");
   const [duration, setDuration] = useState("60");
@@ -49,7 +71,6 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
   const [newRole, setNewRole] = useState("Tech Lead");
   const [selectedTeamMember, setSelectedTeamMember] = useState("none");
 
-  // Fetch team members (HR and Interviewers from the system)
   useEffect(() => {
     if (open) fetchTeamMembers();
   }, [open]);
@@ -67,7 +88,6 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
     const member = teamMembers.find((m) => m.id === selectedTeamMember);
     if (!member) return;
 
-    // Check if already added
     if (interviewers.some((i) => i.id === member.id)) {
       toast.error("Already added");
       return;
@@ -89,6 +109,13 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
   const addExternalPerson = () => {
     if (!newName.trim() || !newEmail.trim()) {
       toast.error("Name and email required");
+      return;
+    }
+
+    // Validate email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail.trim())) {
+      toast.error("Please enter a valid email");
       return;
     }
 
@@ -149,7 +176,9 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      toast.success(`Interview scheduled with ${interviewers.length} interviewer${interviewers.length > 1 ? "s" : ""}! 📅`);
+      toast.success(
+        `Interview scheduled with ${interviewers.length} interviewer${interviewers.length > 1 ? "s" : ""}! 📅`
+      );
       onOpenChange(false);
       onScheduled();
 
@@ -170,6 +199,16 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minDate = tomorrow.toISOString().split("T")[0];
 
+  // Preview formatted date
+  const previewDate =
+    date && time
+      ? new Date(`${date}T${time}`).toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        })
+      : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
@@ -182,7 +221,8 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
 
         <div className="space-y-5 py-2">
           <p className="text-sm text-slate-500">
-            Scheduling interview for <strong>{candidateName}</strong>
+            Scheduling interview for{" "}
+            <strong>{candidateName}</strong>
           </p>
 
           {/* Date & Time */}
@@ -213,7 +253,9 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
             <div className="space-y-2">
               <Label className="text-sm">Duration</Label>
               <Select value={duration} onValueChange={setDuration}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="30">30 min</SelectItem>
                   <SelectItem value="45">45 min</SelectItem>
@@ -224,13 +266,22 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
             </div>
             <div className="space-y-2">
               <Label className="text-sm">Type</Label>
-              <Select value={interviewType} onValueChange={setInterviewType}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <Select
+                value={interviewType}
+                onValueChange={setInterviewType}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="technical">Technical</SelectItem>
                   <SelectItem value="behavioral">Behavioral</SelectItem>
-                  <SelectItem value="hiring_manager">Hiring Manager</SelectItem>
-                  <SelectItem value="culture_fit">Culture Fit</SelectItem>
+                  <SelectItem value="hiring_manager">
+                    Hiring Manager
+                  </SelectItem>
+                  <SelectItem value="culture_fit">
+                    Culture Fit
+                  </SelectItem>
                   <SelectItem value="panel">Panel Interview</SelectItem>
                 </SelectContent>
               </Select>
@@ -270,20 +321,31 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-[#D1DEFF] flex items-center justify-center">
                         <span className="text-xs font-semibold text-[#0245EF]">
-                          {person.name.split(" ").map((n) => n[0]).join("").substring(0, 2)}
+                          {person.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .substring(0, 2)}
                         </span>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-700">{person.name}</p>
+                        <p className="text-sm font-medium text-slate-700">
+                          {person.name}
+                        </p>
                         <p className="text-xs text-slate-400 flex items-center gap-1">
                           <Mail className="w-3 h-3" /> {person.email}
                         </p>
                       </div>
-                      <Badge variant="outline" className="text-[10px] ml-2">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] ml-2"
+                      >
                         {person.role}
                       </Badge>
                       {person.isExternal && (
-                        <Badge className="text-[10px] bg-amber-100 text-amber-700">External</Badge>
+                        <Badge className="text-[10px] bg-amber-100 text-amber-700">
+                          External
+                        </Badge>
                       )}
                     </div>
                     <Button
@@ -301,26 +363,37 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
 
             {interviewers.length === 0 && (
               <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg">
-                ⚠️ Add at least one interviewer
+                ⚠️ Add at least one interviewer. All interviewers will
+                receive an email with calendar invite and candidate
+                resume.
               </p>
             )}
 
             {/* Add from team */}
             <div className="flex gap-2">
-              <Select value={selectedTeamMember} onValueChange={setSelectedTeamMember}>
+              <Select
+                value={selectedTeamMember}
+                onValueChange={setSelectedTeamMember}
+              >
                 <SelectTrigger className="h-9 flex-1">
                   <SelectValue placeholder="Add team member..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none" disabled>Select team member</SelectItem>
+                  <SelectItem value="none" disabled>
+                    Select team member
+                  </SelectItem>
                   {teamMembers.map((m) => (
                     <SelectItem
                       key={m.id}
                       value={m.id}
-                      disabled={interviewers.some((i) => i.id === m.id)}
+                      disabled={interviewers.some(
+                        (i) => i.id === m.id
+                      )}
                     >
                       {m.first_name} {m.last_name}
-                      <span className="text-slate-400 ml-1">({m.email})</span>
+                      <span className="text-slate-400 ml-1">
+                        ({m.email})
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -349,7 +422,9 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
               </Button>
             ) : (
               <div className="bg-slate-50 rounded-lg p-3 space-y-2">
-                <p className="text-xs font-medium text-slate-600">Add External Interviewer</p>
+                <p className="text-xs font-medium text-slate-600">
+                  Add External Interviewer
+                </p>
                 <div className="grid grid-cols-2 gap-2">
                   <Input
                     value={newName}
@@ -360,7 +435,7 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
                   <Input
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="Email"
+                    placeholder="email@company.com"
                     type="email"
                     className="h-8 text-sm"
                   />
@@ -371,6 +446,10 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
                   placeholder="Role (e.g. Tech Lead, VP Engineering)"
                   className="h-8 text-sm"
                 />
+                <p className="text-[10px] text-slate-400">
+                  📧 They&apos;ll receive an email with calendar
+                  invite, meeting link, and candidate resume.
+                </p>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -394,7 +473,9 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
 
           {/* Notes */}
           <div className="space-y-2">
-            <Label className="text-sm">Notes for everyone (optional)</Label>
+            <Label className="text-sm">
+              Notes for everyone (optional)
+            </Label>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -408,20 +489,39 @@ export function ScheduleF2FDialog({ open, onOpenChange, applicationId, candidate
           {interviewers.length > 0 && date && (
             <div className="bg-[#EBF0FF] rounded-lg p-3 text-xs text-[#0237BF] space-y-1">
               <p className="font-semibold">Summary</p>
-              <p>📅 {new Date(`${date}T${time || "10:00"}`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at {time || "10:00"}</p>
+              <p>📅 {previewDate} at {time || "10:00"}</p>
               <p>👤 Candidate: {candidateName}</p>
-              <p>👥 Interviewers: {interviewers.map((i) => i.name).join(", ")}</p>
-              <p>⏱ {duration} min • {interviewType}</p>
+              <p>
+                👥 Interviewers:{" "}
+                {interviewers.map((i) => i.name).join(", ")}
+              </p>
+              <p>
+                ⏱ {duration} min • {interviewType}
+              </p>
               {meetingLink && <p>🔗 {meetingLink}</p>}
+              <p className="text-[10px] text-[#0245EF]/60 mt-1">
+                📧 All participants will receive email invites with
+                calendar attachments
+                {interviewers.some((i) => !i.isExternal)
+                  ? " and candidate resume"
+                  : ""}
+              </p>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleSchedule}
-            disabled={saving || !date || interviewers.length === 0}
+            disabled={
+              saving || !date || interviewers.length === 0
+            }
             className="bg-[#0245EF] hover:bg-[#0237BF]"
           >
             {saving ? (
