@@ -10,7 +10,7 @@ import { tmpdir } from "os";
 
 const execAsync = promisify(exec);
 const TEMP_DIR = join(tmpdir(), ".tmp-exec");
-const TIMEOUT = 15000; // 15 seconds
+const TIMEOUT = 15000;
 
 export async function POST(req: NextRequest) {
   try {
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 }
 
 // ==========================================
-// SQL — Execute against a temporary in-memory database
+// SQL
 // ==========================================
 async function executeSQL(
   code: string,
@@ -88,12 +88,9 @@ async function executeSQL(
   try {
     mkdirSync(workDir, { recursive: true });
 
-    // Input contains the setup SQL (CREATE TABLE, INSERT) and expected format
-    // Code is the candidate's query
     let setupSQL = "";
     const candidateQuery = code.trim();
 
-    // Parse input — it contains table setup
     if (input) {
       try {
         const parsed =
@@ -106,24 +103,17 @@ async function executeSQL(
       }
     }
 
-    // Use Node.js with better-sqlite3 for in-memory execution
     const sqlScript = `
 const Database = require('better-sqlite3');
 const db = new Database(':memory:');
 
 try {
-  // Setup tables
   const setupStatements = ${JSON.stringify(setupSQL)}.split(';').filter(s => s.trim());
   for (const stmt of setupStatements) {
-    if (stmt.trim()) {
-      db.exec(stmt.trim());
-    }
+    if (stmt.trim()) db.exec(stmt.trim());
   }
 
-  // Run candidate's query
   const query = ${JSON.stringify(candidateQuery)}.trim().replace(/;$/, '');
-
-  // Detect if it's a SELECT or modification
   const isSelect = query.toUpperCase().trimStart().startsWith('SELECT');
   const isShow = query.toUpperCase().trimStart().startsWith('SHOW');
 
@@ -132,7 +122,6 @@ try {
     if (rows.length === 0) {
       console.log('(empty result set)');
     } else {
-      // Print as table
       const cols = Object.keys(rows[0]);
       console.log(cols.join('|'));
       for (const row of rows) {
@@ -174,7 +163,6 @@ try {
       version: `SQL (${dialect})`,
     };
   } catch (error: any) {
-    // If better-sqlite3 is not available, fall back to pg
     if (
       error.message?.includes("better-sqlite3") ||
       error.message?.includes("Cannot find module")
@@ -187,9 +175,7 @@ try {
       stdout: error.stdout?.trim() || "",
       stderr: isTimeout
         ? "⏰ Time Limit Exceeded"
-        : formatError(
-            error.stderr || error.message || "SQL execution failed"
-          ),
+        : formatError(error.stderr || error.message || "SQL execution failed"),
       exitCode: error.code || 1,
       executionTime: 0,
       version: `SQL (${dialect})`,
@@ -201,18 +187,16 @@ try {
   }
 }
 
-// Fallback: Use the existing PostgreSQL connection
+// SQL Fallback — PostgreSQL
 async function executeSQLWithPg(
   code: string,
   input: string,
   dialect: string
 ): Promise<ExecutionResult> {
   try {
-    // Dynamic import to avoid issues if pg isn't available
     const pg = await import("pg");
     const { Pool } = pg;
 
-    // Create a temporary schema for isolation
     const schemaName = `test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const pool = new Pool({
@@ -221,11 +205,9 @@ async function executeSQLWithPg(
     });
 
     try {
-      // Create isolated schema
       await pool.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
       await pool.query(`SET search_path TO "${schemaName}"`);
 
-      // Run setup SQL
       if (input) {
         let setupSQL = input;
         try {
@@ -233,19 +215,14 @@ async function executeSQLWithPg(
           setupSQL = parsed.setup || parsed.schema || input;
         } catch {}
 
-        const statements = setupSQL
-          .split(";")
-          .filter((s: string) => s.trim());
+        const statements = setupSQL.split(";").filter((s: string) => s.trim());
         for (const stmt of statements) {
           if (stmt.trim()) {
-            await pool.query(
-              `SET search_path TO "${schemaName}"; ${stmt.trim()}`
-            );
+            await pool.query(`SET search_path TO "${schemaName}"; ${stmt.trim()}`);
           }
         }
       }
 
-      // Run candidate query
       const startTime = Date.now();
       const result = await pool.query(
         `SET search_path TO "${schemaName}"; ${code.trim().replace(/;$/, "")}`
@@ -271,10 +248,7 @@ async function executeSQLWithPg(
         output = "(empty result set)";
       }
 
-      // Cleanup
-      await pool.query(
-        `DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`
-      );
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
       await pool.end();
 
       return {
@@ -285,11 +259,8 @@ async function executeSQLWithPg(
         version: "PostgreSQL (live)",
       };
     } catch (err: any) {
-      // Cleanup on error
       try {
-        await pool.query(
-          `DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`
-        );
+        await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
         await pool.end();
       } catch {}
       throw err;
@@ -297,9 +268,7 @@ async function executeSQLWithPg(
   } catch (error: any) {
     return {
       stdout: "",
-      stderr: formatError(
-        error.message || "SQL execution failed"
-      ),
+      stderr: formatError(error.message || "SQL execution failed"),
       exitCode: 1,
       executionTime: 0,
       version: `SQL (${dialect})`,
@@ -308,7 +277,7 @@ async function executeSQLWithPg(
 }
 
 // ==========================================
-// JAVASCRIPT — Using Node.js directly
+// JAVASCRIPT
 // ==========================================
 async function executeJavaScript(
   code: string,
@@ -319,10 +288,8 @@ async function executeJavaScript(
 
   try {
     mkdirSync(workDir, { recursive: true });
-
     writeFileSync(join(workDir, "input.txt"), input);
 
-    // Smart wrapper: auto-parse JSON, handle all input types
     const wrappedCode = `
 const __fs = require('fs');
 const __path = require('path');
@@ -330,35 +297,120 @@ const __path = require('path');
 // Read raw input
 const __rawInput = __fs.readFileSync(__path.join(__dirname, 'input.txt'), 'utf8').trim();
 
-// Smart parse: try JSON first, then use as string
+// Smart parse: try JSON first, then number, then string
 let __input;
 try {
   __input = JSON.parse(__rawInput);
 } catch {
-  // Not JSON — check if it's a number
   if (!isNaN(__rawInput) && __rawInput !== '') {
     __input = Number(__rawInput);
   } else {
-    // Keep as string
     __input = __rawInput;
   }
 }
 
+// ==========================================
 // User's code
+// ==========================================
 ${code}
 
-// Try to call common function names and print result
+// ==========================================
+// Auto-detect what to run
+// ==========================================
 try {
   let __result;
-  if (typeof solve === 'function') {
-    __result = solve(__input);
-  } else if (typeof main === 'function') {
-    __result = main(__input);
-  } else if (typeof solution === 'function') {
-    __result = solution(__input);
+  let __found = false;
+
+  // 1. Try common function names
+  const __funcNames = ['solve', 'main', 'solution', 'run', 'execute'];
+  for (const __fn of __funcNames) {
+    try {
+      const __func = eval(__fn);
+      if (typeof __func === 'function') {
+        __result = __func(__input);
+        __found = true;
+        break;
+      }
+    } catch {}
   }
+
+  // 2. If no function found, look for classes
+  if (!__found) {
+    const __builtins = new Set([
+      'Object', 'Array', 'String', 'Number', 'Boolean', 'Function',
+      'RegExp', 'Error', 'Promise', 'Map', 'Set', 'WeakMap', 'WeakSet',
+      'Symbol', 'Buffer', 'Proxy', 'Date', 'Math', 'JSON', 'Intl',
+      'Int8Array', 'Uint8Array', 'Float32Array', 'Float64Array',
+      'ArrayBuffer', 'SharedArrayBuffer', 'DataView', 'URL',
+      'TextEncoder', 'TextDecoder', 'AbortController', 'Event',
+      'EventTarget', 'MessageChannel', 'MessagePort',
+    ]);
+
+    // Scan for user-defined classes
+    const __possibleClasses = [];
+    for (const __key of Object.getOwnPropertyNames(global)) {
+      try {
+        const __val = global[__key];
+        if (
+          typeof __val === 'function' &&
+          __val.prototype &&
+          __val.prototype.constructor === __val &&
+          /^[A-Z]/.test(__key) &&
+          !__builtins.has(__key)
+        ) {
+          __possibleClasses.push({ name: __key, cls: __val });
+        }
+      } catch {}
+    }
+
+    if (__possibleClasses.length > 0) {
+      const { name: __clsName, cls: __Cls } = __possibleClasses[0];
+
+      // Try to create instance
+      let __instance = null;
+      try {
+        if (typeof __input === 'object' && __input !== null && !Array.isArray(__input)) {
+          __instance = new __Cls(__input);
+        } else {
+          __instance = new __Cls();
+        }
+      } catch {
+        try { __instance = new __Cls({}); } catch {
+          try { __instance = new __Cls(); } catch {}
+        }
+      }
+
+      if (__instance) {
+        // Try to find a callable method
+        const __methods = ['solve', 'run', 'execute', 'test', 'process', 'call', 'handle'];
+        for (const __m of __methods) {
+          if (typeof __instance[__m] === 'function') {
+            __result = __instance[__m](__input);
+            __found = true;
+            break;
+          }
+        }
+
+        if (!__found) {
+          // No known method — print class info so candidate gets feedback
+          const __ownMethods = Object.getOwnPropertyNames(__Cls.prototype)
+            .filter(m => m !== 'constructor' && typeof __instance[m] === 'function');
+          console.log('Class ' + __clsName + ' found with methods: ' + __ownMethods.join(', '));
+          console.log('Add a solve(input) method or export a solve() function.');
+          __found = true;
+        }
+      } else {
+        console.log('Class ' + __clsName + ' found but could not be instantiated.');
+        __found = true;
+      }
+    }
+  }
+
+  // 3. Print result
   if (__result !== undefined && __result !== null) {
     if (typeof __result === 'object') {
+      console.log(JSON.stringify(__result));
+    } else if (typeof __result === 'boolean') {
       console.log(JSON.stringify(__result));
     } else {
       console.log(String(__result));
@@ -391,14 +443,11 @@ try {
     };
   } catch (error: any) {
     const isTimeout = error.killed || error.signal === "SIGTERM";
-
     return {
       stdout: error.stdout?.trim() || "",
       stderr: isTimeout
         ? "⏰ Time Limit Exceeded (15s)"
-        : formatError(
-            error.stderr || error.message || "Execution failed"
-          ),
+        : formatError(error.stderr || error.message || "Execution failed"),
       exitCode: error.code || 1,
       executionTime: 0,
       version: "Node.js " + process.version,
@@ -411,7 +460,7 @@ try {
 }
 
 // ==========================================
-// PYTHON — Using system Python
+// PYTHON
 // ==========================================
 async function executePython(
   code: string,
@@ -422,20 +471,19 @@ async function executePython(
 
   try {
     mkdirSync(workDir, { recursive: true });
-
     writeFileSync(join(workDir, "input.txt"), input);
 
-    // Smart wrapper: auto-parse JSON
     const wrappedCode = `
 import sys
 import os
 import json
+import inspect
 
 # Read raw input
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'input.txt'), 'r') as f:
     __raw_input = f.read().strip()
 
-# Smart parse: try JSON first, then number, then string
+# Smart parse
 try:
     __input = json.loads(__raw_input)
 except (json.JSONDecodeError, ValueError):
@@ -444,18 +492,88 @@ except (json.JSONDecodeError, ValueError):
     except ValueError:
         __input = __raw_input
 
+# ==========================================
 # User's code
+# ==========================================
 ${code}
 
-# Try to call common function names
+# ==========================================
+# Auto-detect what to run
+# ==========================================
 try:
     __result = None
-    if 'solve' in dir():
-        __result = solve(__input)
-    elif 'main' in dir():
-        __result = main(__input)
-    elif 'solution' in dir():
-        __result = solution(__input)
+    __found = False
+
+    # 1. Try common function names
+    for __fname in ['solve', 'main', 'solution', 'run', 'execute']:
+        if __fname in dir():
+            __func = eval(__fname)
+            if callable(__func) and not isinstance(__func, type):
+                try:
+                    __result = __func(__input)
+                    __found = True
+                    break
+                except TypeError:
+                    # Maybe it takes no args
+                    try:
+                        __result = __func()
+                        __found = True
+                        break
+                    except:
+                        pass
+
+    # 2. If no function, look for classes
+    if not __found:
+        __user_classes = []
+        for __name, __obj in list(locals().items()) + list(globals().items()):
+            if isinstance(__obj, type) and __obj.__module__ == '__main__' and __name not in ('__builtins__',):
+                __user_classes.append((__name, __obj))
+
+        if __user_classes:
+            __cls_name, __Cls = __user_classes[0]
+
+            # Try to instantiate
+            __instance = None
+            try:
+                if isinstance(__input, dict):
+                    __instance = __Cls(__input)
+                else:
+                    __instance = __Cls()
+            except:
+                try:
+                    __instance = __Cls({})
+                except:
+                    try:
+                        __instance = __Cls()
+                    except:
+                        pass
+
+            if __instance:
+                for __mname in ['solve', 'run', 'execute', 'test', 'process', 'call', 'handle']:
+                    if hasattr(__instance, __mname) and callable(getattr(__instance, __mname)):
+                        try:
+                            __result = getattr(__instance, __mname)(__input)
+                            __found = True
+                            break
+                        except TypeError:
+                            try:
+                                __result = getattr(__instance, __mname)()
+                                __found = True
+                                break
+                            except:
+                                pass
+
+                if not __found:
+                    __methods = [m for m in dir(__instance)
+                                 if not m.startswith('_') and callable(getattr(__instance, m))]
+                    print(f'Class {__cls_name} found with methods: {", ".join(__methods)}')
+                    print('Add a solve(input) method or define a solve() function.')
+                    __found = True
+            else:
+                print(f'Class {__cls_name} found but could not be instantiated.')
+                __found = True
+
+    # 3. Print result
     if __result is not None:
         if isinstance(__result, (list, dict, tuple)):
             print(json.dumps(__result))
@@ -472,7 +590,6 @@ except Exception as e:
 
     const startTime = Date.now();
 
-    // Try python3 first, then python
     let pythonCmd = "python3";
     try {
       await execAsync("python3 --version");
@@ -483,8 +600,7 @@ except Exception as e:
       } catch {
         return {
           stdout: "",
-          stderr:
-            "Python is not available in this environment. Please use JavaScript instead.",
+          stderr: "Python is not available in this environment. Please use JavaScript instead.",
           exitCode: 1,
           executionTime: 0,
           version: "Python (unavailable)",
@@ -509,14 +625,11 @@ except Exception as e:
     };
   } catch (error: any) {
     const isTimeout = error.killed || error.signal === "SIGTERM";
-
     return {
       stdout: error.stdout?.trim() || "",
       stderr: isTimeout
         ? "⏰ Time Limit Exceeded (15s)"
-        : formatError(
-            error.stderr || error.message || "Execution failed"
-          ),
+        : formatError(error.stderr || error.message || "Execution failed"),
       exitCode: error.code || 1,
       executionTime: 0,
       version: "Python",
@@ -529,13 +642,12 @@ except Exception as e:
 }
 
 // ==========================================
-// TYPESCRIPT — Compile + Run
+// TYPESCRIPT — Strip types + run as JS
 // ==========================================
 async function executeTypeScript(
   code: string,
   input: string
 ): Promise<ExecutionResult> {
-  // Strip TS types and run as JS
   const jsCode = stripTypeScriptTypes(code);
   const result = await executeJavaScript(jsCode, input);
   result.version = "TypeScript (compiled to JS)";
@@ -544,33 +656,24 @@ async function executeTypeScript(
 
 function stripTypeScriptTypes(code: string): string {
   return code
-    .replace(
-      /:\s*(string|number|boolean|any|void|never|unknown|object)\s*/g,
-      " "
-    )
-    .replace(
-      /:\s*(string|number|boolean|any|void|never|unknown|object)\[\]\s*/g,
-      " "
-    )
-    .replace(/<[^>]+>/g, "") // Remove generics
-    .replace(/\binterface\s+\w+\s*{[^}]*}/g, "") // Remove interfaces
-    .replace(/\btype\s+\w+\s*=\s*[^;]+;/g, "") // Remove type aliases
-    .replace(/\bas\s+\w+/g, "") // Remove type assertions
-    .replace(/\!\.|\!\[/g, (match) => match.slice(1)); // Remove non-null assertions
+    .replace(/:\s*(string|number|boolean|any|void|never|unknown|object)\s*/g, " ")
+    .replace(/:\s*(string|number|boolean|any|void|never|unknown|object)\[\]\s*/g, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\binterface\s+\w+\s*\{[^}]*\}/g, "")
+    .replace(/\btype\s+\w+\s*=\s*[^;]+;/g, "")
+    .replace(/\bas\s+\w+/g, "")
+    .replace(/!\.|\!\[/g, (match) => match.slice(1));
 }
 
 // ==========================================
-// DOCKER — For other languages (Java, C++, Go, etc.)
+// DOCKER — Java, C++, Go, Rust
 // ==========================================
 async function executeWithDocker(
   code: string,
   language: string,
   input: string
 ): Promise<ExecutionResult> {
-  const langConfig: Record<
-    string,
-    { image: string; filename: string; cmd: string }
-  > = {
+  const langConfig: Record<string, { image: string; filename: string; cmd: string }> = {
     java: {
       image: "openjdk:21-slim",
       filename: "Solution.java",
@@ -608,7 +711,6 @@ async function executeWithDocker(
     };
   }
 
-  // Check if Docker is available
   try {
     await execAsync("docker --version");
   } catch {
@@ -660,9 +762,7 @@ async function executeWithDocker(
       stdout: error.stdout?.trim() || "",
       stderr: isTimeout
         ? "⏰ Time Limit Exceeded (15s)"
-        : formatError(
-            error.stderr || error.message || "Execution failed"
-          ),
+        : formatError(error.stderr || error.message || "Execution failed"),
       exitCode: error.code || 1,
       executionTime: 0,
       version: `Docker: ${config.image}`,
