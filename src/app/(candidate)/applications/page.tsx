@@ -8,10 +8,27 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { NotificationBell } from "@/components/shared/NotificationBell";
 import {
-  Briefcase, MapPin, Building2, Loader2, ArrowLeft,
-  FileSearch, Code, Bot, Video, Award, XCircle, Clock,
-  Sparkles, ListChecks, MessageSquare, Users, Rocket,
-  CheckCircle, FileText, BookOpen, Calendar,
+  Briefcase,
+  MapPin,
+  Building2,
+  Loader2,
+  ArrowLeft,
+  FileSearch,
+  Code,
+  Bot,
+  Video,
+  Award,
+  XCircle,
+  Clock,
+  Sparkles,
+  ListChecks,
+  MessageSquare,
+  Users,
+  Rocket,
+  CheckCircle,
+  FileText,
+  BookOpen,
+  Calendar,
 } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -48,8 +65,21 @@ const statusLabels: Record<string, string> = {
 };
 
 const iconMap: Record<string, React.ElementType> = {
-  Briefcase, FileSearch, Code, ListChecks, Bot, MessageSquare,
-  Video, Users, Award, XCircle, Rocket, Clock, FileText, CheckCircle, Calendar,
+  Briefcase,
+  FileSearch,
+  Code,
+  ListChecks,
+  Bot,
+  MessageSquare,
+  Video,
+  Users,
+  Award,
+  XCircle,
+  Rocket,
+  Clock,
+  FileText,
+  CheckCircle,
+  Calendar,
 };
 
 // ==========================================
@@ -60,7 +90,9 @@ export default function ApplicationsPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [applications, setApplications] = useState<any[]>([]);
-  const [pipelineData, setPipelineData] = useState<Record<string, any>>({});
+  const [pipelineData, setPipelineData] = useState<Record<string, any>>(
+    {}
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -71,6 +103,7 @@ export default function ApplicationsPage() {
 
   useEffect(() => {
     if (isAuthenticated) fetchApplications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
   const fetchApplications = async () => {
@@ -83,7 +116,9 @@ export default function ApplicationsPage() {
       // Fetch pipeline stages for each application
       const pipelinePromises = apps.map(async (app: any) => {
         try {
-          const pRes = await fetch(`/api/applications/${app.id}/pipeline`);
+          const pRes = await fetch(
+            `/api/applications/${app.id}/pipeline`
+          );
           const pData = await pRes.json();
           return { appId: app.id, ...pData };
         } catch {
@@ -115,8 +150,8 @@ export default function ApplicationsPage() {
   const activeApps = applications.filter(
     (a) => !["REJECTED", "WITHDRAWN", "HIRED"].includes(a.status)
   );
-  const pastApps = applications.filter(
-    (a) => ["REJECTED", "WITHDRAWN", "HIRED"].includes(a.status)
+  const pastApps = applications.filter((a) =>
+    ["REJECTED", "WITHDRAWN", "HIRED"].includes(a.status)
   );
 
   return (
@@ -126,7 +161,11 @@ export default function ApplicationsPage() {
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/jobs">
-              <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+              >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
@@ -134,10 +173,11 @@ export default function ApplicationsPage() {
               <div className="w-6 h-6 bg-gradient-to-br from-[#0245EF] to-[#5B3FE6] rounded flex items-center justify-center">
                 <Briefcase className="w-3 h-3 text-white" />
               </div>
-              <span className="font-semibold text-slate-800">My Applications</span>
+              <span className="font-semibold text-slate-800">
+                My Applications
+              </span>
             </div>
           </div>
-          
         </div>
       </header>
 
@@ -145,8 +185,12 @@ export default function ApplicationsPage() {
         {applications.length === 0 ? (
           <div className="text-center py-20">
             <Briefcase className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-slate-600">No applications yet</h3>
-            <p className="text-slate-400 mt-2 mb-6">Start applying and track your journey</p>
+            <h3 className="text-xl font-medium text-slate-600">
+              No applications yet
+            </h3>
+            <p className="text-slate-400 mt-2 mb-6">
+              Start applying and track your journey
+            </p>
             <Link href="/jobs">
               <Button className="bg-[#0245EF] hover:bg-[#0237BF]">
                 <Sparkles className="w-4 h-4 mr-2" /> Browse Jobs
@@ -197,15 +241,37 @@ export default function ApplicationsPage() {
 }
 
 // ==========================================
-// APPLICATION CARD
+// APPLICATION CARD — reads flat API fields
 // ==========================================
 
-function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
+function ApplicationCard({
+  app,
+  pipeline,
+}: {
+  app: any;
+  pipeline?: any;
+}) {
   const stages = pipeline?.stages || [];
   const currentStageIndex = pipeline?.currentStageIndex ?? 0;
   const isRejected = app.status === "REJECTED";
   const isWithdrawn = app.status === "WITHDRAWN";
-  const isHired = app.status === "HIRED" || app.status === "OFFERED";
+  const isHired =
+    app.status === "HIRED" || app.status === "OFFERED";
+
+  // ✅ FIX: Read flat fields from API, with fallbacks
+  const jobTitle =
+    app.jobTitle || app.job?.title || app.job_title || "Untitled Job";
+  const companyName =
+    app.jobCompany ||
+    app.company ||
+    app.job?.poster?.company ||
+    app.poster?.company ||
+    "";
+  const jobLocation =
+    app.jobLocation || app.job?.location || app.job_location || "";
+  const jobId = app.jobId || app.job_id || app.id;
+  const resumeScore = parseFloat(app.resumeScore || app.resume_score) || 0;
+  const appliedAt = app.appliedAt || app.applied_at;
 
   return (
     <Card className="hover:shadow-md transition-all">
@@ -231,30 +297,43 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
               )}
             </div>
             <div>
-              <Link href={`/jobs/${app.jobId}`} className="hover:underline">
+              <Link
+                href={`/jobs/${jobId}`}
+                className="hover:underline"
+              >
                 <h3 className="font-semibold text-slate-800">
-                  {app.job?.title || "Job"}
+                  {jobTitle}
                 </h3>
               </Link>
               <div className="flex items-center gap-3 text-sm text-slate-500 mt-0.5">
-                <span className="flex items-center gap-1">
-                  <Building2 className="w-3.5 h-3.5" />
-                  {app.job?.poster?.company || "Company"}
-                </span>
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5" />
-                  {app.job?.location || "Location"}
-                </span>
+                {companyName && (
+                  <span className="flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5" />
+                    {companyName}
+                  </span>
+                )}
+                {jobLocation && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" />
+                    {jobLocation}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           <div className="text-right">
-            <Badge className={statusColors[app.status] || "bg-slate-100"}>
+            <Badge
+              className={
+                statusColors[app.status] || "bg-slate-100"
+              }
+            >
               {statusLabels[app.status] || app.status}
             </Badge>
             <p className="text-[11px] text-slate-400 mt-1.5">
-              {formatRelativeTime(app.appliedAt)}
+              {appliedAt
+                ? `Applied ${formatRelativeTime(appliedAt)}`
+                : ""}
             </p>
           </div>
         </div>
@@ -266,10 +345,11 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
               {stages.map((stage: any, i: number) => {
                 const isCompleted = i < currentStageIndex;
                 const isCurrent = i === currentStageIndex;
-                const IconComp = iconMap[stage.icon] || Briefcase;
+                const IconComp =
+                  iconMap[stage.icon] || Briefcase;
 
                 return (
-                  <React.Fragment key={stage.id}>
+                  <React.Fragment key={stage.id || i}>
                     <div
                       className="flex flex-col items-center"
                       style={{ minWidth: 60, flex: 1 }}
@@ -278,11 +358,12 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
                         className={`
                           w-10 h-10 rounded-full flex items-center justify-center border-2
                           transition-all duration-300
-                          ${isCompleted
-                            ? "bg-emerald-500 border-emerald-500 shadow-sm shadow-emerald-200"
-                            : isCurrent
-                              ? "bg-[#0245EF] border-[#0245EF] ring-4 ring-[#D1DEFF] shadow-md shadow-[#A3BDFF]"
-                              : "bg-white border-slate-200"
+                          ${
+                            isCompleted
+                              ? "bg-emerald-500 border-emerald-500 shadow-sm shadow-emerald-200"
+                              : isCurrent
+                                ? "bg-[#0245EF] border-[#0245EF] ring-4 ring-[#D1DEFF] shadow-md shadow-[#A3BDFF]"
+                                : "bg-white border-slate-200"
                           }
                         `}
                       >
@@ -291,7 +372,9 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
                         ) : (
                           <IconComp
                             className={`w-4 h-4 ${
-                              isCurrent ? "text-white" : "text-slate-300"
+                              isCurrent
+                                ? "text-white"
+                                : "text-slate-300"
                             }`}
                           />
                         )}
@@ -313,11 +396,17 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
                     {i < stages.length - 1 && (
                       <div
                         className="flex-shrink-0 pt-5"
-                        style={{ width: 0, flex: "0 1 auto", minWidth: 8 }}
+                        style={{
+                          width: 0,
+                          flex: "0 1 auto",
+                          minWidth: 8,
+                        }}
                       >
                         <div
                           className={`h-0.5 w-full min-w-[8px] ${
-                            i < currentStageIndex ? "bg-emerald-400" : "bg-slate-200"
+                            i < currentStageIndex
+                              ? "bg-emerald-400"
+                              : "bg-slate-200"
                           }`}
                         />
                       </div>
@@ -327,7 +416,7 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
               })}
             </div>
 
-            {/* Current stage info box */}
+            {/* Current stage info */}
             {stages[currentStageIndex] && !isHired && (
               <div className="mt-4 bg-[#EBF0FF] rounded-lg p-3 flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-[#0245EF] shrink-0 mt-0.5" />
@@ -339,7 +428,8 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
                     {stages[currentStageIndex].description}
                   </p>
                   <p className="text-[10px] text-[#4775FF] mt-1">
-                    Step {currentStageIndex + 1} of {stages.length}
+                    Step {currentStageIndex + 1} of{" "}
+                    {stages.length}
                   </p>
                 </div>
               </div>
@@ -353,71 +443,98 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
                     Congratulations! 🎉
                   </p>
                   <p className="text-xs text-emerald-600 mt-0.5">
-                    You&apos;ve received an offer. Check your email for details.
+                    You&apos;ve received an offer. Check your
+                    email for details.
                   </p>
                 </div>
               </div>
             )}
 
             {/* Action Buttons */}
-            {!isHired && !isRejected && stages[currentStageIndex] && (
-              <div className="mt-3">
-                {/* Assessment */}
-                {["coding_assessment", "mcq_assessment"].includes(stages[currentStageIndex]?.subtype) && (
-                  <Button
-                    size="sm"
-                    className="bg-[#0245EF] hover:bg-[#0237BF]"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/assessments?jobId=${app.jobId}`);
-                        const data = await res.json();
-                        if (data.assessments?.length > 0) {
-                          window.location.href = `/assessment/${data.assessments[0].id}?applicationId=${app.id}`;
-                        } else {
-                          window.location.href = `/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+            {!isHired &&
+              !isRejected &&
+              stages[currentStageIndex] && (
+                <div className="mt-3">
+                  {/* Assessment */}
+                  {[
+                    "coding_assessment",
+                    "mcq_assessment",
+                  ].includes(
+                    stages[currentStageIndex]?.subtype
+                  ) && (
+                    <Button
+                      size="sm"
+                      className="bg-[#0245EF] hover:bg-[#0237BF]"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(
+                            `/api/assessments?jobId=${jobId}`
+                          );
+                          const data = await res.json();
+                          if (
+                            data.assessments?.length > 0
+                          ) {
+                            window.location.href = `/candidate/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+                          } else {
+                            window.location.href = `/candidate/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+                          }
+                        } catch {
+                          window.location.href = `/candidate/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
                         }
-                      } catch {
-                        window.location.href = `/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
-                      }
-                    }}
-                  >
-                    <Code className="w-4 h-4 mr-2" />
-                    {stages[currentStageIndex].subtype === "mcq_assessment"
-                      ? "Take Quiz →"
-                      : "Start Coding Challenge →"
-                    }
-                  </Button>
-                )}
+                      }}
+                    >
+                      <Code className="w-4 h-4 mr-2" />
+                      {stages[currentStageIndex].subtype ===
+                      "mcq_assessment"
+                        ? "Take Quiz →"
+                        : "Start Coding Challenge →"}
+                    </Button>
+                  )}
 
-                {/* AI Interview */}
-                {["ai_technical_interview", "ai_behavioral_interview"].includes(stages[currentStageIndex]?.subtype) && (
-                  <Button
-                    size="sm"
-                    className="bg-[#0245EF] hover:bg-[#0237BF]"
-                    onClick={() => {
-                      window.location.href = `/interview/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
-                    }}
-                  >
-                    <Bot className="w-4 h-4 mr-2" />
-    {stages[currentStageIndex].subtype === "ai_behavioral_interview"
-      ? "Start Behavioral Interview →"
-      : "Start Technical Interview →"
-    }
-                  </Button>
-                )}
-              </div>
-            )}
+                  {/* AI Interview */}
+                  {[
+                    "ai_technical_interview",
+                    "ai_behavioral_interview",
+                  ].includes(
+                    stages[currentStageIndex]?.subtype
+                  ) && (
+                    <Button
+                      size="sm"
+                      className="bg-[#0245EF] hover:bg-[#0237BF]"
+                      onClick={() => {
+                        window.location.href = `/candidate/interview/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+                      }}
+                    >
+                      <Bot className="w-4 h-4 mr-2" />
+                      {stages[currentStageIndex].subtype ===
+                      "ai_behavioral_interview"
+                        ? "Start Behavioral Interview →"
+                        : "Start Technical Interview →"}
+                    </Button>
+                  )}
+                </div>
+              )}
 
-            {/* F2F Interview Info */}
-            <F2FInfo applicationId={app.id} currentStage={stages[currentStageIndex]?.subtype} />
+            {/* F2F Info */}
+            <F2FInfo
+              applicationId={app.id}
+              currentStage={
+                stages[currentStageIndex]?.subtype
+              }
+            />
           </div>
         ) : isRejected ? (
           <div className="mt-4 bg-slate-50 rounded-lg p-4">
             <p className="text-sm text-slate-600 mb-3">
-              Thank you for your interest. We&apos;ve decided to move forward with other candidates.
+              Thank you for your interest. We&apos;ve decided to
+              move forward with other candidates.
             </p>
             <Link href={`/feedback/${app.id}`}>
-              <Button size="sm" variant="outline" className="text-[#0245EF] border-[#A3BDFF] hover:bg-[#EBF0FF]">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-[#0245EF] border-[#A3BDFF] hover:bg-[#EBF0FF]"
+              >
                 <BookOpen className="w-4 h-4 mr-2" />
                 View Personalized Feedback →
               </Button>
@@ -431,37 +548,43 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
                 style={{ width: "15%" }}
               />
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">Processing...</p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Processing...
+            </p>
           </div>
         )}
 
         {/* Resume Score */}
-        {app.resumeScore > 0 && (
+        {resumeScore > 0 && (
           <div className="mt-3 flex items-center gap-3 text-xs pt-3 border-t border-slate-100">
-            <span className="text-slate-500">Resume Match:</span>
+            <span className="text-slate-500">
+              Resume Match:
+            </span>
             <div className="flex items-center gap-2 flex-1">
               <div className="flex-1 h-1.5 bg-slate-100 rounded-full max-w-[120px]">
                 <div
                   className={`h-full rounded-full ${
-                    app.resumeScore >= 70
+                    resumeScore >= 70
                       ? "bg-emerald-500"
-                      : app.resumeScore >= 40
+                      : resumeScore >= 40
                         ? "bg-amber-500"
                         : "bg-red-500"
                   }`}
-                  style={{ width: `${Math.min(app.resumeScore, 100)}%` }}
+                  style={{
+                    width: `${Math.min(resumeScore, 100)}%`,
+                  }}
                 />
               </div>
               <span
                 className={`font-bold ${
-                  app.resumeScore >= 70
+                  resumeScore >= 70
                     ? "text-emerald-600"
-                    : app.resumeScore >= 40
+                    : resumeScore >= 40
                       ? "text-amber-600"
                       : "text-red-600"
                 }`}
               >
-                {Math.round(app.resumeScore)}%
+                {Math.round(resumeScore)}%
               </span>
             </div>
           </div>
@@ -475,16 +598,25 @@ function ApplicationCard({ app, pipeline }: { app: any; pipeline?: any }) {
 // F2F INTERVIEW INFO
 // ==========================================
 
-function F2FInfo({ applicationId, currentStage }: { applicationId: string; currentStage?: string }) {
+function F2FInfo({
+  applicationId,
+  currentStage,
+}: {
+  applicationId: string;
+  currentStage?: string;
+}) {
   const [interviews, setInterviews] = useState<any[]>([]);
 
   useEffect(() => {
     fetchInterviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId]);
 
   const fetchInterviews = async () => {
     try {
-      const res = await fetch(`/api/f2f?applicationId=${applicationId}`);
+      const res = await fetch(
+        `/api/f2f?applicationId=${applicationId}`
+      );
       const data = await res.json();
       setInterviews(data.interviews || []);
     } catch {}
@@ -497,7 +629,16 @@ function F2FInfo({ applicationId, currentStage }: { applicationId: string; curre
       {interviews.map((interview) => {
         const date = new Date(interview.scheduled_at);
         const isPast = date < new Date();
-        const isToday = date.toDateString() === new Date().toDateString();
+        const isToday =
+          date.toDateString() === new Date().toDateString();
+
+        let metadata = interview.metadata || {};
+        try {
+          if (typeof metadata === "string")
+            metadata = JSON.parse(metadata);
+        } catch {
+          metadata = {};
+        }
 
         return (
           <div
@@ -511,33 +652,65 @@ function F2FInfo({ applicationId, currentStage }: { applicationId: string; curre
             }`}
           >
             <div className="flex items-start gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                isToday ? "bg-[#D1DEFF]" : isPast ? "bg-slate-200" : "bg-blue-100"
-              }`}>
-                <Calendar className={`w-5 h-5 ${
-                  isToday ? "text-[#0245EF]" : isPast ? "text-slate-500" : "text-blue-600"
-                }`} />
+              <div
+                className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                  isToday
+                    ? "bg-[#D1DEFF]"
+                    : isPast
+                      ? "bg-slate-200"
+                      : "bg-blue-100"
+                }`}
+              >
+                <Calendar
+                  className={`w-5 h-5 ${
+                    isToday
+                      ? "text-[#0245EF]"
+                      : isPast
+                        ? "text-slate-500"
+                        : "text-blue-600"
+                  }`}
+                />
               </div>
 
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <h4 className={`text-sm font-semibold ${
-                    isToday ? "text-[#011B5F]" : isPast ? "text-slate-600" : "text-blue-800"
-                  }`}>
-                    {isToday ? "🔴 Interview Today!" : isPast ? "Interview Completed" : "📅 Interview Scheduled"}
+                  <h4
+                    className={`text-sm font-semibold ${
+                      isToday
+                        ? "text-[#011B5F]"
+                        : isPast
+                          ? "text-slate-600"
+                          : "text-blue-800"
+                    }`}
+                  >
+                    {isToday
+                      ? "🔴 Interview Today!"
+                      : isPast
+                        ? "Interview Completed"
+                        : "📅 Interview Scheduled"}
                   </h4>
                   {interview.interview_type && (
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full capitalize ${
-                      isToday ? "bg-indigo-200 text-[#0237BF]" : "bg-slate-200 text-slate-600"
-                    }`}>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full capitalize ${
+                        isToday
+                          ? "bg-indigo-200 text-[#0237BF]"
+                          : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
                       {interview.interview_type}
                     </span>
                   )}
                 </div>
 
-                <p className={`text-sm mt-1 ${
-                  isToday ? "text-[#0245EF]" : isPast ? "text-slate-500" : "text-blue-600"
-                }`}>
+                <p
+                  className={`text-sm mt-1 ${
+                    isToday
+                      ? "text-[#0245EF]"
+                      : isPast
+                        ? "text-slate-500"
+                        : "text-blue-600"
+                  }`}
+                >
                   {date.toLocaleDateString("en-US", {
                     weekday: "long",
                     month: "long",
@@ -546,42 +719,60 @@ function F2FInfo({ applicationId, currentStage }: { applicationId: string; curre
                   })}
                 </p>
 
-                <p className={`text-sm ${
-                  isToday ? "text-[#0245EF]" : isPast ? "text-slate-500" : "text-blue-600"
-                }`}>
-                  🕐 {date.toLocaleTimeString("en-US", {
+                <p
+                  className={`text-sm ${
+                    isToday
+                      ? "text-[#0245EF]"
+                      : isPast
+                        ? "text-slate-500"
+                        : "text-blue-600"
+                  }`}
+                >
+                  🕐{" "}
+                  {date.toLocaleTimeString("en-US", {
                     hour: "2-digit",
                     minute: "2-digit",
                     hour12: true,
                   })}
-                  {interview.duration && ` • ${interview.duration} minutes`}
+                  {interview.duration &&
+                    ` • ${interview.duration} minutes`}
                 </p>
 
-                {/* Show all interviewers */}
-{interview.metadata?.interviewers?.length > 0 ? (
-  <div className="mt-1">
-    <p className="text-xs text-slate-500">
-      👥 {interview.metadata.interviewers.length > 1 ? "Panel" : "Interviewer"}:
-    </p>
-    <div className="flex flex-wrap gap-1 mt-1">
-      {interview.metadata.interviewers.map((person: any, idx: number) => (
-        <span
-          key={idx}
-          className="text-xs bg-white px-2 py-0.5 rounded-full border border-slate-200 text-slate-600"
-        >
-          {person.name}
-          {person.role && (
-            <span className="text-slate-400 ml-1">({person.role})</span>
-          )}
-        </span>
-      ))}
-    </div>
-  </div>
-) : interview.interviewer_first_name ? (
-  <p className="text-xs text-slate-500 mt-1">
-    👤 Interviewer: {interview.interviewer_first_name} {interview.interviewer_last_name}
-  </p>
-) : null}
+                {/* Interviewers */}
+                {metadata.interviewers?.length > 0 ? (
+                  <div className="mt-1">
+                    <p className="text-xs text-slate-500">
+                      👥{" "}
+                      {metadata.interviewers.length > 1
+                        ? "Panel"
+                        : "Interviewer"}
+                      :
+                    </p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {metadata.interviewers.map(
+                        (person: any, idx: number) => (
+                          <span
+                            key={idx}
+                            className="text-xs bg-white px-2 py-0.5 rounded-full border border-slate-200 text-slate-600"
+                          >
+                            {person.name}
+                            {person.role && (
+                              <span className="text-slate-400 ml-1">
+                                ({person.role})
+                              </span>
+                            )}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ) : interview.interviewer_first_name ? (
+                  <p className="text-xs text-slate-500 mt-1">
+                    👤 Interviewer:{" "}
+                    {interview.interviewer_first_name}{" "}
+                    {interview.interviewer_last_name}
+                  </p>
+                ) : null}
 
                 {interview.notes && (
                   <p className="text-xs text-slate-500 mt-1">
@@ -605,14 +796,17 @@ function F2FInfo({ applicationId, currentStage }: { applicationId: string; curre
                   }`}
                 >
                   <Video className="w-4 h-4" />
-                  {isToday ? "Join Meeting Now →" : "Meeting Link →"}
+                  {isToday
+                    ? "Join Meeting Now →"
+                    : "Meeting Link →"}
                 </a>
               </div>
             )}
 
             {isPast && interview.status === "COMPLETED" && (
               <div className="mt-2 text-xs text-emerald-600 flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" /> Interview completed
+                <CheckCircle className="w-3 h-3" /> Interview
+                completed
               </div>
             )}
           </div>
