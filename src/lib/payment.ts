@@ -1,4 +1,3 @@
-import Razorpay from "razorpay";
 import crypto from "crypto";
 import { query, queryOne } from "./db";
 import { getCompanySubscription } from "./billing";
@@ -6,13 +5,17 @@ import { getCompanySubscription } from "./billing";
 // ==========================================
 // RAZORPAY INSTANCE
 // ==========================================
-let razorpayInstance: Razorpay | null = null;
+let razorpayInstance: any = null;
 
-function getRazorpay(): Razorpay {
+async function getRazorpay() {
   if (!razorpayInstance) {
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      throw new Error("Razorpay credentials not configured");
+      throw new Error(
+        "Razorpay not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET."
+      );
     }
+
+    const Razorpay = (await import("razorpay")).default;
     razorpayInstance = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET,
@@ -22,7 +25,7 @@ function getRazorpay(): Razorpay {
 }
 
 // ==========================================
-// CREATE ORDER (for one-time plan purchase)
+// CREATE ORDER
 // ==========================================
 export async function createRazorpayOrder(params: {
   companyId: string;
@@ -31,13 +34,7 @@ export async function createRazorpayOrder(params: {
   userId: string;
   userEmail: string;
   userName: string;
-}): Promise<{
-  orderId: string;
-  amount: number;
-  currency: string;
-  keyId: string;
-  prefill: { name: string; email: string };
-}> {
+}) {
   const plan = await queryOne(
     "SELECT * FROM billing_plans WHERE slug = $1 AND is_active = true",
     [params.planSlug]
@@ -54,16 +51,15 @@ export async function createRazorpayOrder(params: {
     throw new Error("Cannot create payment for free plan");
   }
 
-  // Amount in paise (Razorpay uses smallest currency unit)
-  const amountInPaise = Math.round(amount * 100);
-  const currency = plan.currency || "USD";
+  const currency = plan.currency || "INR";
+  const amountInSmallestUnit = Math.round(amount * 100);
 
-  const razorpay = getRazorpay();
+  const razorpay = await getRazorpay();
 
   const order = await razorpay.orders.create({
-    amount: amountInPaise,
-    currency: currency,
-    receipt: `order_${params.companyId}_${Date.now()}`,
+    amount: amountInSmallestUnit,
+    currency,
+    receipt: `order_${params.companyId.substring(0, 8)}_${Date.now()}`,
     notes: {
       company_id: params.companyId,
       plan_slug: params.planSlug,
@@ -73,33 +69,36 @@ export async function createRazorpayOrder(params: {
     },
   });
 
-  // Store pending order in DB
-  await query(
-    `INSERT INTO payment_orders (
-      id, company_id, user_id, plan_id, plan_slug,
-      billing_cycle, amount, currency, provider,
-      provider_order_id, status, metadata
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'razorpay', $9, 'CREATED', $10)`,
-    [
-      crypto.randomUUID(),
-      params.companyId,
-      params.userId,
-      plan.id,
-      params.planSlug,
-      params.billingCycle,
-      amount,
-      currency,
-      order.id,
-      JSON.stringify({
-        plan_name: plan.name,
-        credits_included: plan.credits_included,
-      }),
-    ]
-  );
+  // Store pending order
+  try {
+    await query(
+      `INSERT INTO payment_orders (
+        company_id, user_id, plan_id, plan_slug,
+        billing_cycle, amount, currency, provider,
+        provider_order_id, status, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'razorpay', $8, 'CREATED', $9)`,
+      [
+        params.companyId,
+        params.userId,
+        plan.id,
+        params.planSlug,
+        params.billingCycle,
+        amount,
+        currency,
+        order.id,
+        JSON.stringify({
+          plan_name: plan.name,
+          credits_included: plan.credits_included,
+        }),
+      ]
+    );
+  } catch (err) {
+    console.error("Failed to store payment order (non-critical):", err);
+  }
 
   return {
     orderId: order.id,
-    amount: amountInPaise,
+    amount: amountInSmallestUnit,
     currency,
     keyId: process.env.RAZORPAY_KEY_ID!,
     prefill: {
@@ -110,111 +109,7 @@ export async function createRazorpayOrder(params: {
 }
 
 // ==========================================
-// CREATE RAZORPAY SUBSCRIPTION (recurring)
-// ==========================================
-export async function createRazorpaySubscription(params: {
-  companyId: string;
-  planSlug: string;
-  billingCycle: "monthly" | "yearly";
-  userId: string;
-  userEmail: string;
-  userName: string;
-}): Promise<{
-  subscriptionId: string;
-  shortUrl: string;
-  keyId: string;
-}> {
-  const plan = await queryOne(
-    "SELECT * FROM billing_plans WHERE slug = $1 AND is_active = true",
-    [params.planSlug]
-  );
-
-  if (!plan) throw new Error("Plan not found");
-
-  // Check if plan has a Razorpay plan_id stored
-  let razorpayPlanId = plan.razorpay_plan_id;
-
-  if (!razorpayPlanId) {
-    // Create a Razorpay Plan
-    const razorpay = getRazorpay();
-    const amount =
-      params.billingCycle === "yearly"
-        ? parseFloat(plan.price_yearly) || 0
-        : parseFloat(plan.price_monthly) || 0;
-
-    const period = params.billingCycle === "yearly" ? "yearly" : "monthly";
-
-    const rzpPlan = await razorpay.plans.create({
-      period,
-      interval: 1,
-      item: {
-        name: `${plan.name} Plan (${params.billingCycle})`,
-        amount: Math.round(amount * 100),
-        currency: plan.currency || "USD",
-        description: `${plan.name} — ${params.billingCycle} billing`,
-      },
-    });
-
-    razorpayPlanId = rzpPlan.id;
-
-    // Store for reuse
-    await query(
-      "UPDATE billing_plans SET razorpay_plan_id = $2 WHERE id = $1",
-      [plan.id, razorpayPlanId]
-    );
-  }
-
-  const razorpay = getRazorpay();
-
-  const subscription = await razorpay.subscriptions.create({
-    plan_id: razorpayPlanId,
-    total_count: params.billingCycle === "yearly" ? 1 : 12,
-    quantity: 1,
-    customer_notify: 1,
-    notes: {
-      company_id: params.companyId,
-      plan_slug: params.planSlug,
-      user_id: params.userId,
-      billing_cycle: params.billingCycle,
-    },
-  });
-
-  // Store pending subscription
-  await query(
-    `INSERT INTO payment_orders (
-      id, company_id, user_id, plan_id, plan_slug,
-      billing_cycle, amount, currency, provider,
-      provider_order_id, provider_subscription_id, status, metadata
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'razorpay', $9, $10, 'CREATED', $11)`,
-    [
-      crypto.randomUUID(),
-      params.companyId,
-      params.userId,
-      plan.id,
-      params.planSlug,
-      params.billingCycle,
-      params.billingCycle === "yearly"
-        ? parseFloat(plan.price_yearly)
-        : parseFloat(plan.price_monthly),
-      plan.currency || "USD",
-      subscription.id,
-      subscription.id,
-      JSON.stringify({
-        plan_name: plan.name,
-        short_url: subscription.short_url,
-      }),
-    ]
-  );
-
-  return {
-    subscriptionId: subscription.id,
-    shortUrl: subscription.short_url || "",
-    keyId: process.env.RAZORPAY_KEY_ID!,
-  };
-}
-
-// ==========================================
-// VERIFY RAZORPAY PAYMENT SIGNATURE
+// VERIFY SIGNATURE
 // ==========================================
 export function verifyRazorpaySignature(params: {
   orderId: string;
@@ -234,7 +129,7 @@ export function verifyRazorpaySignature(params: {
 }
 
 // ==========================================
-// VERIFY RAZORPAY WEBHOOK SIGNATURE
+// VERIFY WEBHOOK
 // ==========================================
 export function verifyRazorpayWebhook(
   body: string,
@@ -261,7 +156,7 @@ export async function activatePlanAfterPayment(params: {
   paymentId: string;
   orderId: string;
   subscriptionId?: string;
-}): Promise<any> {
+}) {
   const plan = await queryOne(
     "SELECT * FROM billing_plans WHERE slug = $1",
     [params.planSlug]
@@ -273,7 +168,6 @@ export async function activatePlanAfterPayment(params: {
   const periodInterval =
     params.billingCycle === "yearly" ? "365 days" : "30 days";
 
-  // Check if subscription exists
   const existingSub = await queryOne(
     "SELECT * FROM company_subscriptions WHERE company_id = $1",
     [params.companyId]
@@ -330,85 +224,59 @@ export async function activatePlanAfterPayment(params: {
   }
 
   // Update payment order status
-  await query(
-    `UPDATE payment_orders
-     SET status = 'PAID', provider_payment_id = $2, paid_at = NOW()
-     WHERE provider_order_id = $1 OR provider_subscription_id = $1`,
-    [params.orderId, params.paymentId]
-  );
+  try {
+    await query(
+      `UPDATE payment_orders
+       SET status = 'PAID', provider_payment_id = $2, paid_at = NOW()
+       WHERE provider_order_id = $1`,
+      [params.orderId, params.paymentId]
+    );
+  } catch {}
 
   // Generate invoice
-  const amount =
-    params.billingCycle === "yearly"
-      ? parseFloat(plan.price_yearly)
-      : parseFloat(plan.price_monthly);
+  try {
+    const amount =
+      params.billingCycle === "yearly"
+        ? parseFloat(plan.price_yearly)
+        : parseFloat(plan.price_monthly);
 
-  await query(
-    `INSERT INTO invoices (
-      company_id, period_start, period_end, plan_name,
-      base_amount, usage_amount, credits_applied, total_amount,
-      status, payment_id, line_items
-    ) VALUES ($1, NOW(), NOW() + INTERVAL '${periodInterval}', $2, $3, 0, 0, $3, 'PAID', $4, $5)`,
-    [
-      params.companyId,
-      plan.name,
-      amount,
-      params.paymentId,
-      JSON.stringify([
-        {
-          description: `${plan.name} Plan — ${params.billingCycle}`,
-          amount,
-        },
-      ]),
-    ]
-  );
+    await query(
+      `INSERT INTO invoices (
+        company_id, period_start, period_end, plan_name,
+        base_amount, total_amount, status, payment_id, line_items
+      ) VALUES ($1, NOW(), NOW() + INTERVAL '${periodInterval}', $2, $3, $3, 'PAID', $4, $5)`,
+      [
+        params.companyId,
+        plan.name,
+        amount,
+        params.paymentId,
+        JSON.stringify([
+          {
+            description: `${plan.name} Plan — ${params.billingCycle}`,
+            amount,
+          },
+        ]),
+      ]
+    );
+  } catch (err) {
+    console.error("Invoice generation failed:", err);
+  }
 
   return await getCompanySubscription(params.companyId);
 }
 
 // ==========================================
-// FETCH PAYMENT DETAILS
-// ==========================================
-export async function getPaymentDetails(paymentId: string) {
-  try {
-    const razorpay = getRazorpay();
-    return await razorpay.payments.fetch(paymentId);
-  } catch {
-    return null;
-  }
-}
-
-// ==========================================
-// CANCEL RAZORPAY SUBSCRIPTION
+// CANCEL SUBSCRIPTION
 // ==========================================
 export async function cancelRazorpaySubscription(
   subscriptionId: string
 ): Promise<boolean> {
   try {
-    const razorpay = getRazorpay();
+    const razorpay = await getRazorpay();
     await razorpay.subscriptions.cancel(subscriptionId, false);
     return true;
   } catch (err) {
     console.error("Failed to cancel Razorpay subscription:", err);
-    return false;
-  }
-}
-
-// ==========================================
-// REFUND PAYMENT
-// ==========================================
-export async function refundPayment(
-  paymentId: string,
-  amount?: number
-): Promise<boolean> {
-  try {
-    const razorpay = getRazorpay();
-    const refundParams: any = {};
-    if (amount) refundParams.amount = Math.round(amount * 100);
-    await razorpay.payments.refund(paymentId, refundParams);
-    return true;
-  } catch (err) {
-    console.error("Refund failed:", err);
     return false;
   }
 }

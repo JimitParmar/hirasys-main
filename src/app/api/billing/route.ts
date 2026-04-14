@@ -21,6 +21,7 @@ import {
   cancelRazorpaySubscription,
 } from "@/lib/payment";
 
+
 // ==========================================
 // GET — Fetch billing data
 // ==========================================
@@ -247,72 +248,99 @@ export async function POST(req: NextRequest) {
     // CREATE CHECKOUT — Initiates Razorpay order
     // ==========================================
     if (action === "create_checkout") {
-      const { planSlug, billingCycle = "monthly" } = body;
+  const { planSlug, billingCycle = "monthly" } = body;
 
-      if (!planSlug) {
-        return NextResponse.json(
-          { error: "planSlug required" },
-          { status: 400 }
-        );
-      }
+  if (!planSlug) {
+    return NextResponse.json(
+      { error: "planSlug required" },
+      { status: 400 }
+    );
+  }
 
-      // Free plan — just switch directly
-      const plan = await queryOne(
-        "SELECT * FROM billing_plans WHERE slug = $1",
-        [planSlug]
+  const plan = await queryOne(
+    "SELECT * FROM billing_plans WHERE slug = $1",
+    [planSlug]
+  );
+
+  if (!plan) {
+    return NextResponse.json(
+      { error: "Plan not found" },
+      { status: 404 }
+    );
+  }
+
+  const price =
+    billingCycle === "yearly"
+      ? parseFloat(plan.price_yearly)
+      : parseFloat(plan.price_monthly);
+
+  // Free plan — activate directly
+  if (price <= 0) {
+    try {
+      await activatePlanAfterPayment({
+        companyId,
+        planSlug,
+        billingCycle,
+        paymentId: "free_plan",
+        orderId: "free_plan",
+      });
+    } catch {}
+
+    return NextResponse.json({
+      type: "free",
+      message: `Switched to ${plan.name} plan`,
+    });
+  }
+
+  // Paid plan — create Razorpay order
+      // Paid plan — create Razorpay order
+    try {
+      const userInfo = await queryOne(
+        "SELECT email, first_name, last_name FROM users WHERE id = $1",
+        [userId]
       );
 
-      if (!plan) {
-        return NextResponse.json(
-          { error: "Plan not found" },
-          { status: 404 }
-        );
-      }
+      console.log("[Billing] Creating Razorpay order:", {
+        companyId,
+        planSlug,
+        billingCycle,
+        currency: plan.currency,
+        amount: billingCycle === "yearly"
+          ? plan.price_yearly
+          : plan.price_monthly,
+      });
 
-      const price =
-        billingCycle === "yearly"
-          ? parseFloat(plan.price_yearly)
-          : parseFloat(plan.price_monthly);
+      const order = await createRazorpayOrder({
+        companyId,
+        planSlug,
+        billingCycle,
+        userId,
+        userEmail: userInfo?.email || userEmail || "",
+        userName:
+          `${userInfo?.first_name || ""} ${userInfo?.last_name || ""}`.trim() ||
+          "User",
+      });
 
-      if (price <= 0) {
-        // Free plan — activate directly
-        await activatePlanAfterPayment({
-          companyId,
-          planSlug,
-          billingCycle,
-          paymentId: "free_plan",
-          orderId: "free_plan",
-        });
+      return NextResponse.json({
+        type: "razorpay",
+        order,
+      });
+    } catch (err: any) {
+      console.error("[Billing] Razorpay order failed:", {
+        message: err.message,
+        stack: err.stack?.substring(0, 300),
+        statusCode: err.statusCode,
+        error: err.error,
+      });
 
-        return NextResponse.json({
-          type: "free",
-          message: `Switched to ${plan.name} plan`,
-        });
-      }
-
-      // Create Razorpay order
-      try {
-        const order = await createRazorpayOrder({
-          companyId,
-          planSlug,
-          billingCycle,
-          userId,
-          userEmail,
-          userName,
-        });
-
-        return NextResponse.json({
-          type: "razorpay",
-          order,
-        });
-      } catch (err: any) {
-        console.error("Razorpay order creation failed:", err);
-        return NextResponse.json(
-          { error: `Payment initialization failed: ${err.message}` },
-          { status: 500 }
-        );
-      }
+      return NextResponse.json(
+        {
+          error: `Payment initialization failed: ${err.message || err.error?.description || "Check Razorpay configuration"}`,
+        },
+        { status: 500 }
+      );
     }
+}
 
     // ==========================================
     // VERIFY PAYMENT — After Razorpay checkout
