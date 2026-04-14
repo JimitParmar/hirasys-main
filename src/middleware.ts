@@ -29,37 +29,46 @@ const ROUTE_RULES: {
 function getSessionFromCookie(
   req: NextRequest
 ): { id: string; role: string; email: string } | null {
-  // Find ANY cookie that looks like a JWT
   const allCookies = req.cookies.getAll();
+
+  // LOG: See all cookies
+  console.log(
+    "[MW] Cookies:",
+    allCookies.map((c) => `${c.name} (${c.value.length} chars)`)
+  );
 
   for (const cookie of allCookies) {
     const value = cookie.value;
-
-    // JWT has 3 parts separated by dots
     const parts = value.split(".");
-    if (parts.length !== 3) continue;
 
-    try {
-      // Decode the payload (middle part) — no verification needed
-      // We trust it because it's an httpOnly cookie set by our own server
-      const payload = JSON.parse(
-        atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-      );
+    // LOG: Check each cookie
+    console.log(
+      `[MW] Checking ${cookie.name}: parts=${parts.length}, length=${value.length}`
+    );
 
-      // Check if it looks like our session token
-      if (payload.role || payload.id || payload.sub || payload.email) {
-        return {
-          id: (payload.id || payload.sub || "") as string,
-          role: (payload.role || "CANDIDATE") as string,
-          email: (payload.email || "") as string,
-        };
+    if (parts.length === 3) {
+      try {
+        const payload = JSON.parse(
+          atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
+        );
+        console.log(`[MW] Decoded ${cookie.name}:`, JSON.stringify(payload).substring(0, 200));
+
+        if (payload.role || payload.id || payload.sub || payload.email) {
+          console.log(`[MW] ✅ Found session in ${cookie.name}: role=${payload.role}`);
+          return {
+            id: (payload.id || payload.sub || "") as string,
+            role: (payload.role || "CANDIDATE") as string,
+            email: (payload.email || "") as string,
+          };
+        }
+      } catch (err) {
+        console.log(`[MW] Failed to decode ${cookie.name}:`, (err as any).message);
+        continue;
       }
-    } catch {
-      // Not a valid JWT payload, try next cookie
-      continue;
     }
   }
 
+  console.log("[MW] ❌ No session found in any cookie");
   return null;
 }
 
