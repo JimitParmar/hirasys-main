@@ -5,6 +5,7 @@ import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { getCompanyUserIds } from "@/lib/company";
 import { logAudit } from "@/lib/audit";
+import { checkJobLimit, checkApplicantLimit } from "@/lib/plan-limits";
 
 export async function GET(req: NextRequest) {
   try {
@@ -25,10 +26,8 @@ export async function GET(req: NextRequest) {
     let paramIndex = 1;
 
     if (!isHR) {
-      // Candidates only see published jobs
       whereClause += ` AND j.status = 'PUBLISHED'`;
     } else if (isHR && userId) {
-      // HR sees ALL jobs from their company
       const companyUserIds = await getCompanyUserIds(userId);
 
       if (companyUserIds.length > 0) {
@@ -118,11 +117,32 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
-    if (!session || !["HR", "ADMIN"].includes((session.user as any).role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (
+      !session ||
+      !["HR", "ADMIN"].includes((session.user as any).role)
+    ) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
     const userId = (session.user as any).id;
+
+    // ✅ CHECK JOB LIMIT
+    const jobLimit = await checkJobLimit(userId);
+    if (!jobLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: jobLimit.message,
+          upgradeRequired: jobLimit.upgradeRequired,
+          limit: jobLimit.limit,
+          current: jobLimit.current,
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
 
     if (
@@ -178,10 +198,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ AUDIT — after successful creation
     await logAudit({
       userId,
-      action: body.status === "PUBLISHED" ? "JOB_PUBLISHED" : "JOB_CREATED",
+      action:
+        body.status === "PUBLISHED"
+          ? "JOB_PUBLISHED"
+          : "JOB_CREATED",
       resourceType: "job",
       resourceId: job.id,
       resourceName: job.title,
@@ -195,7 +217,10 @@ export async function POST(req: NextRequest) {
       req,
     });
 
-    return NextResponse.json({ success: true, job }, { status: 201 });
+    return NextResponse.json(
+      { success: true, job },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error("Job creation error:", error);
     return NextResponse.json(

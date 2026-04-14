@@ -5,6 +5,8 @@ import { queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { getUserCompanyId } from "@/lib/company";
 
+import { checkFeatureAccess, PlanCheckResult } from "@/lib/plan-limits";
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
@@ -20,6 +22,16 @@ export async function GET(req: NextRequest) {
         { status: 403 }
       );
     }
+
+
+// After role check:
+const auditAccess: PlanCheckResult = await checkFeatureAccess(user.id, "auditLogs");
+if (!auditAccess.allowed) {
+  return NextResponse.json(
+    { error: auditAccess.message, upgradeRequired: auditAccess.upgradeRequired },
+    { status: 403 }
+  );
+}
 
     // ==========================================
     // RESOLVE COMPANY ID from DB (not session)

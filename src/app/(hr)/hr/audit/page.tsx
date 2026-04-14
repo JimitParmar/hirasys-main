@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { UpgradePrompt } from "@/components/shared/UpgradePrompt";
 import {
   Select,
   SelectContent,
@@ -39,6 +40,7 @@ import {
 } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 import toast from "react-hot-toast";
 
 const ACTION_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
@@ -97,6 +99,17 @@ export default function AuditPage() {
   const [filterResource, setFilterResource] = useState("all");
   const [filterUser, setFilterUser] = useState("all");
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const { hasFeature, planName } = usePlanLimits();
+
+if (!hasFeature("auditLogs")) {
+  return (
+    <UpgradePrompt
+      feature="Audit Logs"
+      message="Audit logs are available on the Enterprise plan."
+      currentPlan={planName}
+    />
+  );
+}
 
   useEffect(() => {
     if (!authLoading) {

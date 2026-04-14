@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { getCompanyUserIds } from "@/lib/company";
+import { checkApplicantLimit } from "@/lib/plan-limits";
 
 export async function GET(req: NextRequest) {
   try {
@@ -187,6 +188,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const jobData = await queryOne(
+  "SELECT posted_by, title, status FROM jobs WHERE id = $1",
+  [jobId]
+);
+
+if (!jobData) {
+  return NextResponse.json(
+    { error: "Job not found" },
+    { status: 404 }
+  );
+}
+
+if (jobData.status !== "PUBLISHED") {
+  return NextResponse.json(
+    { error: "This job is no longer accepting applications" },
+    { status: 400 }
+  );
+}
+
+const applicantLimit = await checkApplicantLimit(jobId, jobData.posted_by);
+
+if (!applicantLimit.allowed) {
+  // Don't tell the candidate about the company's plan limits
+  // Show a generic "no longer accepting" message instead
+  return NextResponse.json(
+    {
+      error: "This position has received the maximum number of applications and is no longer accepting new ones. Please check back later or explore other openings.",
+    },
+    { status: 400 }
+  );
+}
+
+
     // Create application immediately
     const application = await queryOne(
       `INSERT INTO applications (job_id, candidate_id, resume_url, resume_text, cover_letter, status)
@@ -213,6 +247,40 @@ export async function POST(req: NextRequest) {
       "UPDATE jobs SET applicant_count = applicant_count + 1 WHERE id = $1",
       [jobId]
     );
+
+    try {
+  const newCount = await queryOne(
+    "SELECT COUNT(*)::int as count FROM applications WHERE job_id = $1",
+    [jobId]
+  );
+
+  const postLimit = await checkApplicantLimit(jobId, jobData.posted_by);
+
+  if (!postLimit.allowed) {
+    // Limit reached — auto-close the job
+    await query(
+      "UPDATE jobs SET status = 'CLOSED', metadata = jsonb_set(COALESCE(metadata, '{}'), '{closedReason}', '\"applicant_limit_reached\"'), updated_at = NOW() WHERE id = $1 AND status = 'PUBLISHED'",
+      [jobId]
+    );
+
+    // Notify HR
+    await query(
+      `INSERT INTO notifications (user_id, type, title, message, link)
+       VALUES ($1, 'JOB_UPDATE', '📋 Job Auto-Closed', $2, $3)`,
+      [
+        jobData.posted_by,
+        `"${jobData.title}" has been automatically closed after reaching ${newCount?.count} applications (plan limit). Upgrade your plan to accept more applicants.`,
+        `/hr/jobs/${jobId}`,
+      ]
+    );
+
+    console.log(
+      `[Plan] Job ${jobId} auto-closed: ${newCount?.count} applicants (limit: ${postLimit.limit})`
+    );
+  }
+} catch (err) {
+  console.error("Auto-close check failed (non-critical):", err);
+}
 
     // ==========================================
     // RETURN IMMEDIATELY — don't wait for parsing

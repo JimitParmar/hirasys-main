@@ -5,6 +5,7 @@ import { queryOne, queryMany, query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { getCompanyUserIds } from "@/lib/company";
+import { checkPipelineNodeLimits } from "@/lib/plan-limits";
 
 export async function GET(req: NextRequest) {
   try {
@@ -73,7 +74,24 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    
     const body = await req.json();
+    if (body.nodes && Array.isArray(body.nodes) && body.nodes.length > 0) {
+  const nodeCheck = await checkPipelineNodeLimits(userId, body.nodes);
+
+  if (!nodeCheck.allowed) {
+    return NextResponse.json(
+      {
+        error: nodeCheck.violations[0],
+        violations: nodeCheck.violations,
+        plan: nodeCheck.plan,
+        planName: nodeCheck.planName,
+        upgradeRequired: true,
+      },
+      { status: 403 }
+    );
+  }
+}
 
     // Handle both single linkedJobId (old) and linkedJobIds array (new)
     let jobIds: string[] = [];
@@ -233,7 +251,7 @@ export async function POST(req: NextRequest) {
       },
       req,
     });
-
+    
     return NextResponse.json({ success: true, pipeline }, { status: 201 });
   } catch (error: any) {
     console.error("Pipeline save error:", error);

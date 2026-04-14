@@ -7,6 +7,7 @@ import { getSession } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { getUserCompanyId } from "@/lib/company";
 import crypto from "crypto";
+import { checkMemberLimit } from "@/lib/plan-limits";
 
 // ==========================================
 // POST — invite team member
@@ -19,7 +20,21 @@ export async function POST(req: NextRequest) {
     }
 
     const user = session.user as any;
+    
     const userId = user.id;
+
+
+// After auth check:
+const memberLimit = await checkMemberLimit(userId);
+if (!memberLimit.allowed) {
+  return NextResponse.json(
+    {
+      error: memberLimit.message,
+      upgradeRequired: memberLimit.upgradeRequired,
+    },
+    { status: 403 }
+  );
+}
 
     if (!["ADMIN", "HR"].includes(user.role)) {
       return NextResponse.json(

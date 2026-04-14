@@ -511,5 +511,28 @@ await query(`
   CREATE INDEX IF NOT EXISTS idx_f2f_app_status ON f2f_interviews(application_id, status);
   CREATE INDEX IF NOT EXISTS idx_jobs_posted_status ON jobs(posted_by, status);
 `);
+
+  // ==========================================
+  // UPDATE PLANS WITH PROPER LIMITS
+  // ==========================================
+    // ==========================================
+  // UPDATE PLANS WITH PROPER LIMITS
+  // ==========================================
+  await query(`
+    UPDATE billing_plans SET
+      features = '{"jobs": 1, "templates": "basic", "pipelineBuilder": true, "aiGenerate": false, "integrations": false, "auditLogs": false, "sso": false, "prioritySupport": false}',
+      limits = '{"maxJobs": 1, "maxMembers": 1, "maxAssessmentNodes": 1, "maxAiInterviewNodes": 1, "maxApplicantsPerJob": 50, "maxPipelineNodes": 5, "maxResumeScreens": 500}'
+    WHERE slug = 'free';
+
+    UPDATE billing_plans SET
+      features = '{"jobs": 10, "templates": "all", "pipelineBuilder": true, "aiGenerate": true, "integrations": true, "auditLogs": false, "sso": false, "prioritySupport": true}',
+      limits = '{"maxJobs": 10, "maxMembers": 3, "maxAssessmentNodes": -1, "maxAiInterviewNodes": -1, "maxApplicantsPerJob": 500, "maxPipelineNodes": 20, "maxResumeScreens": -1}'
+    WHERE slug = 'pro';
+
+    UPDATE billing_plans SET
+      features = '{"jobs": 30, "templates": "all", "pipelineBuilder": true, "aiGenerate": true, "integrations": true, "auditLogs": true, "sso": true, "prioritySupport": true, "dedicatedSupport": true}',
+      limits = '{"maxJobs": 30, "maxMembers": 7, "maxAssessmentNodes": -1, "maxAiInterviewNodes": -1, "maxApplicantsPerJob": -1, "maxPipelineNodes": -1, "maxResumeScreens": -1}'
+    WHERE slug = 'enterprise';
+  `);
   console.log("Database schema initialized successfully");
 }

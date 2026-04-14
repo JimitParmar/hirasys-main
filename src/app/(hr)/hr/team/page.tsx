@@ -25,6 +25,8 @@ import {
 import { formatRelativeTime, formatDateTime } from "@/lib/utils";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { UpgradePrompt } from "@/components/shared/UpgradePrompt";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; icon: any; description: string }> = {
   ADMIN: {
@@ -66,7 +68,17 @@ export default function TeamPage() {
   const [copied, setCopied] = useState(false);
 
   const isAdmin = (user as any)?.role === "ADMIN";
+  const { hasFeature, planName } = usePlanLimits();
 
+if (!hasFeature("auditLogs")) {
+  return (
+    <UpgradePrompt
+      feature="Audit Logs"
+      message="Audit logs are available on the Enterprise plan."
+      currentPlan={planName}
+    />
+  );
+}
   useEffect(() => {
     if (!authLoading) {
       if (!user || !["ADMIN", "HR"].includes((user as any)?.role)) {

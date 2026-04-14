@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { aiJSON } from "@/lib/ai";
 import { NODE_CATALOG, NodeCatalogItem } from "@/types";
+import { checkFeatureAccess } from "@/lib/plan-limits";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,6 +19,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const userId = (session.user as any).id;
+
+    // ✅ CHECK AI GENERATE FEATURE ACCESS
+    const aiAccess = await checkFeatureAccess(userId, "aiGenerate");
+    if (!aiAccess.allowed) {
+      return NextResponse.json(
+        {
+          error: aiAccess.message || "AI Generation requires the Pro plan.",
+          upgradeRequired: aiAccess.upgradeRequired,
+        },
+        { status: 403 }
+      );
+    }
+
     const { prompt } = await req.json();
 
     if (!prompt || prompt.trim().length < 10) {
@@ -29,7 +44,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
+    
     console.log("=== AI PIPELINE GENERATION ===");
     console.log("Prompt:", prompt);
 
