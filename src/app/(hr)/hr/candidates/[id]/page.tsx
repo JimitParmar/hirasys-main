@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 // Add these imports at the top:
+import { ResumeViewer } from "@/components/shared/ResumeViewer";
 import { F2FScheduledInfo } from "@/components/shared/F2FScheduledInfo";
 import { Calendar } from "lucide-react"; // add Calendar to the existing import
 import { Badge } from "@/components/ui/badge";
@@ -204,85 +205,23 @@ export default function CandidateDetailPage() {
 
           {/* Resume Tab */}
           <TabsContent value="resume">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileSearch className="w-5 h-5 text-[#0245EF]" />{" "}
-                  Resume Analysis
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="text-center">
-                    <p
-                      className={`text-3xl font-bold ${
-                        application.resumeScore >= 70
-                          ? "text-emerald-600"
-                          : application.resumeScore >= 40
-                            ? "text-amber-600"
-                            : "text-red-500"
-                      }`}
-                    >
-                      {Math.round(application.resumeScore)}%
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      Match Score
-                    </p>
-                  </div>
-                  {application.resumeParsed?.matchedSkills && (
-                    <div className="flex-1">
-                      <p className="text-xs text-slate-500 mb-1">
-                        Matched Skills
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        {application.resumeParsed.matchedSkills.map(
-                          (s: string) => (
-                            <Badge
-                              key={s}
-                              className="bg-emerald-100 text-emerald-700 text-[10px]"
-                            >
-                              {s}
-                            </Badge>
-                          )
-                        )}
-                      </div>
-                      {application.resumeParsed.missingSkills
-                        ?.length > 0 && (
-                        <>
-                          <p className="text-xs text-slate-500 mb-1 mt-2">
-                            Missing Skills
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {application.resumeParsed.missingSkills.map(
-                              (s: string) => (
-                                <Badge
-                                  key={s}
-                                  variant="outline"
-                                  className="text-red-600 text-[10px]"
-                                >
-                                  {s}
-                                </Badge>
-                              )
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {application.resumeText && (
-                  <div className="bg-slate-50 rounded-lg p-4 max-h-[400px] overflow-y-auto">
-                    <p className="text-xs text-slate-500 mb-2 font-semibold">
-                      Resume Text
-                    </p>
-                    <pre className="text-xs text-slate-600 whitespace-pre-wrap font-sans">
-                      {application.resumeText}
-                    </pre>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+  <Card>
+    <CardHeader>
+      <CardTitle className="text-lg flex items-center gap-2">
+        <FileSearch className="w-5 h-5 text-[#0245EF]" />
+        Resume
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ResumeViewer
+        resumeText={application.resumeText}
+        resumeUrl={application.resumeUrl}
+        resumeParsed={application.resumeParsed}
+        resumeScore={application.resumeScore}
+      />
+    </CardContent>
+  </Card>
+</TabsContent>
 
           {/* Assessment Tab — with Proctoring Report */}
           <TabsContent value="assessment">
