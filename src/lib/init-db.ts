@@ -482,6 +482,15 @@ export async function initializeDatabase() {
     EXCEPTION WHEN OTHERS THEN NULL;
     END $$;
   `);
+  await query(`
+  CREATE TABLE IF NOT EXISTS password_resets (
+    user_id TEXT PRIMARY KEY REFERENCES users(id),
+    token TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token);
+`);
 
   console.log("Database schema initialized successfully");
 }
