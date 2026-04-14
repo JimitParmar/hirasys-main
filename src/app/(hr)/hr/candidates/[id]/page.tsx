@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ProctoringReport } from "@/components/shared/ProctoringReport";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -24,6 +25,7 @@ import {
   FileText,
   MessageSquare,
   HelpCircle,
+  Shield,
 } from "lucide-react";
 import { formatDateTime, formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
@@ -72,13 +74,8 @@ export default function CandidateDetailPage() {
     );
   }
 
-  const {
-    application,
-    submissions,
-    interviews,
-    f2fInterviews,
-    rating,
-  } = data;
+  const { application, submissions, interviews, f2fInterviews, rating } =
+    data;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -119,7 +116,7 @@ export default function CandidateDetailPage() {
                     <Mail className="w-4 h-4" />{" "}
                     {application.candidate.email}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-md text-emerald-700 mt-1">
                     Applied for{" "}
                     <strong>{application.jobTitle}</strong> •{" "}
                     {formatRelativeTime(application.appliedAt)}
@@ -284,7 +281,7 @@ export default function CandidateDetailPage() {
             </Card>
           </TabsContent>
 
-          {/* Assessment Tab — FIXED MCQ display */}
+          {/* Assessment Tab — with Proctoring Report */}
           <TabsContent value="assessment">
             {submissions.length === 0 ? (
               <Card>
@@ -294,276 +291,293 @@ export default function CandidateDetailPage() {
               </Card>
             ) : (
               submissions.map((sub: any) => (
-                <Card key={sub.id} className="mb-4">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center justify-between">
-                      <span className="flex items-center gap-2">
-                        <Code className="w-5 h-5 text-[#0245EF]" />{" "}
-                        Assessment Results
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          className={
-                            sub.percentage >= 70
-                              ? "bg-emerald-100 text-emerald-700"
-                              : sub.percentage >= 40
-                                ? "bg-amber-100 text-amber-700"
-                                : "bg-red-100 text-red-700"
-                          }
-                        >
-                          {Math.round(sub.percentage)}% (
-                          {sub.totalScore}/{sub.maxScore})
-                        </Badge>
-                        <span className="text-xs text-slate-400">
-                          {sub.timeTaken
-                            ? `${Math.floor(sub.timeTaken / 60)}m ${sub.timeTaken % 60}s`
-                            : ""}
+                <div key={sub.id} className="mb-6">
+                  {/* Assessment Results Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Code className="w-5 h-5 text-[#0245EF]" />{" "}
+                          Assessment Results
                         </span>
-                      </div>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {(sub.answers || []).map(
-                      (answer: any, i: number) => (
-                        <div
-                          key={i}
-                          className="border rounded-lg overflow-hidden"
-                        >
-                          {/* Question Header */}
-                          <div
-                            className={`flex items-center justify-between p-3 ${
-                              answer.score > 0
-                                ? "bg-emerald-50"
-                                : "bg-red-50"
-                            }`}
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            className={
+                              sub.percentage >= 70
+                                ? "bg-emerald-100 text-emerald-700"
+                                : sub.percentage >= 40
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-red-100 text-red-700"
+                            }
                           >
-                            <div className="flex items-center gap-2">
-                              {answer.score > 0 ? (
-                                <CheckCircle className="w-4 h-4 text-emerald-600" />
-                              ) : (
-                                <XCircle className="w-4 h-4 text-red-500" />
-                              )}
-                              <span className="text-sm font-medium text-slate-700">
-                                Q{i + 1}: {answer.questionTitle}
-                              </span>
-                              <Badge
-                                variant="outline"
-                                className="text-[10px]"
-                              >
-                                {answer.type === "mcq" ? (
-                                  <span className="flex items-center gap-0.5">
-                                    <HelpCircle className="w-3 h-3" />{" "}
-                                    MCQ
-                                  </span>
-                                ) : (
-                                  answer.type
-                                )}
-                              </Badge>
-                            </div>
-                            <span
-                              className={`text-sm font-bold ${
+                            {Math.round(sub.percentage)}% (
+                            {sub.totalScore}/{sub.maxScore})
+                          </Badge>
+                          <span className="text-xs text-slate-400">
+                            {sub.timeTaken
+                              ? `${Math.floor(sub.timeTaken / 60)}m ${sub.timeTaken % 60}s`
+                              : ""}
+                          </span>
+                        </div>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {(sub.answers || []).map(
+                        (answer: any, i: number) => (
+                          <div
+                            key={i}
+                            className="border rounded-lg overflow-hidden"
+                          >
+                            {/* Question Header */}
+                            <div
+                              className={`flex items-center justify-between p-3 ${
                                 answer.score > 0
-                                  ? "text-emerald-600"
-                                  : "text-red-500"
+                                  ? "bg-emerald-50"
+                                  : "bg-red-50"
                               }`}
                             >
-                              {answer.score}/{answer.maxScore}
-                            </span>
-                          </div>
+                              <div className="flex items-center gap-2">
+                                {answer.score > 0 ? (
+                                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                                ) : (
+                                  <XCircle className="w-4 h-4 text-red-500" />
+                                )}
+                                <span className="text-sm font-medium text-slate-700">
+                                  Q{i + 1}: {answer.questionTitle}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px]"
+                                >
+                                  {answer.type === "mcq" ? (
+                                    <span className="flex items-center gap-0.5">
+                                      <HelpCircle className="w-3 h-3" />{" "}
+                                      MCQ
+                                    </span>
+                                  ) : (
+                                    answer.type
+                                  )}
+                                </Badge>
+                              </div>
+                              <span
+                                className={`text-sm font-bold ${
+                                  answer.score > 0
+                                    ? "text-emerald-600"
+                                    : "text-red-500"
+                                }`}
+                              >
+                                {answer.score}/{answer.maxScore}
+                              </span>
+                            </div>
 
-                          <div className="p-3 space-y-2">
-                            {/* ==========================================
-                                CODING ANSWER
-                                ========================================== */}
-                            {answer.type === "coding" &&
-                              answer.code && (
-                                <div>
-                                  <p className="text-xs text-slate-500 mb-1">
-                                    Code (
-                                    {answer.language || "javascript"})
-                                  </p>
-                                  <pre className="text-xs bg-slate-900 text-slate-300 p-3 rounded-lg overflow-x-auto max-h-[300px]">
-                                    {answer.code}
-                                  </pre>
-                                  {answer.grading?.testResults && (
-                                    <div className="mt-2 space-y-1">
-                                      <p className="text-xs text-slate-500">
-                                        Tests:{" "}
-                                        {answer.grading.passedCount}/
-                                        {answer.grading.totalTests}{" "}
-                                        passed
-                                      </p>
-                                      {answer.grading.testResults.map(
-                                        (
-                                          tr: any,
-                                          ti: number
-                                        ) => (
-                                          <div
-                                            key={ti}
-                                            className={`text-[10px] px-2 py-1 rounded flex items-center gap-2 ${
-                                              tr.passed
-                                                ? "bg-emerald-50 text-emerald-700"
-                                                : "bg-red-50 text-red-600"
-                                            }`}
-                                          >
-                                            {tr.passed ? (
-                                              <CheckCircle className="w-3 h-3" />
-                                            ) : (
-                                              <XCircle className="w-3 h-3" />
-                                            )}
-                                            Test {ti + 1}
-                                            {tr.isHidden === false &&
-                                              ` — Input: ${tr.input}`}
-                                            {!tr.passed &&
-                                              tr.error && (
-                                                <span className="ml-2 text-red-500">
-                                                  {tr.error}
-                                                </span>
+                            <div className="p-3 space-y-2">
+                              {/* CODING ANSWER */}
+                              {answer.type === "coding" &&
+                                answer.code && (
+                                  <div>
+                                    <p className="text-xs text-slate-500 mb-1">
+                                      Code (
+                                      {answer.language ||
+                                        "javascript"}
+                                      )
+                                    </p>
+                                    <pre className="text-xs bg-slate-900 text-slate-300 p-3 rounded-lg overflow-x-auto max-h-[300px]">
+                                      {answer.code}
+                                    </pre>
+                                    {answer.grading
+                                      ?.testResults && (
+                                      <div className="mt-2 space-y-1">
+                                        <p className="text-xs text-slate-500">
+                                          Tests:{" "}
+                                          {
+                                            answer.grading
+                                              .passedCount
+                                          }
+                                          /
+                                          {
+                                            answer.grading
+                                              .totalTests
+                                          }{" "}
+                                          passed
+                                        </p>
+                                        {answer.grading.testResults.map(
+                                          (
+                                            tr: any,
+                                            ti: number
+                                          ) => (
+                                            <div
+                                              key={ti}
+                                              className={`text-[10px] px-2 py-1 rounded flex items-center gap-2 ${
+                                                tr.passed
+                                                  ? "bg-emerald-50 text-emerald-700"
+                                                  : "bg-red-50 text-red-600"
+                                              }`}
+                                            >
+                                              {tr.passed ? (
+                                                <CheckCircle className="w-3 h-3" />
+                                              ) : (
+                                                <XCircle className="w-3 h-3" />
                                               )}
-                                          </div>
-                                        )
+                                              Test{" "}
+                                              {ti + 1}
+                                              {tr.isHidden ===
+                                                false &&
+                                                ` — Input: ${tr.input}`}
+                                              {!tr.passed &&
+                                                tr.error && (
+                                                  <span className="ml-2 text-red-500">
+                                                    {
+                                                      tr.error
+                                                    }
+                                                  </span>
+                                                )}
+                                            </div>
+                                          )
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                              {/* MCQ ANSWER */}
+                              {answer.type === "mcq" && (
+                                <div className="space-y-2">
+                                  {answer.questionDescription && (
+                                    <p className="text-xs text-slate-500 whitespace-pre-line">
+                                      {
+                                        answer.questionDescription
+                                      }
+                                    </p>
+                                  )}
+
+                                  {answer.grading?.options ? (
+                                    <div className="space-y-1.5">
+                                      {answer.grading.options.map(
+                                        (opt: any) => {
+                                          const isSelected =
+                                            answer.grading
+                                              ?.selected ===
+                                            opt.id;
+                                          const isCorrect =
+                                            answer.grading
+                                              ?.correctAnswer ===
+                                            opt.id;
+
+                                          return (
+                                            <div
+                                              key={opt.id}
+                                              className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${
+                                                isCorrect &&
+                                                isSelected
+                                                  ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                                                  : isCorrect
+                                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                                                    : isSelected &&
+                                                        !isCorrect
+                                                      ? "bg-red-50 border-red-300 text-red-700"
+                                                      : "bg-white border-slate-200 text-slate-600"
+                                              }`}
+                                            >
+                                              <span
+                                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                                  isCorrect
+                                                    ? "bg-emerald-500 text-white"
+                                                    : isSelected
+                                                      ? "bg-red-500 text-white"
+                                                      : "bg-slate-200 text-slate-500"
+                                                }`}
+                                              >
+                                                {opt.id.toUpperCase()}
+                                              </span>
+                                              <span className="flex-1">
+                                                {opt.text}
+                                              </span>
+                                              {isCorrect && (
+                                                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                                              )}
+                                              {isSelected &&
+                                                !isCorrect && (
+                                                  <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                                                )}
+                                              {isSelected && (
+                                                <Badge
+                                                  variant="outline"
+                                                  className={`text-[9px] h-4 ${
+                                                    isCorrect
+                                                      ? "text-emerald-600 border-emerald-300"
+                                                      : "text-red-600 border-red-300"
+                                                  }`}
+                                                >
+                                                  Selected
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          );
+                                        }
                                       )}
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      <div
+                                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${
+                                          answer.grading?.correct
+                                            ? "bg-emerald-50 border-emerald-200"
+                                            : "bg-red-50 border-red-200"
+                                        }`}
+                                      >
+                                        {answer.grading
+                                          ?.correct ? (
+                                          <CheckCircle className="w-4 h-4 text-emerald-500" />
+                                        ) : (
+                                          <XCircle className="w-4 h-4 text-red-500" />
+                                        )}
+                                        <span>
+                                          Selected:{" "}
+                                          <strong>
+                                            {answer.grading?.selected?.toUpperCase() ||
+                                              answer.selectedOption?.toUpperCase() ||
+                                              "None"}
+                                          </strong>
+                                        </span>
+                                        {!answer.grading
+                                          ?.correct &&
+                                          answer.grading
+                                            ?.correctAnswer && (
+                                            <span className="text-slate-400 ml-2">
+                                              Correct:{" "}
+                                              <strong className="text-emerald-600">
+                                                {answer.grading.correctAnswer.toUpperCase()}
+                                              </strong>
+                                            </span>
+                                          )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {answer.grading
+                                    ?.explanation && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-xs text-blue-700">
+                                      <span className="font-semibold">
+                                        💡 Explanation:
+                                      </span>{" "}
+                                      {
+                                        answer.grading
+                                          .explanation
+                                      }
                                     </div>
                                   )}
                                 </div>
                               )}
-
-                            {/* ==========================================
-                                MCQ ANSWER — FULL DETAIL
-                                ========================================== */}
-                            {answer.type === "mcq" && (
-                              <div className="space-y-2">
-                                {/* Show question description if available */}
-                                {answer.questionDescription && (
-                                  <p className="text-xs text-slate-500 whitespace-pre-line">
-                                    {answer.questionDescription}
-                                  </p>
-                                )}
-
-                                {/* Show all options with visual indicators */}
-                                {answer.grading?.options ? (
-                                  <div className="space-y-1.5">
-                                    {answer.grading.options.map(
-                                      (opt: any) => {
-                                        const isSelected =
-                                          answer.grading?.selected ===
-                                          opt.id;
-                                        const isCorrect =
-                                          answer.grading
-                                            ?.correctAnswer ===
-                                          opt.id;
-
-                                        return (
-                                          <div
-                                            key={opt.id}
-                                            className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${
-                                              isCorrect && isSelected
-                                                ? "bg-emerald-50 border-emerald-300 text-emerald-800"
-                                                : isCorrect
-                                                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                                                  : isSelected &&
-                                                      !isCorrect
-                                                    ? "bg-red-50 border-red-300 text-red-700"
-                                                    : "bg-white border-slate-200 text-slate-600"
-                                            }`}
-                                          >
-                                            {/* Option letter */}
-                                            <span
-                                              className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                                                isCorrect
-                                                  ? "bg-emerald-500 text-white"
-                                                  : isSelected
-                                                    ? "bg-red-500 text-white"
-                                                    : "bg-slate-200 text-slate-500"
-                                              }`}
-                                            >
-                                              {opt.id.toUpperCase()}
-                                            </span>
-
-                                            {/* Option text */}
-                                            <span className="flex-1">
-                                              {opt.text}
-                                            </span>
-
-                                            {/* Indicators */}
-                                            {isCorrect && (
-                                              <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
-                                            )}
-                                            {isSelected &&
-                                              !isCorrect && (
-                                                <XCircle className="w-4 h-4 text-red-500 shrink-0" />
-                                              )}
-                                            {isSelected && (
-                                              <Badge
-                                                variant="outline"
-                                                className={`text-[9px] h-4 ${
-                                                  isCorrect
-                                                    ? "text-emerald-600 border-emerald-300"
-                                                    : "text-red-600 border-red-300"
-                                                }`}
-                                              >
-                                                Selected
-                                              </Badge>
-                                            )}
-                                          </div>
-                                        );
-                                      }
-                                    )}
-                                  </div>
-                                ) : (
-                                  /* Fallback: just show selected vs correct */
-                                  <div className="space-y-1.5">
-                                    <div
-                                      className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${
-                                        answer.grading?.correct
-                                          ? "bg-emerald-50 border-emerald-200"
-                                          : "bg-red-50 border-red-200"
-                                      }`}
-                                    >
-                                      {answer.grading?.correct ? (
-                                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                                      ) : (
-                                        <XCircle className="w-4 h-4 text-red-500" />
-                                      )}
-                                      <span>
-                                        Selected:{" "}
-                                        <strong>
-                                          {answer.grading?.selected?.toUpperCase() ||
-                                            answer.selectedOption?.toUpperCase() ||
-                                            "None"}
-                                        </strong>
-                                      </span>
-                                      {!answer.grading?.correct &&
-                                        answer.grading
-                                          ?.correctAnswer && (
-                                          <span className="text-slate-400 ml-2">
-                                            Correct:{" "}
-                                            <strong className="text-emerald-600">
-                                              {answer.grading.correctAnswer.toUpperCase()}
-                                            </strong>
-                                          </span>
-                                        )}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Explanation */}
-                                {answer.grading?.explanation && (
-                                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-xs text-blue-700">
-                                    <span className="font-semibold">
-                                      💡 Explanation:
-                                    </span>{" "}
-                                    {answer.grading.explanation}
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                            </div>
                           </div>
-                        </div>
-                      )
-                    )}
-                  </CardContent>
-                </Card>
+                        )
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* ✅ PROCTORING REPORT — shown below each submission */}
+                  <ProctoringReport submissionId={sub.id} />
+                </div>
               ))
             )}
           </TabsContent>
@@ -582,8 +596,8 @@ export default function CandidateDetailPage() {
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center justify-between">
                       <span className="flex items-center gap-2">
-                        <Bot className="w-5 h-5 text-[#0245EF]" /> AI{" "}
-                        {interview.type} Interview
+                        <Bot className="w-5 h-5 text-[#0245EF]" />{" "}
+                        AI {interview.type} Interview
                       </span>
                       <Badge
                         className={
@@ -608,7 +622,8 @@ export default function CandidateDetailPage() {
                         {
                           label: "Technical",
                           score:
-                            interview.scoreBreakdown?.technicalScore,
+                            interview.scoreBreakdown
+                              ?.technicalScore,
                         },
                         {
                           label: "Communication",
@@ -765,7 +780,9 @@ export default function CandidateDetailPage() {
                         <Video className="w-5 h-5 text-[#0245EF]" />{" "}
                         {f2f.interview_type} Interview
                       </span>
-                      <Badge variant="outline">{f2f.status}</Badge>
+                      <Badge variant="outline">
+                        {f2f.status}
+                      </Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -786,7 +803,8 @@ export default function CandidateDetailPage() {
                           },
                           {
                             label: "Problem Solving",
-                            score: f2f.problem_solving_score,
+                            score:
+                              f2f.problem_solving_score,
                           },
                           {
                             label: "Culture Fit",

@@ -7,6 +7,8 @@ import Editor from "@monaco-editor/react";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime, parseDBTimestamp } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { useProctoring } from "@/hooks/useProctoring";
+import { ProctoringBanner} from "@/components/shared/ProctoringBanner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -78,6 +80,19 @@ function AssessmentContent() {
   const [questionsReady, setQuestionsReady] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const submitCalledRef = useRef(false);
+  const MAX_WARNINGS = 5;
+
+
+  const proctoring = useProctoring({
+  enabled: questionsReady && !isFinished,
+  submissionId: submissionRef.current?.id,
+  maxWarnings: MAX_WARNINGS,
+  blockCopyPaste: true,
+  blockRightClick: true,
+  detectDevTools: true,
+  detectTabSwitch: true,
+  warnOnViolation: true,
+});
 
   // Keep an up-to-date ref of answers for the interval timer
   const answersRef = useRef<Record<string, any>>({});
@@ -365,7 +380,7 @@ function AssessmentContent() {
       console.log("⛔ Already submitting, skipping...");
       return;
     }
-
+    proctoring.flush();
     setSubmitting(true);
     submitCalledRef.current = true;
 
@@ -608,6 +623,14 @@ function AssessmentContent() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-900 text-white">
+      {questionsReady && !isFinished && (
+    <ProctoringBanner
+      warnings={proctoring.warnings}
+      maxWarnings={MAX_WARNINGS}
+      tabSwitches={proctoring.tabSwitches}
+      copyAttempts={proctoring.copyAttempts}
+    />
+  )}
       {/* Top Bar */}
       <div className="h-12 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">

@@ -492,5 +492,12 @@ export async function initializeDatabase() {
   CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token);
 `);
 
+await query(`
+  DO $$ BEGIN
+    ALTER TABLE submissions ADD COLUMN IF NOT EXISTS proctoring_events JSONB DEFAULT '[]';
+    ALTER TABLE submissions ADD COLUMN IF NOT EXISTS proctoring_summary JSONB;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END $$;
+`);
   console.log("Database schema initialized successfully");
 }
