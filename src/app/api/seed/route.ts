@@ -56,11 +56,11 @@ export async function GET() {
         progress(3, TOTAL_STEPS, "Creating team members...");
 
         const teamMembers = [
-          { email: "priya@nexlayer.io", firstName: "Priya", lastName: "Sharma", role: "ADMIN" },
-          { email: "recruiter@nexlayer.io", firstName: "Meera", lastName: "Kapoor", role: "HR" },
-          { email: "hiring@nexlayer.io", firstName: "Arjun", lastName: "Mehta", role: "HR" },
-          { email: "rahul@nexlayer.io", firstName: "Rahul", lastName: "Desai", role: "HIRING_MANAGER" },
-        ];
+  { email: "priya@nexlayer.io", firstName: "Priya", lastName: "Sharma", role: "ADMIN" },
+  { email: "recruiter@nexlayer.io", firstName: "Meera", lastName: "Kapoor", role: "HR" },
+  { email: "hiring@nexlayer.io", firstName: "Arjun", lastName: "Mehta", role: "HR" },
+  { email: "rahul@nexlayer.io", firstName: "Rahul", lastName: "Desai", role: "INTERVIEWER" },
+];
 
         for (const u of teamMembers) {
           const existing = await queryOne("SELECT id FROM users WHERE email = $1", [u.email]);
@@ -382,11 +382,11 @@ export async function GET() {
                 jobs: 8,
                 applications: appCount,
                 accounts: [
-                  { role: "Admin", email: "priya@nexlayer.io" },
-                  { role: "Recruiter", email: "recruiter@nexlayer.io" },
-                  { role: "Recruiter #2", email: "hiring@nexlayer.io" },
-                  { role: "Hiring Manager", email: "rahul@nexlayer.io" },
-                ],
+  { role: "Admin", email: "priya@nexlayer.io" },
+  { role: "Recruiter", email: "recruiter@nexlayer.io" },
+  { role: "Recruiter #2", email: "hiring@nexlayer.io" },
+  { role: "Interviewer", email: "rahul@nexlayer.io" },
+],
                 password: "Test1234!",
               },
             })}\n\n`
