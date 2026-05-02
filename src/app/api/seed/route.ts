@@ -20,7 +20,7 @@ export async function GET() {
         );
       }
 
-      const TOTAL_STEPS = 7;
+      const TOTAL_STEPS = 8;
 
       try {
         // ==========================================
@@ -236,10 +236,788 @@ export async function GET() {
           if (created) jobIds[job.title] = created.id;
         }
 
+
+                // ==========================================
+        // STEP 6: PIPELINES
         // ==========================================
-        // STEP 6: APPLICATIONS
+        progress(6, TOTAL_STEPS, "Creating pipelines for all jobs...");
+
+        const pipelineConfigs: Array<{
+          jobTitle: string;
+          name: string;
+          description: string;
+          nodes: any[];
+          edges: any[];
+        }> = [
+          // ---- Senior Frontend Engineer ----
+          {
+            jobTitle: "Senior Frontend Engineer",
+            name: "Senior Frontend Hiring Pipeline",
+            description: "Full pipeline for senior frontend engineer role — resume screen, coding assessment, AI interview, F2F, and final review.",
+            nodes: [
+              {
+                id: "start-1",
+                type: "startNode",
+                position: { x: 0, y: 300 },
+                data: { label: "Applications Open", description: "Candidates apply through job posting" },
+              },
+              {
+                id: "resume-1",
+                type: "resumeScreenNode",
+                position: { x: 300, y: 300 },
+                data: {
+                  label: "Resume Screening",
+                  description: "AI screens resumes against role requirements",
+                  passThreshold: 70,
+                  criteria: ["React 5+ years", "TypeScript", "Next.js experience", "Production scale apps"],
+                  estimatedPassRate: 40,
+                },
+              },
+              {
+                id: "assessment-1",
+                type: "assessmentNode",
+                position: { x: 600, y: 200 },
+                data: {
+                  label: "Coding Assessment",
+                  description: "React + TypeScript coding challenge",
+                  assessmentType: "CODING",
+                  duration: 90,
+                  passingScore: 65,
+                  skills: ["React", "TypeScript", "Problem Solving"],
+                },
+              },
+              {
+                id: "ai-interview-1",
+                type: "aiInterviewNode",
+                position: { x: 900, y: 200 },
+                data: {
+                  label: "AI Technical Interview",
+                  description: "30-min AI interview on frontend architecture and system design",
+                  interviewType: "TECHNICAL",
+                  duration: 30,
+                  maxQuestions: 8,
+                  focusAreas: ["React architecture", "Performance", "State management", "Testing"],
+                },
+              },
+              {
+                id: "f2f-1",
+                type: "interviewNode",
+                position: { x: 1200, y: 200 },
+                data: {
+                  label: "Team Interview",
+                  description: "1-hour interview with engineering lead and senior engineer",
+                  interviewType: "technical",
+                  duration: 60,
+                  interviewers: ["Engineering Lead", "Senior Engineer"],
+                },
+              },
+              {
+                id: "review-1",
+                type: "reviewNode",
+                position: { x: 1500, y: 300 },
+                data: {
+                  label: "Final Review",
+                  description: "Hiring committee reviews all scores and feedback",
+                  reviewers: ["Engineering Lead", "VP Engineering", "HR"],
+                },
+              },
+              {
+                id: "offer-1",
+                type: "offerNode",
+                position: { x: 1800, y: 300 },
+                data: { label: "Offer", description: "Extend offer to selected candidate" },
+              },
+              {
+                id: "reject-resume",
+                type: "rejectionNode",
+                position: { x: 300, y: 500 },
+                data: { label: "Rejected — Resume", description: "Did not meet minimum requirements", sendFeedback: true },
+              },
+              {
+                id: "reject-assessment",
+                type: "rejectionNode",
+                position: { x: 600, y: 500 },
+                data: { label: "Rejected — Assessment", description: "Below passing score on coding challenge", sendFeedback: true },
+              },
+              {
+                id: "reject-interview",
+                type: "rejectionNode",
+                position: { x: 1050, y: 500 },
+                data: { label: "Rejected — Interview", description: "Not a fit based on interview performance", sendFeedback: true },
+              },
+            ],
+            edges: [
+              { id: "e-start-resume", source: "start-1", target: "resume-1", type: "smoothstep", animated: true },
+              { id: "e-resume-pass", source: "resume-1", target: "assessment-1", type: "smoothstep", label: "Score ≥ 70", animated: true },
+              { id: "e-resume-fail", source: "resume-1", target: "reject-resume", type: "smoothstep", label: "Score < 70", style: { stroke: "#ef4444" } },
+              { id: "e-assess-pass", source: "assessment-1", target: "ai-interview-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-assess-fail", source: "assessment-1", target: "reject-assessment", type: "smoothstep", label: "Fail", style: { stroke: "#ef4444" } },
+              { id: "e-ai-pass", source: "ai-interview-1", target: "f2f-1", type: "smoothstep", label: "Advance", animated: true },
+              { id: "e-ai-fail", source: "ai-interview-1", target: "reject-interview", type: "smoothstep", label: "No advance", style: { stroke: "#ef4444" } },
+              { id: "e-f2f-pass", source: "f2f-1", target: "review-1", type: "smoothstep", label: "Positive", animated: true },
+              { id: "e-f2f-fail", source: "f2f-1", target: "reject-interview", type: "smoothstep", label: "No hire", style: { stroke: "#ef4444" } },
+              { id: "e-review-offer", source: "review-1", target: "offer-1", type: "smoothstep", label: "Approved", animated: true },
+              { id: "e-review-reject", source: "review-1", target: "reject-interview", type: "smoothstep", label: "Declined", style: { stroke: "#ef4444" } },
+            ],
+          },
+
+          // ---- Backend Engineer ----
+          {
+            jobTitle: "Backend Engineer — Platform",
+            name: "Backend Engineer Pipeline",
+            description: "Technical-heavy pipeline with coding assessment, system design AI interview, and team interview.",
+            nodes: [
+              {
+                id: "start-1",
+                type: "startNode",
+                position: { x: 0, y: 300 },
+                data: { label: "Applications Open", description: "Candidates apply" },
+              },
+              {
+                id: "resume-1",
+                type: "resumeScreenNode",
+                position: { x: 300, y: 300 },
+                data: {
+                  label: "Resume Screening",
+                  description: "AI screens for backend experience",
+                  passThreshold: 65,
+                  criteria: ["Node.js/Python 3+ years", "PostgreSQL", "API design", "Cloud experience"],
+                  estimatedPassRate: 45,
+                },
+              },
+              {
+                id: "assessment-1",
+                type: "assessmentNode",
+                position: { x: 600, y: 200 },
+                data: {
+                  label: "Backend Coding Challenge",
+                  description: "API design and database query challenge",
+                  assessmentType: "CODING",
+                  duration: 120,
+                  passingScore: 60,
+                  skills: ["Node.js", "SQL", "API Design"],
+                },
+              },
+              {
+                id: "ai-interview-1",
+                type: "aiInterviewNode",
+                position: { x: 900, y: 200 },
+                data: {
+                  label: "AI System Design Interview",
+                  description: "AI-led system design and architecture discussion",
+                  interviewType: "TECHNICAL",
+                  duration: 35,
+                  maxQuestions: 10,
+                  focusAreas: ["System design", "Database modeling", "Scalability", "API patterns"],
+                },
+              },
+              {
+                id: "f2f-1",
+                type: "interviewNode",
+                position: { x: 1200, y: 200 },
+                data: {
+                  label: "Team Interview",
+                  description: "Live coding + architecture discussion with platform team",
+                  interviewType: "technical",
+                  duration: 75,
+                  interviewers: ["Platform Lead", "Staff Engineer"],
+                },
+              },
+              {
+                id: "review-1",
+                type: "reviewNode",
+                position: { x: 1500, y: 300 },
+                data: { label: "Final Review", description: "Team debrief and decision" },
+              },
+              {
+                id: "offer-1",
+                type: "offerNode",
+                position: { x: 1800, y: 300 },
+                data: { label: "Offer", description: "Extend offer" },
+              },
+              {
+                id: "reject-1",
+                type: "rejectionNode",
+                position: { x: 600, y: 500 },
+                data: { label: "Rejected", description: "Not moving forward", sendFeedback: true },
+              },
+            ],
+            edges: [
+              { id: "e-start-resume", source: "start-1", target: "resume-1", type: "smoothstep", animated: true },
+              { id: "e-resume-pass", source: "resume-1", target: "assessment-1", type: "smoothstep", label: "Score ≥ 65", animated: true },
+              { id: "e-resume-fail", source: "resume-1", target: "reject-1", type: "smoothstep", label: "Below threshold", style: { stroke: "#ef4444" } },
+              { id: "e-assess-pass", source: "assessment-1", target: "ai-interview-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-assess-fail", source: "assessment-1", target: "reject-1", type: "smoothstep", label: "Fail", style: { stroke: "#ef4444" } },
+              { id: "e-ai-pass", source: "ai-interview-1", target: "f2f-1", type: "smoothstep", label: "Advance", animated: true },
+              { id: "e-ai-fail", source: "ai-interview-1", target: "reject-1", type: "smoothstep", label: "No advance", style: { stroke: "#ef4444" } },
+              { id: "e-f2f-pass", source: "f2f-1", target: "review-1", type: "smoothstep", label: "Positive", animated: true },
+              { id: "e-f2f-fail", source: "f2f-1", target: "reject-1", type: "smoothstep", label: "No hire", style: { stroke: "#ef4444" } },
+              { id: "e-review-offer", source: "review-1", target: "offer-1", type: "smoothstep", animated: true },
+            ],
+          },
+
+          // ---- Product Designer ----
+          {
+            jobTitle: "Product Designer",
+            name: "Product Designer Pipeline",
+            description: "Design-focused pipeline with portfolio review, design challenge, and culture fit.",
+            nodes: [
+              {
+                id: "start-1",
+                type: "startNode",
+                position: { x: 0, y: 300 },
+                data: { label: "Applications Open", description: "Candidates apply with portfolio" },
+              },
+              {
+                id: "resume-1",
+                type: "resumeScreenNode",
+                position: { x: 300, y: 300 },
+                data: {
+                  label: "Resume + Portfolio Screen",
+                  description: "AI reviews resume and portfolio link",
+                  passThreshold: 70,
+                  criteria: ["3+ years product design", "Figma proficiency", "B2B SaaS experience", "Portfolio quality"],
+                  estimatedPassRate: 35,
+                },
+              },
+              {
+                id: "assessment-1",
+                type: "assessmentNode",
+                position: { x: 600, y: 200 },
+                data: {
+                  label: "Design Challenge",
+                  description: "Take-home design exercise — redesign a hiring workflow",
+                  assessmentType: "SUBJECTIVE",
+                  duration: 180,
+                  passingScore: 70,
+                  skills: ["UI Design", "UX Thinking", "Design Systems"],
+                },
+              },
+              {
+                id: "ai-interview-1",
+                type: "aiInterviewNode",
+                position: { x: 900, y: 200 },
+                data: {
+                  label: "AI Design Thinking Interview",
+                  description: "AI-led interview on design process and decision making",
+                  interviewType: "BEHAVIORAL",
+                  duration: 25,
+                  maxQuestions: 8,
+                  focusAreas: ["Design process", "User empathy", "Collaboration", "Design critique"],
+                },
+              },
+              {
+                id: "f2f-1",
+                type: "interviewNode",
+                position: { x: 1200, y: 200 },
+                data: {
+                  label: "Design Presentation + Culture Fit",
+                  description: "Present design challenge solution + team culture chat",
+                  interviewType: "culture",
+                  duration: 60,
+                  interviewers: ["Design Lead", "Product Manager", "Engineer"],
+                },
+              },
+              {
+                id: "offer-1",
+                type: "offerNode",
+                position: { x: 1500, y: 300 },
+                data: { label: "Offer", description: "Extend offer" },
+              },
+              {
+                id: "reject-1",
+                type: "rejectionNode",
+                position: { x: 600, y: 500 },
+                data: { label: "Rejected", description: "Not moving forward", sendFeedback: true },
+              },
+            ],
+            edges: [
+              { id: "e-start-resume", source: "start-1", target: "resume-1", type: "smoothstep", animated: true },
+              { id: "e-resume-pass", source: "resume-1", target: "assessment-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-resume-fail", source: "resume-1", target: "reject-1", type: "smoothstep", label: "Fail", style: { stroke: "#ef4444" } },
+              { id: "e-assess-pass", source: "assessment-1", target: "ai-interview-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-assess-fail", source: "assessment-1", target: "reject-1", type: "smoothstep", label: "Fail", style: { stroke: "#ef4444" } },
+              { id: "e-ai-pass", source: "ai-interview-1", target: "f2f-1", type: "smoothstep", label: "Advance", animated: true },
+              { id: "e-ai-fail", source: "ai-interview-1", target: "reject-1", type: "smoothstep", label: "No advance", style: { stroke: "#ef4444" } },
+              { id: "e-f2f-pass", source: "f2f-1", target: "offer-1", type: "smoothstep", label: "Hire", animated: true },
+              { id: "e-f2f-fail", source: "f2f-1", target: "reject-1", type: "smoothstep", label: "No hire", style: { stroke: "#ef4444" } },
+            ],
+          },
+
+          // ---- DevOps ----
+          {
+            jobTitle: "DevOps / Infrastructure Engineer",
+            name: "DevOps Engineer Pipeline",
+            description: "Infrastructure-focused pipeline with hands-on assessment and incident response scenario.",
+            nodes: [
+              {
+                id: "start-1",
+                type: "startNode",
+                position: { x: 0, y: 300 },
+                data: { label: "Applications Open", description: "Candidates apply" },
+              },
+              {
+                id: "resume-1",
+                type: "resumeScreenNode",
+                position: { x: 300, y: 300 },
+                data: {
+                  label: "Resume Screening",
+                  passThreshold: 65,
+                  criteria: ["AWS experience", "Terraform/IaC", "Docker", "CI/CD", "On-call experience"],
+                },
+              },
+              {
+                id: "assessment-1",
+                type: "assessmentNode",
+                position: { x: 600, y: 200 },
+                data: {
+                  label: "Infrastructure Challenge",
+                  description: "Terraform + Docker hands-on task",
+                  assessmentType: "CODING",
+                  duration: 90,
+                  passingScore: 60,
+                  skills: ["Terraform", "Docker", "AWS", "Bash"],
+                },
+              },
+              {
+                id: "ai-interview-1",
+                type: "aiInterviewNode",
+                position: { x: 900, y: 200 },
+                data: {
+                  label: "AI Incident Response Interview",
+                  description: "Scenario-based interview on debugging and incident handling",
+                  interviewType: "TECHNICAL",
+                  duration: 30,
+                  maxQuestions: 8,
+                },
+              },
+              {
+                id: "f2f-1",
+                type: "interviewNode",
+                position: { x: 1200, y: 200 },
+                data: {
+                  label: "Team Interview",
+                  interviewType: "technical",
+                  duration: 60,
+                  interviewers: ["Platform Lead", "SRE Lead"],
+                },
+              },
+              {
+                id: "offer-1",
+                type: "offerNode",
+                position: { x: 1500, y: 300 },
+                data: { label: "Offer" },
+              },
+              {
+                id: "reject-1",
+                type: "rejectionNode",
+                position: { x: 600, y: 500 },
+                data: { label: "Rejected", sendFeedback: true },
+              },
+            ],
+            edges: [
+              { id: "e-start-resume", source: "start-1", target: "resume-1", type: "smoothstep", animated: true },
+              { id: "e-resume-pass", source: "resume-1", target: "assessment-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-resume-fail", source: "resume-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-assess-pass", source: "assessment-1", target: "ai-interview-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-assess-fail", source: "assessment-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-ai-pass", source: "ai-interview-1", target: "f2f-1", type: "smoothstep", label: "Advance", animated: true },
+              { id: "e-ai-fail", source: "ai-interview-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-f2f-pass", source: "f2f-1", target: "offer-1", type: "smoothstep", animated: true },
+              { id: "e-f2f-fail", source: "f2f-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+            ],
+          },
+
+          // ---- Growth Marketing Manager ----
+          {
+            jobTitle: "Growth Marketing Manager",
+            name: "Marketing Hire Pipeline",
+            description: "Marketing pipeline — resume screen, case study presentation, culture fit.",
+            nodes: [
+              {
+                id: "start-1",
+                type: "startNode",
+                position: { x: 0, y: 300 },
+                data: { label: "Applications Open" },
+              },
+              {
+                id: "resume-1",
+                type: "resumeScreenNode",
+                position: { x: 300, y: 300 },
+                data: {
+                  label: "Resume Screening",
+                  passThreshold: 70,
+                  criteria: ["B2B SaaS marketing", "SEO experience", "Paid acquisition", "Analytics"],
+                },
+              },
+              {
+                id: "ai-interview-1",
+                type: "aiInterviewNode",
+                position: { x: 600, y: 200 },
+                data: {
+                  label: "AI Marketing Interview",
+                  description: "AI-led interview on growth strategy and marketing fundamentals",
+                  interviewType: "BEHAVIORAL",
+                  duration: 25,
+                  maxQuestions: 8,
+                },
+              },
+              {
+                id: "f2f-1",
+                type: "interviewNode",
+                position: { x: 900, y: 200 },
+                data: {
+                  label: "Case Study Presentation",
+                  description: "Present a GTM strategy for Nexlayer",
+                  interviewType: "presentation",
+                  duration: 45,
+                  interviewers: ["Head of Marketing", "CEO"],
+                },
+              },
+              {
+                id: "f2f-2",
+                type: "interviewNode",
+                position: { x: 1200, y: 200 },
+                data: {
+                  label: "Culture Fit Chat",
+                  interviewType: "culture",
+                  duration: 30,
+                  interviewers: ["Team Lead", "HR"],
+                },
+              },
+              {
+                id: "offer-1",
+                type: "offerNode",
+                position: { x: 1500, y: 300 },
+                data: { label: "Offer" },
+              },
+              {
+                id: "reject-1",
+                type: "rejectionNode",
+                position: { x: 500, y: 500 },
+                data: { label: "Rejected", sendFeedback: true },
+              },
+            ],
+            edges: [
+              { id: "e-start-resume", source: "start-1", target: "resume-1", type: "smoothstep", animated: true },
+              { id: "e-resume-pass", source: "resume-1", target: "ai-interview-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-resume-fail", source: "resume-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-ai-pass", source: "ai-interview-1", target: "f2f-1", type: "smoothstep", label: "Advance", animated: true },
+              { id: "e-ai-fail", source: "ai-interview-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-f2f1-pass", source: "f2f-1", target: "f2f-2", type: "smoothstep", label: "Advance", animated: true },
+              { id: "e-f2f1-fail", source: "f2f-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-f2f2-pass", source: "f2f-2", target: "offer-1", type: "smoothstep", animated: true },
+              { id: "e-f2f2-fail", source: "f2f-2", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+            ],
+          },
+
+          // ---- Full Stack Engineering Intern ----
+          {
+            jobTitle: "Full Stack Engineering Intern",
+            name: "Intern Hiring Pipeline",
+            description: "Lightweight pipeline for interns — resume screen, short assessment, AI interview.",
+            nodes: [
+              {
+                id: "start-1",
+                type: "startNode",
+                position: { x: 0, y: 300 },
+                data: { label: "Applications Open" },
+              },
+              {
+                id: "resume-1",
+                type: "resumeScreenNode",
+                position: { x: 300, y: 300 },
+                data: {
+                  label: "Resume Screening",
+                  passThreshold: 55,
+                  criteria: ["CS student", "JavaScript basics", "At least one project", "Enthusiasm"],
+                  estimatedPassRate: 50,
+                },
+              },
+              {
+                id: "assessment-1",
+                type: "assessmentNode",
+                position: { x: 600, y: 200 },
+                data: {
+                  label: "Quick Coding Test",
+                  description: "45-min JavaScript fundamentals test",
+                  assessmentType: "CODING",
+                  duration: 45,
+                  passingScore: 50,
+                  skills: ["JavaScript", "Problem Solving", "Basic React"],
+                },
+              },
+              {
+                id: "ai-interview-1",
+                type: "aiInterviewNode",
+                position: { x: 900, y: 200 },
+                data: {
+                  label: "AI Conversational Interview",
+                  description: "Friendly AI interview focused on motivation and learning ability",
+                  interviewType: "BEHAVIORAL",
+                  duration: 20,
+                  maxQuestions: 6,
+                },
+              },
+              {
+                id: "review-1",
+                type: "reviewNode",
+                position: { x: 1200, y: 300 },
+                data: { label: "Team Review", description: "Engineering team picks top candidates" },
+              },
+              {
+                id: "offer-1",
+                type: "offerNode",
+                position: { x: 1500, y: 300 },
+                data: { label: "Internship Offer" },
+              },
+              {
+                id: "reject-1",
+                type: "rejectionNode",
+                position: { x: 500, y: 500 },
+                data: { label: "Rejected", sendFeedback: true },
+              },
+            ],
+            edges: [
+              { id: "e-start-resume", source: "start-1", target: "resume-1", type: "smoothstep", animated: true },
+              { id: "e-resume-pass", source: "resume-1", target: "assessment-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-resume-fail", source: "resume-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-assess-pass", source: "assessment-1", target: "ai-interview-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-assess-fail", source: "assessment-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-ai-pass", source: "ai-interview-1", target: "review-1", type: "smoothstep", label: "Advance", animated: true },
+              { id: "e-ai-fail", source: "ai-interview-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-review-offer", source: "review-1", target: "offer-1", type: "smoothstep", animated: true },
+              { id: "e-review-reject", source: "review-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+            ],
+          },
+
+          // ---- Technical Content Writer ----
+          {
+            jobTitle: "Technical Content Writer",
+            name: "Content Writer Pipeline",
+            description: "Writing-focused pipeline — resume screen, writing sample, AI interview.",
+            nodes: [
+              {
+                id: "start-1",
+                type: "startNode",
+                position: { x: 0, y: 300 },
+                data: { label: "Applications Open" },
+              },
+              {
+                id: "resume-1",
+                type: "resumeScreenNode",
+                position: { x: 300, y: 300 },
+                data: {
+                  label: "Resume + Portfolio Screen",
+                  passThreshold: 65,
+                  criteria: ["Technical writing experience", "Published portfolio", "SEO knowledge"],
+                },
+              },
+              {
+                id: "assessment-1",
+                type: "assessmentNode",
+                position: { x: 600, y: 200 },
+                data: {
+                  label: "Writing Sample",
+                  description: "Write a 500-word technical blog post on a given topic",
+                  assessmentType: "SUBJECTIVE",
+                  duration: 120,
+                  passingScore: 70,
+                  skills: ["Technical Writing", "Clarity", "SEO"],
+                },
+              },
+              {
+                id: "ai-interview-1",
+                type: "aiInterviewNode",
+                position: { x: 900, y: 200 },
+                data: {
+                  label: "AI Editorial Interview",
+                  interviewType: "BEHAVIORAL",
+                  duration: 20,
+                  maxQuestions: 6,
+                },
+              },
+              {
+                id: "f2f-1",
+                type: "interviewNode",
+                position: { x: 1200, y: 200 },
+                data: {
+                  label: "Chat with Marketing Lead",
+                  interviewType: "culture",
+                  duration: 30,
+                  interviewers: ["Head of Marketing"],
+                },
+              },
+              {
+                id: "offer-1",
+                type: "offerNode",
+                position: { x: 1500, y: 300 },
+                data: { label: "Offer" },
+              },
+              {
+                id: "reject-1",
+                type: "rejectionNode",
+                position: { x: 500, y: 500 },
+                data: { label: "Rejected", sendFeedback: true },
+              },
+            ],
+            edges: [
+              { id: "e-start-resume", source: "start-1", target: "resume-1", type: "smoothstep", animated: true },
+              { id: "e-resume-pass", source: "resume-1", target: "assessment-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-resume-fail", source: "resume-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-assess-pass", source: "assessment-1", target: "ai-interview-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-assess-fail", source: "assessment-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-ai-pass", source: "ai-interview-1", target: "f2f-1", type: "smoothstep", animated: true },
+              { id: "e-ai-fail", source: "ai-interview-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-f2f-pass", source: "f2f-1", target: "offer-1", type: "smoothstep", animated: true },
+              { id: "e-f2f-fail", source: "f2f-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+            ],
+          },
+
+          // ---- Senior Data Engineer ----
+          {
+            jobTitle: "Senior Data Engineer",
+            name: "Data Engineer Pipeline",
+            description: "Data-heavy pipeline with SQL challenge, pipeline design interview, and team fit.",
+            nodes: [
+              {
+                id: "start-1",
+                type: "startNode",
+                position: { x: 0, y: 300 },
+                data: { label: "Applications Open" },
+              },
+              {
+                id: "resume-1",
+                type: "resumeScreenNode",
+                position: { x: 300, y: 300 },
+                data: {
+                  label: "Resume Screening",
+                  passThreshold: 70,
+                  criteria: ["4+ years data engineering", "SQL mastery", "Python", "Cloud DW experience"],
+                },
+              },
+              {
+                id: "assessment-1",
+                type: "assessmentNode",
+                position: { x: 600, y: 200 },
+                data: {
+                  label: "SQL + Python Challenge",
+                  description: "Complex queries, data transformation, and pipeline design",
+                  assessmentType: "CODING",
+                  duration: 90,
+                  passingScore: 65,
+                  skills: ["SQL", "Python", "Data Modeling"],
+                },
+              },
+              {
+                id: "ai-interview-1",
+                type: "aiInterviewNode",
+                position: { x: 900, y: 200 },
+                data: {
+                  label: "AI Data Architecture Interview",
+                  description: "Discussion on data pipeline design and warehouse architecture",
+                  interviewType: "TECHNICAL",
+                  duration: 30,
+                  maxQuestions: 10,
+                },
+              },
+              {
+                id: "f2f-1",
+                type: "interviewNode",
+                position: { x: 1200, y: 200 },
+                data: {
+                  label: "Team Interview",
+                  interviewType: "technical",
+                  duration: 60,
+                  interviewers: ["Data Lead", "ML Engineer", "Backend Lead"],
+                },
+              },
+              {
+                id: "review-1",
+                type: "reviewNode",
+                position: { x: 1500, y: 300 },
+                data: { label: "Hiring Committee Review" },
+              },
+              {
+                id: "offer-1",
+                type: "offerNode",
+                position: { x: 1800, y: 300 },
+                data: { label: "Offer" },
+              },
+              {
+                id: "reject-1",
+                type: "rejectionNode",
+                position: { x: 600, y: 500 },
+                data: { label: "Rejected", sendFeedback: true },
+              },
+            ],
+            edges: [
+              { id: "e-start-resume", source: "start-1", target: "resume-1", type: "smoothstep", animated: true },
+              { id: "e-resume-pass", source: "resume-1", target: "assessment-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-resume-fail", source: "resume-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-assess-pass", source: "assessment-1", target: "ai-interview-1", type: "smoothstep", label: "Pass", animated: true },
+              { id: "e-assess-fail", source: "assessment-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-ai-pass", source: "ai-interview-1", target: "f2f-1", type: "smoothstep", label: "Advance", animated: true },
+              { id: "e-ai-fail", source: "ai-interview-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-f2f-pass", source: "f2f-1", target: "review-1", type: "smoothstep", animated: true },
+              { id: "e-f2f-fail", source: "f2f-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+              { id: "e-review-offer", source: "review-1", target: "offer-1", type: "smoothstep", animated: true },
+              { id: "e-review-reject", source: "review-1", target: "reject-1", type: "smoothstep", style: { stroke: "#ef4444" } },
+            ],
+          },
+        ];
+
+        const pipelineIds: Record<string, string> = {};
+
+        for (const config of pipelineConfigs) {
+          const jobId = jobIds[config.jobTitle];
+          if (!jobId) continue;
+
+          // Check if pipeline already exists for this job
+          const existing = await queryOne(
+            "SELECT id FROM pipelines WHERE linked_job_id = $1",
+            [jobId]
+          );
+
+          if (existing) {
+            pipelineIds[config.jobTitle] = existing.id;
+            continue;
+          }
+
+          const viewport = { x: 50, y: 50, zoom: 0.75 };
+
+          const pipeline = await queryOne(
+            `INSERT INTO pipelines (name, description, status, nodes, edges, viewport, estimated_applicants, is_template, created_by, linked_job_id)
+             VALUES ($1, $2, 'ACTIVE', $3, $4, $5, $6, false, $7, $8)
+             RETURNING id`,
+            [
+              config.name,
+              config.description,
+              JSON.stringify(config.nodes),
+              JSON.stringify(config.edges),
+              JSON.stringify(viewport),
+              config.nodes.length * 15,
+              recruiter?.id || admin?.id,
+              jobId,
+            ]
+          );
+
+          if (pipeline) {
+            pipelineIds[config.jobTitle] = pipeline.id;
+
+            // Link pipeline back to job
+            await query(
+              "UPDATE jobs SET pipeline_id = $1 WHERE id = $2",
+              [pipeline.id, jobId]
+            );
+          }
+        }
+
+        console.log(`Created ${Object.keys(pipelineIds).length} pipelines`);
         // ==========================================
-        progress(6, TOTAL_STEPS, "Creating 82 applications across all jobs...");
+        // STEP 7: APPLICATIONS
+        // ==========================================
+        progress(7, TOTAL_STEPS, "Creating 82 applications across all jobs...");
 
         async function getUserId(email: string): Promise<string | null> {
           const user = await queryOne("SELECT id FROM users WHERE email = $1", [email]);
@@ -364,9 +1142,9 @@ export async function GET() {
         }
 
         // ==========================================
-        // STEP 7: DONE
+        // STEP 8: DONE
         // ==========================================
-        progress(7, TOTAL_STEPS, `Done! Created ${appCount} applications across 8 jobs.`);
+        progress(8, TOTAL_STEPS, `Done! Created ${appCount} applications across 8 jobs.`);
 
         // Send final summary
         controller.enqueue(
@@ -375,18 +1153,19 @@ export async function GET() {
               step: TOTAL_STEPS,
               total: TOTAL_STEPS,
               message: "complete",
-              summary: {
+                            summary: {
                 company: "Nexlayer",
                 teamMembers: 4,
                 candidates: 40,
                 jobs: 8,
+                pipelines: Object.keys(pipelineIds).length,
                 applications: appCount,
                 accounts: [
-  { role: "Admin", email: "priya@nexlayer.io" },
-  { role: "Recruiter", email: "recruiter@nexlayer.io" },
-  { role: "Recruiter #2", email: "hiring@nexlayer.io" },
-  { role: "Interviewer", email: "rahul@nexlayer.io" },
-],
+                  { role: "Admin", email: "priya@nexlayer.io" },
+                  { role: "Recruiter", email: "recruiter@nexlayer.io" },
+                  { role: "Recruiter #2", email: "hiring@nexlayer.io" },
+                  { role: "Interviewer", email: "rahul@nexlayer.io" },
+                ],
                 password: "Test1234!",
               },
             })}\n\n`
