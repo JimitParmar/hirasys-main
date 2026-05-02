@@ -161,7 +161,7 @@ export default function LandingPage() {
             </div>
 
             <p className="text-sm text-slate-400 mt-4">
-              Free for up to 3 jobs • No credit card required
+              Post your 1<sup className="text-xs">st</sup> job for free • No credit card
             </p>
           </div>
         </div>
@@ -230,7 +230,7 @@ export default function LandingPage() {
 
       {/* ============ PRODUCT DEMO — TABBED FEATURE SHOWCASE ============ */}
       <section id="product-demo" className="py-20">
-        <div className="max-w-6xl mx-auto px-4">
+        <div className="max-w-6xl mx-auto px-2">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">
               See what you're getting
@@ -259,9 +259,9 @@ export default function LandingPage() {
           </div>
 
           {/* Active feature content */}
-          <div className="grid lg:grid-cols-2 gap-10 items-center">
+          <div className="grid lg:grid-cols-5 gap-10 items-center">
             {/* Left — text */}
-            <div>
+            <div className="col-span-2">
               <h3 className="text-2xl font-bold text-slate-900">
                 {features[activeFeature].title}
               </h3>
@@ -285,13 +285,13 @@ export default function LandingPage() {
             </div>
 
             {/* Right — screenshot */}
-            <div className="relative rounded-xl border border-slate-200 shadow-xl overflow-hidden bg-slate-50">
+            <div className="relative col-span-3 rounded-xl border border-slate-200 shadow-xl overflow-hidden bg-slate-50">
               <div className="aspect-[4/3] relative">
                 <Image
                   src={features[activeFeature].image}
                   alt={features[activeFeature].title}
                   fill
-                  className="object-cover object-top"
+                  className=" object-cover"
                 />
               </div>
             </div>
@@ -448,19 +448,17 @@ export default function LandingPage() {
             <CardContent className="p-8">
               <Quote className="w-8 h-8 text-[#0245EF] opacity-20 mb-4" />
               <p className="text-lg text-slate-700 leading-relaxed italic">
-                "We were drowning in 300+ applications per role and spending
-                entire days just screening. Hirasys gave us a shortlist of 15
-                candidates we actually wanted to talk to — on day one."
+                "We were drowning in 320+ applications per role and spending
+                entire days just screening. Hirasys gave us a shortlist of 12
+                candidates we actually wanted to talk to — in 4 days."
               </p>
               <div className="mt-6 flex items-center justify-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-slate-200" />
                 {/* Replace with actual avatar */}
                 <div className="text-left">
-                  <p className="text-sm font-medium text-slate-800">
-                    Name of early user
-                  </p>
+                  
                   <p className="text-xs text-slate-500">
-                    Title, Company
+                    Midseas Infotech
                   </p>
                 </div>
               </div>
@@ -556,7 +554,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-sm text-blue-300 mt-4">
-            Free for up to 3 jobs • No credit card • Set up in minutes
+            Post your 1<sup className="text-xs">st</sup> job for free • No credit card • Set up in minutes
           </p>
         </div>
       </section>

@@ -467,7 +467,7 @@ export default function TeamPage() {
                     Audit Log
                     {!hasFeature("auditLogs") && (
                       <Badge variant="outline" className="ml-2 text-[10px] text-slate-400 border-slate-200">
-                        Pro
+                        Enterprise
                       </Badge>
                     )}
                   </p>
@@ -484,7 +484,7 @@ export default function TeamPage() {
               ) : (
                 <Link href="/settings/billing">
                   <Button size="sm" className="bg-[#0245EF] hover:bg-[#0237BF]">
-                    Upgrade to Pro
+                    Upgrade to Enterprise
                   </Button>
                 </Link>
               )}
