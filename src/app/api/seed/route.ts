@@ -246,13 +246,13 @@ export async function GET() {
           return user?.id || null;
         }
 
-        const applications = [
+                const applications = [
           // Senior Frontend Engineer — 15
-          { candidateEmail: "ananya.r@gmail.com", jobTitle: "Senior Frontend Engineer", status: "SHORTLISTED", score: 94, appliedDaysAgo: 12 },
-          { candidateEmail: "sarah.chen@proton.me", jobTitle: "Senior Frontend Engineer", status: "SHORTLISTED", score: 91, appliedDaysAgo: 11 },
-          { candidateEmail: "vikram.joshi@yahoo.com", jobTitle: "Senior Frontend Engineer", status: "INTERVIEW", score: 87, appliedDaysAgo: 10 },
-          { candidateEmail: "emily.zhang@gmail.com", jobTitle: "Senior Frontend Engineer", status: "INTERVIEW", score: 85, appliedDaysAgo: 10 },
-          { candidateEmail: "carlos.rivera@hotmail.com", jobTitle: "Senior Frontend Engineer", status: "SCREENING", score: 82, appliedDaysAgo: 8 },
+          { candidateEmail: "ananya.r@gmail.com", jobTitle: "Senior Frontend Engineer", status: "UNDER_REVIEW", score: 94, appliedDaysAgo: 12 },
+          { candidateEmail: "sarah.chen@proton.me", jobTitle: "Senior Frontend Engineer", status: "UNDER_REVIEW", score: 91, appliedDaysAgo: 11 },
+          { candidateEmail: "vikram.joshi@yahoo.com", jobTitle: "Senior Frontend Engineer", status: "F2F_INTERVIEW", score: 87, appliedDaysAgo: 10 },
+          { candidateEmail: "emily.zhang@gmail.com", jobTitle: "Senior Frontend Engineer", status: "AI_INTERVIEW", score: 85, appliedDaysAgo: 10 },
+          { candidateEmail: "carlos.rivera@hotmail.com", jobTitle: "Senior Frontend Engineer", status: "ASSESSMENT", score: 82, appliedDaysAgo: 8 },
           { candidateEmail: "daniel.moretti@outlook.com", jobTitle: "Senior Frontend Engineer", status: "SCREENING", score: 78, appliedDaysAgo: 7 },
           { candidateEmail: "kevin.wu@gmail.com", jobTitle: "Senior Frontend Engineer", status: "SCREENING", score: 75, appliedDaysAgo: 6 },
           { candidateEmail: "tom.anderson@yahoo.com", jobTitle: "Senior Frontend Engineer", status: "APPLIED", score: 72, appliedDaysAgo: 5 },
@@ -265,10 +265,10 @@ export async function GET() {
           { candidateEmail: "chloe.bennett@outlook.com", jobTitle: "Senior Frontend Engineer", status: "REJECTED", score: 22, appliedDaysAgo: 8 },
 
           // Backend Engineer — 12
-          { candidateEmail: "omar.faisal@outlook.com", jobTitle: "Backend Engineer — Platform", status: "SHORTLISTED", score: 92, appliedDaysAgo: 14 },
-          { candidateEmail: "james.okonkwo@pm.me", jobTitle: "Backend Engineer — Platform", status: "INTERVIEW", score: 88, appliedDaysAgo: 13 },
-          { candidateEmail: "deepak.sharma@gmail.com", jobTitle: "Backend Engineer — Platform", status: "INTERVIEW", score: 86, appliedDaysAgo: 11 },
-          { candidateEmail: "sneha.patel@gmail.com", jobTitle: "Backend Engineer — Platform", status: "SCREENING", score: 79, appliedDaysAgo: 9 },
+          { candidateEmail: "omar.faisal@outlook.com", jobTitle: "Backend Engineer — Platform", status: "OFFERED", score: 92, appliedDaysAgo: 14 },
+          { candidateEmail: "james.okonkwo@pm.me", jobTitle: "Backend Engineer — Platform", status: "F2F_INTERVIEW", score: 88, appliedDaysAgo: 13 },
+          { candidateEmail: "deepak.sharma@gmail.com", jobTitle: "Backend Engineer — Platform", status: "AI_INTERVIEW", score: 86, appliedDaysAgo: 11 },
+          { candidateEmail: "sneha.patel@gmail.com", jobTitle: "Backend Engineer — Platform", status: "ASSESSMENT", score: 79, appliedDaysAgo: 9 },
           { candidateEmail: "samuel.osei@outlook.com", jobTitle: "Backend Engineer — Platform", status: "SCREENING", score: 76, appliedDaysAgo: 8 },
           { candidateEmail: "noah.klein@proton.me", jobTitle: "Backend Engineer — Platform", status: "APPLIED", score: 73, appliedDaysAgo: 6 },
           { candidateEmail: "grace.liu@gmail.com", jobTitle: "Backend Engineer — Platform", status: "APPLIED", score: 70, appliedDaysAgo: 5 },
@@ -279,9 +279,9 @@ export async function GET() {
           { candidateEmail: "arjun.nair@gmail.com", jobTitle: "Backend Engineer — Platform", status: "REJECTED", score: 19, appliedDaysAgo: 9 },
 
           // Product Designer — 8
-          { candidateEmail: "isha.singh@pm.me", jobTitle: "Product Designer", status: "SHORTLISTED", score: 93, appliedDaysAgo: 9 },
-          { candidateEmail: "maya.johnson@gmail.com", jobTitle: "Product Designer", status: "INTERVIEW", score: 89, appliedDaysAgo: 8 },
-          { candidateEmail: "derek.chang@outlook.com", jobTitle: "Product Designer", status: "SCREENING", score: 81, appliedDaysAgo: 7 },
+          { candidateEmail: "isha.singh@pm.me", jobTitle: "Product Designer", status: "UNDER_REVIEW", score: 93, appliedDaysAgo: 9 },
+          { candidateEmail: "maya.johnson@gmail.com", jobTitle: "Product Designer", status: "F2F_INTERVIEW", score: 89, appliedDaysAgo: 8 },
+          { candidateEmail: "derek.chang@outlook.com", jobTitle: "Product Designer", status: "ASSESSMENT", score: 81, appliedDaysAgo: 7 },
           { candidateEmail: "tanya.wilson@proton.me", jobTitle: "Product Designer", status: "SCREENING", score: 77, appliedDaysAgo: 6 },
           { candidateEmail: "ryan.brooks@gmail.com", jobTitle: "Product Designer", status: "APPLIED", score: 69, appliedDaysAgo: 5 },
           { candidateEmail: "fatima.zahra@outlook.com", jobTitle: "Product Designer", status: "APPLIED", score: 63, appliedDaysAgo: 4 },
@@ -289,8 +289,8 @@ export async function GET() {
           { candidateEmail: "prachi.deshmukh@pm.me", jobTitle: "Product Designer", status: "REJECTED", score: 33, appliedDaysAgo: 7 },
 
           // DevOps — 7
-          { candidateEmail: "james.okonkwo@pm.me", jobTitle: "DevOps / Infrastructure Engineer", status: "SHORTLISTED", score: 90, appliedDaysAgo: 7 },
-          { candidateEmail: "deepak.sharma@gmail.com", jobTitle: "DevOps / Infrastructure Engineer", status: "INTERVIEW", score: 84, appliedDaysAgo: 6 },
+          { candidateEmail: "james.okonkwo@pm.me", jobTitle: "DevOps / Infrastructure Engineer", status: "UNDER_REVIEW", score: 90, appliedDaysAgo: 7 },
+          { candidateEmail: "deepak.sharma@gmail.com", jobTitle: "DevOps / Infrastructure Engineer", status: "AI_INTERVIEW", score: 84, appliedDaysAgo: 6 },
           { candidateEmail: "noah.klein@proton.me", jobTitle: "DevOps / Infrastructure Engineer", status: "SCREENING", score: 78, appliedDaysAgo: 5 },
           { candidateEmail: "samuel.osei@outlook.com", jobTitle: "DevOps / Infrastructure Engineer", status: "APPLIED", score: 71, appliedDaysAgo: 4 },
           { candidateEmail: "ethan.cole@gmail.com", jobTitle: "DevOps / Infrastructure Engineer", status: "APPLIED", score: 66, appliedDaysAgo: 3 },
@@ -298,17 +298,17 @@ export async function GET() {
           { candidateEmail: "ben.taylor@gmail.com", jobTitle: "DevOps / Infrastructure Engineer", status: "REJECTED", score: 27, appliedDaysAgo: 5 },
 
           // Growth Marketing — 6
-          { candidateEmail: "aisha.khan@gmail.com", jobTitle: "Growth Marketing Manager", status: "SHORTLISTED", score: 91, appliedDaysAgo: 8 },
-          { candidateEmail: "tanya.wilson@proton.me", jobTitle: "Growth Marketing Manager", status: "INTERVIEW", score: 83, appliedDaysAgo: 7 },
+          { candidateEmail: "aisha.khan@gmail.com", jobTitle: "Growth Marketing Manager", status: "OFFERED", score: 91, appliedDaysAgo: 8 },
+          { candidateEmail: "tanya.wilson@proton.me", jobTitle: "Growth Marketing Manager", status: "F2F_INTERVIEW", score: 83, appliedDaysAgo: 7 },
           { candidateEmail: "zara.ahmed@outlook.com", jobTitle: "Growth Marketing Manager", status: "SCREENING", score: 76, appliedDaysAgo: 5 },
           { candidateEmail: "pooja.bhatt@gmail.com", jobTitle: "Growth Marketing Manager", status: "APPLIED", score: 68, appliedDaysAgo: 4 },
           { candidateEmail: "lisa.nakamura@yahoo.com", jobTitle: "Growth Marketing Manager", status: "APPLIED", score: 62, appliedDaysAgo: 3 },
           { candidateEmail: "meghna.rao@hotmail.com", jobTitle: "Growth Marketing Manager", status: "REJECTED", score: 36, appliedDaysAgo: 7 },
 
           // Intern — 10
-          { candidateEmail: "rohan.gupta@gmail.com", jobTitle: "Full Stack Engineering Intern", status: "SHORTLISTED", score: 88, appliedDaysAgo: 6 },
-          { candidateEmail: "sophie.miller@yahoo.com", jobTitle: "Full Stack Engineering Intern", status: "INTERVIEW", score: 82, appliedDaysAgo: 5 },
-          { candidateEmail: "arjun.nair@gmail.com", jobTitle: "Full Stack Engineering Intern", status: "INTERVIEW", score: 79, appliedDaysAgo: 5 },
+          { candidateEmail: "rohan.gupta@gmail.com", jobTitle: "Full Stack Engineering Intern", status: "UNDER_REVIEW", score: 88, appliedDaysAgo: 6 },
+          { candidateEmail: "sophie.miller@yahoo.com", jobTitle: "Full Stack Engineering Intern", status: "AI_INTERVIEW", score: 82, appliedDaysAgo: 5 },
+          { candidateEmail: "arjun.nair@gmail.com", jobTitle: "Full Stack Engineering Intern", status: "ASSESSMENT", score: 79, appliedDaysAgo: 5 },
           { candidateEmail: "chloe.bennett@outlook.com", jobTitle: "Full Stack Engineering Intern", status: "SCREENING", score: 74, appliedDaysAgo: 4 },
           { candidateEmail: "karthik.iyer@hotmail.com", jobTitle: "Full Stack Engineering Intern", status: "SCREENING", score: 71, appliedDaysAgo: 4 },
           { candidateEmail: "grace.liu@gmail.com", jobTitle: "Full Stack Engineering Intern", status: "APPLIED", score: 67, appliedDaysAgo: 3 },
@@ -318,17 +318,17 @@ export async function GET() {
           { candidateEmail: "maria.santos@outlook.com", jobTitle: "Full Stack Engineering Intern", status: "REJECTED", score: 21, appliedDaysAgo: 4 },
 
           // Content Writer — 5
-          { candidateEmail: "fatima.zahra@outlook.com", jobTitle: "Technical Content Writer", status: "SHORTLISTED", score: 90, appliedDaysAgo: 5 },
+          { candidateEmail: "fatima.zahra@outlook.com", jobTitle: "Technical Content Writer", status: "UNDER_REVIEW", score: 90, appliedDaysAgo: 5 },
           { candidateEmail: "ritika.menon@gmail.com", jobTitle: "Technical Content Writer", status: "SCREENING", score: 80, appliedDaysAgo: 4 },
           { candidateEmail: "alex.dubois@proton.me", jobTitle: "Technical Content Writer", status: "APPLIED", score: 72, appliedDaysAgo: 3 },
           { candidateEmail: "prachi.deshmukh@pm.me", jobTitle: "Technical Content Writer", status: "APPLIED", score: 65, appliedDaysAgo: 2 },
           { candidateEmail: "kevin.wu@gmail.com", jobTitle: "Technical Content Writer", status: "REJECTED", score: 30, appliedDaysAgo: 4 },
 
           // Data Engineer — 9
-          { candidateEmail: "sarah.chen@proton.me", jobTitle: "Senior Data Engineer", status: "SHORTLISTED", score: 95, appliedDaysAgo: 10 },
-          { candidateEmail: "omar.faisal@outlook.com", jobTitle: "Senior Data Engineer", status: "INTERVIEW", score: 89, appliedDaysAgo: 9 },
-          { candidateEmail: "pooja.bhatt@gmail.com", jobTitle: "Senior Data Engineer", status: "INTERVIEW", score: 85, appliedDaysAgo: 8 },
-          { candidateEmail: "lisa.nakamura@yahoo.com", jobTitle: "Senior Data Engineer", status: "SCREENING", score: 79, appliedDaysAgo: 7 },
+          { candidateEmail: "sarah.chen@proton.me", jobTitle: "Senior Data Engineer", status: "OFFERED", score: 95, appliedDaysAgo: 10 },
+          { candidateEmail: "omar.faisal@outlook.com", jobTitle: "Senior Data Engineer", status: "F2F_INTERVIEW", score: 89, appliedDaysAgo: 9 },
+          { candidateEmail: "pooja.bhatt@gmail.com", jobTitle: "Senior Data Engineer", status: "AI_INTERVIEW", score: 85, appliedDaysAgo: 8 },
+          { candidateEmail: "lisa.nakamura@yahoo.com", jobTitle: "Senior Data Engineer", status: "ASSESSMENT", score: 79, appliedDaysAgo: 7 },
           { candidateEmail: "carlos.rivera@hotmail.com", jobTitle: "Senior Data Engineer", status: "SCREENING", score: 74, appliedDaysAgo: 6 },
           { candidateEmail: "ananya.r@gmail.com", jobTitle: "Senior Data Engineer", status: "APPLIED", score: 70, appliedDaysAgo: 5 },
           { candidateEmail: "sneha.patel@gmail.com", jobTitle: "Senior Data Engineer", status: "APPLIED", score: 66, appliedDaysAgo: 4 },
@@ -355,7 +355,7 @@ export async function GET() {
           appliedAt.setDate(appliedAt.getDate() - app.appliedDaysAgo);
 
           await queryOne(
-            `INSERT INTO applications (candidate_id, job_id, status, score, applied_at)
+            `INSERT INTO applications (candidate_id, job_id, status, resume_score, applied_at)
              VALUES ($1, $2, $3, $4, $5) RETURNING id`,
             [candidateId, jobId, app.status, app.score, appliedAt.toISOString()]
           );
