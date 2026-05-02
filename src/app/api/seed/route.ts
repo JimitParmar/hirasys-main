@@ -1,10 +1,20 @@
 import { query, queryOne } from "@/lib/db";
 import bcrypt from "bcryptjs";
+import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const secret = searchParams.get("key");
+
+  if (secret !== process.env.ADMIN_SECRET) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    );
+  }
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {

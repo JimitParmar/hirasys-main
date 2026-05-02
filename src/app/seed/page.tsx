@@ -11,6 +11,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 type SeedStep = {
   step: number;
@@ -28,6 +29,16 @@ type SeedStep = {
 };
 
 export default function SeedPage() {
+    if (
+    process.env.NODE_ENV === "production" &&
+    !process.env.NEXT_PUBLIC_ENABLE_SEED
+  ) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-slate-400">Not found</p>
+      </div>
+    );
+  }
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">(
     "idle"
   );
@@ -35,15 +46,26 @@ export default function SeedPage() {
   const [currentStep, setCurrentStep] = useState<SeedStep | null>(null);
   const [summary, setSummary] = useState<SeedStep["summary"] | null>(null);
   const [copied, setCopied] = useState(false);
+  const [secretKey, setSecretKey] = useState("");
 
   const runSeed = async () => {
+    if (!secretKey.trim()) {
+    toast?.error?.("Enter the admin secret key") ||
+      alert("Enter the admin secret key");
+    return;
+  }
     setStatus("running");
     setSteps([]);
     setCurrentStep(null);
     setSummary(null);
 
     try {
-      const response = await fetch("/api/seed");
+      const response = await fetch(`/api/seed?key=${encodeURIComponent(secretKey)}`);
+      if (response.status === 401) {
+      setStatus("error");
+      setCurrentStep({ step: -1, total: 1, message: "Invalid secret key" });
+      return;
+    }
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
 
@@ -127,25 +149,44 @@ export default function SeedPage() {
 
           {/* Idle state */}
           {status === "idle" && (
-            <div>
-              <div className="bg-slate-50 rounded-lg p-4 mb-6 text-sm text-slate-600 space-y-1">
-                <p>This will create:</p>
-                <ul className="list-disc list-inside space-y-0.5 text-slate-500">
-                  <li>1 company (Nexlayer)</li>
-                  <li>4 team members</li>
-                  <li>40 candidates</li>
-                  <li>8 job postings</li>
-                  <li>~82 applications with scores</li>
-                </ul>
-              </div>
-              <Button
-                onClick={runSeed}
-                className="w-full h-11 bg-[#0245EF] hover:bg-[#0237BF] text-base"
-              >
-                Run Seed
-              </Button>
-            </div>
-          )}
+  <div>
+    <div className="bg-slate-50 rounded-lg p-4 mb-6 text-sm text-slate-600 space-y-1">
+      <p>This will create:</p>
+      <ul className="list-disc list-inside space-y-0.5 text-slate-500">
+        <li>1 company (Nexlayer)</li>
+        <li>4 team members</li>
+        <li>40 candidates</li>
+        <li>8 job postings with pipelines</li>
+        <li>~82 applications with scores</li>
+      </ul>
+    </div>
+
+    <div className="space-y-3">
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          Admin Secret Key
+        </label>
+        <input
+          type="password"
+          value={secretKey}
+          onChange={(e) => setSecretKey(e.target.value)}
+          placeholder="Enter admin secret"
+          className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0245EF] focus:border-transparent"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && secretKey.trim()) runSeed();
+          }}
+        />
+      </div>
+      <Button
+        onClick={runSeed}
+        disabled={!secretKey.trim()}
+        className="w-full h-11 bg-[#0245EF] hover:bg-[#0237BF] text-base"
+      >
+        Run Seed
+      </Button>
+    </div>
+  </div>
+)}
 
           {/* Running state */}
           {status === "running" && (

@@ -57,3 +57,25 @@ All passwords: `Test1234!`
 - **Screenshot:** If possible
 - **Browser:** Chrome/Safari/Firefox
 - **Device:** Desktop/Mobile
+
+
+
+## To Give pro access to other companies:
+# Set Pro plan
+curl -X POST http://localhost:3000/api/admin/set-plan \
+  -H "Content-Type: application/json" \
+  -H "x-admin-secret: hirasys_admin_2024_change_this_to_something_random" \
+  -d '{"companyId": "YOUR_COMPANY_ID", "planSlug": "pro"}'
+
+# Set Enterprise plan
+curl -X POST http://localhost:3000/api/admin/set-plan \
+  -H "Content-Type: application/json" \
+    -H "x-admin-secret: hirasys_admin_2024_change_this_to_something_random" \
+  -d '{"companyId": "YOUR_COMPANY_ID", "planSlug": "enterprise"}'
+
+# Set back to Free for testing
+curl -X POST http://localhost:3000/api/admin/set-plan \
+  -H "Content-Type: application/json" \
+    -H "x-admin-secret: hirasys_admin_2024_change_this_to_something_random" \
+  -d '{"companyId": "YOUR_COMPANY_ID", "planSlug": "free"}'
+

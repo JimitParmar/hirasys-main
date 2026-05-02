@@ -70,15 +70,15 @@ export default function TeamPage() {
   const isAdmin = (user as any)?.role === "ADMIN";
   const { hasFeature, planName } = usePlanLimits();
 
-if (!hasFeature("auditLogs")) {
-  return (
-    <UpgradePrompt
-      feature="Audit Logs"
-      message="Audit logs are available on the Enterprise plan."
-      currentPlan={planName}
-    />
-  );
-}
+// if (!hasFeature("auditLogs")) {
+//   return (
+//     <UpgradePrompt
+//       feature="Audit Logs"
+//       message="Audit logs are available on the Enterprise plan."
+//       currentPlan={planName}
+//     />
+//   );
+// }
   useEffect(() => {
     if (!authLoading) {
       if (!user || !["ADMIN", "HR"].includes((user as any)?.role)) {
@@ -456,19 +456,38 @@ if (!hasFeature("auditLogs")) {
         )}
 
         {/* Audit Log Link */}
+                {/* Audit Log */}
         {isAdmin && (
-          <Card className="border-slate-200">
+          <Card className={`border-slate-200 ${!hasFeature("auditLogs") ? "relative overflow-hidden" : ""}`}>
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <ShieldCheck className="w-5 h-5 text-[#0245EF]" />
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Audit Log</p>
-                  <p className="text-xs text-slate-400">View all changes made by team members</p>
+                  <p className="text-sm font-medium text-slate-700">
+                    Audit Log
+                    {!hasFeature("auditLogs") && (
+                      <Badge variant="outline" className="ml-2 text-[10px] text-slate-400 border-slate-200">
+                        Pro
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    View all changes made by team members
+                  </p>
                 </div>
               </div>
-              <Link href="/hr/audit">
-                <Button variant="outline" size="sm">View Logs →</Button>
-              </Link>
+
+              {hasFeature("auditLogs") ? (
+                <Link href="/hr/audit">
+                  <Button variant="outline" size="sm">View Logs →</Button>
+                </Link>
+              ) : (
+                <Link href="/settings/billing">
+                  <Button size="sm" className="bg-[#0245EF] hover:bg-[#0237BF]">
+                    Upgrade to Pro
+                  </Button>
+                </Link>
+              )}
             </CardContent>
           </Card>
         )}
