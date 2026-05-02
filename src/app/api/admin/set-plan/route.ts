@@ -2,14 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
-  // Only allow in development
-   const secret = req.headers.get("x-admin-secret");
+  // ONLY check the secret — no environment blocking
+  const secret = req.headers.get("x-admin-secret");
 
   if (secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available" }, { status: 403 });
   }
 
   const { companyId, planSlug } = await req.json();
@@ -48,7 +45,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    message: `Set ${planSlug} plan for company ${companyId}`,
     plan: plan.name,
   });
 }
