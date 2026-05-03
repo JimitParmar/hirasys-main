@@ -286,12 +286,12 @@ export default function LandingPage() {
 
             {/* Right — screenshot */}
             <div className="relative col-span-3 rounded-xl border border-slate-200 shadow-xl overflow-hidden bg-slate-50">
-              <div className="aspect-[4/3] relative">
+              <div className="aspect-[43/25] relative">
                 <Image
                   src={features[activeFeature].image}
                   alt={features[activeFeature].title}
                   fill
-                  className=" object-cover"
+                  className="object-contain bg-white"
                 />
               </div>
             </div>
@@ -406,14 +406,16 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="relative rounded-xl border border-slate-200 shadow-xl overflow-hidden bg-slate-50">
-              <div className="aspect-[4/3] relative">
-                <Image
-                  src="/screenshots/control-override.png"
-                  alt="Manual override controls in Hirasys"
-                  fill
-                  className="object-cover object-top"
-                />
+            <div className="relative rounded-xl border border-slate-200 shadow-xl bg-white overflow-hidden bg-slate-50">
+              <div className="aspect-[8/7] relative bg-white">
+                <video
+  src="/screenshots/control-override.mp4"
+  autoPlay
+  muted
+  loop
+  playsInline
+  className="absolute inset-0 w-full h-full object-cover object-top top-2 bg-white"
+/>
               </div>
             </div>
           </div>
