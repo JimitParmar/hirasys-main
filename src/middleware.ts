@@ -16,6 +16,9 @@ const ROUTE_RULES: {
   { prefix: "/landing", roles: "public" },
   { prefix: "/jobs", roles: "public" },
   { prefix: "/feedback", roles: "public" },
+  { prefix: "/admin", roles: "public" },    // ← add this
+  { prefix: "/seed", roles: "public" },     // ← add this
+  { prefix: "/contact", roles: "public" },  // ← add this
 
   { prefix: "/hr/billing", roles: ["ADMIN"] },
   { prefix: "/hr/audit", roles: ["ADMIN"] },

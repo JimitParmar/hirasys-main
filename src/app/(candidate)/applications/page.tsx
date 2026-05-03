@@ -474,12 +474,12 @@ function ApplicationCard({
                           if (
                             data.assessments?.length > 0
                           ) {
-                            window.location.href = `/candidate/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+                            window.location.href = `/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
                           } else {
-                            window.location.href = `/candidate/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+                            window.location.href = `/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
                           }
                         } catch {
-                          window.location.href = `/candidate/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+                          window.location.href = `/assessment/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
                         }
                       }}
                     >

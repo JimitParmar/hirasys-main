@@ -304,54 +304,52 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">
-              From job post to shortlist in 3 steps
+              From job post to shortlist in 2 steps
             </h2>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid gap-8">
             {[
               {
                 step: "01",
                 icon: MousePointerClick,
                 title: "Build your pipeline",
                 desc: "Use the visual builder to define stages, criteria, and candidate flow. Takes under 5 minutes.",
-                image: "/screenshots/step-1-builder.png",
+                video: "/screenshots/Visual-Builder-Video.mp4",
               },
               {
                 step: "02",
                 icon: SlidersHorizontal,
                 title: "Candidates flow through",
                 desc: "Applications are scored, assessed, and organized automatically. You see a ranked, filtered pipeline — not a pile of resumes.",
-                image: "/screenshots/step-2-pipeline.png",
+                video: "/screenshots/candidate-flow.mp4",
               },
-              {
-                step: "03",
-                icon: Eye,
-                title: "You make the calls",
-                desc: "Review the shortlist. Advance, reject, or override anything. Every decision is yours. The system just gets you here faster.",
-                image: "/screenshots/step-3-decisions.png",
-              },
+              
             ].map((step) => (
-              <div key={step.step} className="text-center">
-                <div className="relative rounded-lg border border-slate-200 shadow-md overflow-hidden bg-white mb-5">
-                  <div className="aspect-[4/3] relative">
-                    <Image
-                      src={step.image}
-                      alt={step.title}
-                      fill
-                      className="object-cover object-top"
-                    />
-                  </div>
-                </div>
+              <div key={step.step} className="text-center px-12">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <span className="text-xs font-bold text-[#0245EF] bg-[#D1DEFF] rounded-full w-6 h-6 flex items-center justify-center">
                     {step.step}
                   </span>
                   <h3 className="font-semibold text-slate-900">{step.title}</h3>
                 </div>
-                <p className="text-sm text-slate-500 leading-relaxed">
+                <p className="text-sm text-slate-500 leading-relaxed mb-6">
                   {step.desc}
                 </p>
+                <div className="relative rounded-lg border border-slate-200 shadow-md overflow-hidden bg-white mb-5">
+                  
+                  <div className="aspect-[43/25] relative ">
+                    <video
+  src={step.video}
+  autoPlay
+  muted
+  loop
+  playsInline
+  className="absolute inset-0 w-full h-full object-cover object-top scale-97 "
+/>
+                  </div>
+                </div>
+                
               </div>
             ))}
           </div>
