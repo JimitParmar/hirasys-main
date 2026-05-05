@@ -119,6 +119,11 @@ export async function POST(req: NextRequest) {
         [body.id]
       );
 
+            // Get company user IDs so any team member can edit
+      const companyUserIds = await getCompanyUserIds(userId);
+      const allowedIds = companyUserIds.length > 0 ? companyUserIds : [userId];
+      const placeholders = allowedIds.map((_, i) => `$${i + 8}`).join(", ");
+
       const pipeline = await queryOne(
         `UPDATE pipelines
          SET name = COALESCE($2, name),
@@ -128,7 +133,7 @@ export async function POST(req: NextRequest) {
              linked_job_id = $6,
              status = $7,
              updated_at = NOW()
-         WHERE id = $1 AND created_by = $8
+         WHERE id = $1 AND created_by IN (${placeholders})
          RETURNING *`,
         [
           body.id,
@@ -138,7 +143,7 @@ export async function POST(req: NextRequest) {
           body.estimatedCost || 0,
           linkedJobId,
           status,
-          userId,
+          ...allowedIds,
         ]
       );
 
