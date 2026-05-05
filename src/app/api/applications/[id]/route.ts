@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryOne } from "@/lib/db";
+import { query, queryOne, queryMany } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 
@@ -43,9 +43,7 @@ export async function PUT(
 
     const oldStatus = oldApp.status;
 
-    // Determine current_stage value:
-    // - If HR passes a specific node subtype (from pipeline dropdown), use that
-    // - Otherwise keep existing or null
+    // Determine current_stage value
     const currentStage = currentNodeSubtype || oldApp.current_stage || null;
 
     const application = await queryOne(
@@ -60,6 +58,113 @@ export async function PUT(
         { error: "Application not found" },
         { status: 404 }
       );
+    }
+
+    // ==========================================
+    // CLEAR OLD STAGE DATA when moving back
+    // ==========================================
+    const stageOrder = [
+      "APPLIED",
+      "SCREENING",
+      "ASSESSMENT",
+      "AI_INTERVIEW",
+      "F2F_INTERVIEW",
+      "UNDER_REVIEW",
+      "OFFERED",
+      "HIRED",
+      "ONBOARDING",
+    ];
+
+    const oldIndex = stageOrder.indexOf(oldStatus);
+    const newIndex = stageOrder.indexOf(status);
+    const isMovingBack = newIndex < oldIndex && newIndex >= 0 && oldIndex >= 0;
+
+    // Also clear if moving TO any stage that has completable data
+    // (even if moving forward — HR might want a redo)
+    const clearableStatuses = [
+      "SCREENING",
+      "ASSESSMENT",
+      "AI_INTERVIEW",
+      "F2F_INTERVIEW",
+    ];
+    const shouldClear = isMovingBack || (
+      clearableStatuses.includes(status) &&
+      oldStatus !== status
+    );
+
+    if (shouldClear) {
+      const clearedItems: string[] = [];
+
+      // Clear data for the target stage AND all stages after it
+      // (if moving back from F2F to ASSESSMENT, clear both assessment and interview data)
+      const targetIndex = stageOrder.indexOf(status);
+
+      // Clear assessment submissions if moving to or before ASSESSMENT
+      if (targetIndex <= stageOrder.indexOf("ASSESSMENT")) {
+        const deleted = await query(
+          "DELETE FROM submissions WHERE application_id = $1",
+          [id]
+        );
+        if ((deleted as any).rowCount > 0) {
+          clearedItems.push(`${(deleted as any).rowCount} submission(s)`);
+        }
+      }
+
+      // Clear AI interviews if moving to or before AI_INTERVIEW
+      if (targetIndex <= stageOrder.indexOf("AI_INTERVIEW")) {
+        const deleted = await query(
+          "DELETE FROM ai_interviews WHERE application_id = $1",
+          [id]
+        );
+        if ((deleted as any).rowCount > 0) {
+          clearedItems.push(`${(deleted as any).rowCount} AI interview(s)`);
+        }
+      }
+
+      // Clear F2F interviews + feedback if moving to or before F2F_INTERVIEW
+      if (targetIndex <= stageOrder.indexOf("F2F_INTERVIEW")) {
+        // Delete feedback first (references interview)
+        const f2fs = await queryMany(
+          "SELECT id FROM f2f_interviews WHERE application_id = $1",
+          [id]
+        );
+        for (const f2f of f2fs) {
+          await query(
+            "DELETE FROM interview_feedback WHERE interview_id = $1",
+            [f2f.id]
+          );
+        }
+        const deleted = await query(
+          "DELETE FROM f2f_interviews WHERE application_id = $1",
+          [id]
+        );
+        if ((deleted as any).rowCount > 0) {
+          clearedItems.push(`${(deleted as any).rowCount} F2F interview(s)`);
+        }
+      }
+
+      // Clear ratings (scores are now invalid)
+      if (targetIndex <= stageOrder.indexOf("UNDER_REVIEW")) {
+        await query(
+          "DELETE FROM ratings WHERE application_id = $1",
+          [id]
+        );
+      }
+
+      // Reset resume score if moving back to SCREENING or APPLIED
+      if (targetIndex <= stageOrder.indexOf("SCREENING") && currentNodeSubtype === "ai_resume_screen") {
+        await query(
+          "UPDATE applications SET resume_score = 0, resume_parsed = NULL WHERE id = $1",
+          [id]
+        );
+        clearedItems.push("resume score");
+      }
+
+      if (clearedItems.length > 0) {
+        console.log(
+          `[Stage Reset] Application ${id}: ${oldStatus} → ${status}. Cleared: ${clearedItems.join(", ")}`
+        );
+      }
     }
 
     // ==========================================
@@ -87,12 +192,10 @@ export async function PUT(
         newStatus: status,
         ...(currentNodeSubtype && { nodeSubtype: currentNodeSubtype }),
         ...(currentNodeId && { nodeId: currentNodeId }),
+        ...(shouldClear && { stageDataCleared: true }),
       },
       req,
     });
-
-    // DO NOT trigger pipeline execution on manual status changes
-    // Pipeline only runs when candidate completes actions (assessment, interview)
 
     return NextResponse.json({ success: true, application });
   } catch (error: any) {

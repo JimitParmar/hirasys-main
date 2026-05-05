@@ -502,7 +502,7 @@ function ApplicationCard({
                       size="sm"
                       className="bg-[#0245EF] hover:bg-[#0237BF]"
                       onClick={() => {
-                        window.location.href = `/candidate/interview/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
+                        window.location.href = `/interview/${stages[currentStageIndex].subtype}?applicationId=${app.id}`;
                       }}
                     >
                       <Bot className="w-4 h-4 mr-2" />
