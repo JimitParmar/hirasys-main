@@ -440,16 +440,16 @@ export default function JobDetailPage() {
                   <div className="space-y-4">
                     <Button
                       className="w-full h-12 bg-[#0245EF] hover:bg-[#0237BF] text-base font-semibold shadow-md"
-                      onClick={() => {
-                        if (!isAuthenticated) {
-                          toast("Please sign in to apply", {
-                            icon: "👤",
-                          });
-                          router.push("/login");
-                          return;
-                        }
-                        setShowApplyForm(true);
-                      }}
+                     onClick={() => {
+  if (!isAuthenticated) {
+    toast("Please sign in to apply", {
+      icon: "👤",
+    });
+    router.push(`/login?redirect=${encodeURIComponent(`/jobs/${params.id}`)}`);
+    return;
+  }
+  setShowApplyForm(true);
+}}
                     >
                       <Send className="w-5 h-5 mr-2" />
                       Apply Now
