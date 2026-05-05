@@ -452,6 +452,7 @@ export default function HRJobDetailPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Filter tabs */}
+                {/* Filter tabs */}
         <div className="flex items-center gap-2 mb-6 flex-wrap">
           <Button
             variant={filterKey === "all" ? "default" : "outline"}
@@ -468,7 +469,9 @@ export default function HRJobDetailPage() {
                 ? stageCounts[stage.stageKey] || 0
                 : statusCounts[stage.status] || 0;
 
-            if (count === 0) return null;
+            // Always show HIRED and OFFERED tabs, hide others if empty
+            const alwaysShow = ["HIRED", "OFFERED"].includes(stage.status);
+            if (count === 0 && !alwaysShow) return null;
 
             const StageIcon = stage.icon;
             const isActive = filterKey === stage.stageKey;
@@ -479,7 +482,19 @@ export default function HRJobDetailPage() {
                 variant={isActive ? "default" : "outline"}
                 size="sm"
                 onClick={() => setFilterKey(stage.stageKey)}
-                className={isActive ? "bg-[#0245EF]" : ""}
+                className={
+                  isActive
+                    ? stage.status === "HIRED"
+                      ? "bg-green-600"
+                      : stage.status === "OFFERED"
+                        ? "bg-emerald-600"
+                        : "bg-[#0245EF]"
+                    : stage.status === "HIRED"
+                      ? "border-green-300 text-green-700 hover:bg-green-50"
+                      : stage.status === "OFFERED"
+                        ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        : ""
+                }
               >
                 <StageIcon className="w-3 h-3 mr-1" />
                 {stage.label} ({count})
@@ -506,14 +521,38 @@ export default function HRJobDetailPage() {
         </div>
 
         {/* Applications */}
-        {filtered.length === 0 ? (
+                {filtered.length === 0 ? (
           <div className="text-center py-16">
-            <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-slate-600">
-              {filterKey === "all"
-                ? "No applications yet"
-                : "No candidates in this stage"}
-            </h3>
+            {filterKey === "HIRED" || (pipelineStages.length > 0 && pipelineStages.find(s => s.stageKey === filterKey)?.status === "HIRED") ? (
+              <>
+                <CheckCircle className="w-12 h-12 text-green-200 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-slate-600">
+                  No hired candidates yet
+                </h3>
+                <p className="text-sm text-slate-400 mt-2">
+                  When you mark a candidate as hired, they'll appear here.
+                </p>
+              </>
+            ) : filterKey === "OFFERED" || (pipelineStages.length > 0 && pipelineStages.find(s => s.stageKey === filterKey)?.status === "OFFERED") ? (
+              <>
+                <Award className="w-12 h-12 text-emerald-200 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-slate-600">
+                  No offers extended yet
+                </h3>
+                <p className="text-sm text-slate-400 mt-2">
+                  Move candidates here when you're ready to make an offer.
+                </p>
+              </>
+            ) : (
+              <>
+                <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-slate-600">
+                  {filterKey === "all"
+                    ? "No applications yet"
+                    : "No candidates in this stage"}
+                </h3>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -535,6 +574,30 @@ export default function HRJobDetailPage() {
                 >
                   <CardContent className="p-5">
                     {/* Candidate row */}
+                    {app.status === "HIRED" && (
+                        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-700">
+                            Hired
+                          </span>
+                          <span className="text-xs text-green-500 ml-auto">
+                            {formatRelativeTime(app.updatedAt)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Offered banner */}
+                      {app.status === "OFFERED" && (
+                        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-4">
+                          <Award className="w-4 h-4 text-emerald-600" />
+                          <span className="text-sm font-medium text-emerald-700">
+                            Offer Extended
+                          </span>
+                          <span className="text-xs text-emerald-500 ml-auto">
+                            {formatRelativeTime(app.updatedAt)}
+                          </span>
+                        </div>
+                      )}
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
                         <div
@@ -1150,6 +1213,15 @@ function extractPipelineStages(pipeline: any): PipelineStage[] {
       label: "Offered",
       icon: Award,
       color: "bg-emerald-100 text-emerald-700",
+    });
+  }
+  if (!seenStatuses.has("HIRED")) {
+    stages.push({
+      stageKey: "HIRED",
+      status: "HIRED",
+      label: "Hired",
+      icon: CheckCircle,
+      color: "bg-green-100 text-green-700",
     });
   }
 
