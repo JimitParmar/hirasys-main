@@ -164,12 +164,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const job = await queryOne(
+        const job = await queryOne(
       `INSERT INTO jobs (
         title, description, requirements, skills, department, location,
         type, experience_min, experience_max, salary_min, salary_max,
-        salary_currency, status, pipeline_id, posted_by, closing_date
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        salary_currency, status, pipeline_id, posted_by, closing_date, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         body.title,
@@ -188,6 +188,7 @@ export async function POST(req: NextRequest) {
         body.pipelineId || null,
         userId,
         body.closingDate ? new Date(body.closingDate) : null,
+        body.metadata ? JSON.stringify(body.metadata) : "{}",
       ]
     );
 

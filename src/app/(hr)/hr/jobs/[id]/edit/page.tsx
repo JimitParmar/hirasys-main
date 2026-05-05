@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PreScreenBuilder } from "@/components/shared/PreScreenBuilder";
+import type { PreScreenQuestion } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -34,6 +36,7 @@ export default function EditJobPage() {
   const { id } = useParams();
   const router = useRouter();
   const { isHR, isLoading: authLoading } = useAuth();
+  const [preScreenQuestions, setPreScreenQuestions] = useState<PreScreenQuestion[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -75,6 +78,7 @@ export default function EditJobPage() {
       const res = await fetch(`/api/jobs/${id}`);
       const data = await res.json();
       const job = data.job;
+      const meta = typeof job.metadata === "string"? JSON.parse(job.metadata) : job.metadata || {};
 
       if (!job) {
         toast.error("Job not found");
@@ -93,6 +97,7 @@ export default function EditJobPage() {
       setSalaryMax(job.salaryMax ?? job.salary_max ? String(job.salaryMax ?? job.salary_max) : "");
       setSalaryCurrency(job.salaryCurrency ?? job.salary_currency ?? "USD");
       setSelectedPipelineId(job.pipeline_id || "none");
+      setPreScreenQuestions(meta.preScreenQuestions || []);
       setStatus(job.status || "DRAFT");
       setApplicantCount(job._count?.applications ?? job.applicant_count ?? 0);
       setSkills(job.skills || []);
@@ -146,21 +151,24 @@ export default function EditJobPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title,
-          description,
-          department,
-          location,
-          type,
-          experienceMin,
-          experienceMax,
-          salaryMin: salaryMin ? parseFloat(salaryMin) : null,
-          salaryMax: salaryMax ? parseFloat(salaryMax) : null,
-          salaryCurrency,
-          skills,
-          requirements,
-          pipelineId: selectedPipelineId !== "none" ? selectedPipelineId : null,
-          status: targetStatus,
-        }),
+  title,
+  description,
+  department,
+  location,
+  type,
+  experienceMin,
+  experienceMax,
+  salaryMin: salaryMin ? parseFloat(salaryMin) : null,
+  salaryMax: salaryMax ? parseFloat(salaryMax) : null,
+  salaryCurrency,
+  skills,
+  requirements,
+  pipelineId: selectedPipelineId !== "none" ? selectedPipelineId : null,
+  status: targetStatus,
+  metadata: {
+    preScreenQuestions: preScreenQuestions.length > 0 ? preScreenQuestions : undefined,
+  },
+}),
       });
 
       const data = await res.json();
@@ -357,6 +365,11 @@ export default function EditJobPage() {
             )}
           </CardContent>
         </Card>
+                {/* Pre-Screen Questions */}
+        <PreScreenBuilder
+          questions={preScreenQuestions}
+          onChange={setPreScreenQuestions}
+        />
 
         {/* Job Details */}
         <Card>

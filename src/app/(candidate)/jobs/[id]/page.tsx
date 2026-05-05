@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
   Briefcase,
@@ -38,6 +39,7 @@ export default function JobDetailPage() {
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [preScreenAnswers, setPreScreenAnswers] = useState<Record<string, any>>({});
   const [showApplyForm, setShowApplyForm] = useState(false);
   const [coverLetter, setCoverLetter] = useState("");
   const [resumeText, setResumeText] = useState("");
@@ -80,48 +82,88 @@ export default function JobDetailPage() {
       setLoading(false);
     }
   };
+const handleApply = async () => {
+  if (!isAuthenticated) {
+    router.push(`/login?redirect=${encodeURIComponent(`/jobs/${params.id}`)}`);
+    return;
+  }
 
-  const handleApply = async () => {
-    if (!isAuthenticated) {
-      router.push("/login");
+  if (!resumeText.trim()) {
+    toast.error("Please paste your resume or upload a file");
+    return;
+  }
+
+  // Check required pre-screen questions
+  const preScreenQuestions = job.preScreenQuestions || [];
+  for (const q of preScreenQuestions) {
+    if (q.required && !preScreenAnswers[q.id]) {
+      toast.error(`Please answer: "${q.question}"`);
       return;
     }
+  }
 
-    if (!resumeText.trim()) {
-      toast.error("Please paste your resume or upload a file");
+  // Check hard filters
+  for (const q of preScreenQuestions) {
+    if (!q.filter?.enabled) continue;
+
+    const answer = preScreenAnswers[q.id];
+    if (!answer) continue;
+
+    let passes = true;
+    const filterValue = q.filter.value;
+
+    switch (q.filter.operator) {
+      case "gte":
+        passes = Number(answer) >= Number(filterValue);
+        break;
+      case "lte":
+        passes = Number(answer) <= Number(filterValue);
+        break;
+      case "eq":
+        passes = String(answer).toLowerCase() === String(filterValue).toLowerCase();
+        break;
+      case "not_eq":
+        passes = String(answer).toLowerCase() !== String(filterValue).toLowerCase();
+        break;
+    }
+
+    if (!passes) {
+      const message =
+        q.filter.rejectMessage?.replace("{value}", String(filterValue)) ||
+        "You don't meet the requirements for this role.";
+      toast.error(message, { duration: 6000 });
       return;
     }
+  }
 
-    setApplying(true);
-    try {
-      const res = await fetch("/api/applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobId: params.id,
-          coverLetter,
-          resumeText,
-        }),
-      });
+  setApplying(true);
+  try {
+    const res = await fetch("/api/applications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jobId: params.id,
+        coverLetter,
+        resumeText,
+        preScreenAnswers,
+      }),
+    });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
 
-      setApplied(true);
-      setShowApplyForm(false);
-
-      // ✅ FIX 2: Don't try to show score — it's parsed in background
-      // The score will be 0 or undefined at this point
-      toast.success(
-        "Application submitted! 🎉 Your resume is being analyzed.",
-        { duration: 5000 }
-      );
-    } catch (err: any) {
-      toast.error(err.message || "Failed to apply");
-    } finally {
-      setApplying(false);
-    }
-  };
+    setApplied(true);
+    setShowApplyForm(false);
+    toast.success(
+      "Application submitted! 🎉 Your resume is being analyzed.",
+      { duration: 5000 }
+    );
+  } catch (err: any) {
+    toast.error(err.message || "Failed to apply");
+  } finally {
+    setApplying(false);
+  }
+};
 
   if (loading) {
     return (
@@ -373,6 +415,96 @@ export default function JobDetailPage() {
                     <h3 className="font-semibold text-slate-800 text-lg">
                       Apply Now
                     </h3>
+                    {/* Pre-Screen Questions */}
+{job.preScreenQuestions?.length > 0 && (
+  <div className="space-y-4">
+    <h4 className="text-sm font-semibold text-slate-700">
+      Pre-Screening Questions
+    </h4>
+    {job.preScreenQuestions.map((q: any) => (
+      <div key={q.id} className="space-y-1.5">
+        <Label className="text-sm">
+          {q.question}
+          {q.required && <span className="text-red-400 ml-0.5">*</span>}
+          {q.category === "diversity" && (
+            <span className="text-xs text-slate-400 ml-1">(voluntary)</span>
+          )}
+        </Label>
+
+        {q.type === "number" || q.type === "salary" ? (
+          <Input
+            type="number"
+            placeholder={q.placeholder || ""}
+            value={preScreenAnswers[q.id] || ""}
+            onChange={(e) =>
+              setPreScreenAnswers((prev: any) => ({
+                ...prev,
+                [q.id]: e.target.value,
+              }))
+            }
+            required={q.required}
+            className="h-10"
+          />
+        ) : q.type === "yes_no" ? (
+          <div className="flex gap-3">
+            {["yes", "no"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() =>
+                  setPreScreenAnswers((prev: any) => ({
+                    ...prev,
+                    [q.id]: opt,
+                  }))
+                }
+                className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
+                  preScreenAnswers[q.id] === opt
+                    ? "border-[#0245EF] bg-[#EBF0FF] text-[#0245EF]"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                {opt === "yes" ? "Yes" : "No"}
+              </button>
+            ))}
+          </div>
+        ) : q.type === "select" ? (
+          <select
+            value={preScreenAnswers[q.id] || ""}
+            onChange={(e) =>
+              setPreScreenAnswers((prev: any) => ({
+                ...prev,
+                [q.id]: e.target.value,
+              }))
+            }
+            required={q.required}
+            className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0245EF]"
+          >
+            <option value="">Select...</option>
+            {q.options?.map((opt: string) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input
+            type="text"
+            placeholder={q.placeholder || ""}
+            value={preScreenAnswers[q.id] || ""}
+            onChange={(e) =>
+              setPreScreenAnswers((prev: any) => ({
+                ...prev,
+                [q.id]: e.target.value,
+              }))
+            }
+            required={q.required}
+            className="h-10"
+          />
+        )}
+      </div>
+    ))}
+  </div>
+)}
 
                     <ResumeUpload
                       value={resumeText}

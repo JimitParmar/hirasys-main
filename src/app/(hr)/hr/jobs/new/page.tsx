@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { PreScreenBuilder } from "@/components/shared/PreScreenBuilder";
+import type { PreScreenQuestion } from "@/types";
 
 export default function NewJobPage() {
   const { user } = useAuth();
@@ -41,6 +43,7 @@ export default function NewJobPage() {
   const [salaryMin, setSalaryMin] = useState("");
   const [salaryMax, setSalaryMax] = useState("");
   const [salaryCurrency, setSalaryCurrency] = useState("USD");
+  const [preScreenQuestions, setPreScreenQuestions] = useState<PreScreenQuestion[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState("none");
   const [selectedPortals, setSelectedPortals] = useState<string[]>([]);
 
@@ -95,21 +98,24 @@ export default function NewJobPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title,
-          description,
-          department,
-          location,
-          type,
-          experienceMin,
-          experienceMax,
-          salaryMin: salaryMin ? parseFloat(salaryMin) : null,
-          salaryMax: salaryMax ? parseFloat(salaryMax) : null,
-          salaryCurrency,
-          skills,
-          requirements,
-          pipelineId: selectedPipelineId !== "none" ? selectedPipelineId : null,
-          status: publish ? "PUBLISHED" : "DRAFT",
-        }),
+  title,
+  description,
+  department,
+  location,
+  type,
+  experienceMin,
+  experienceMax,
+  salaryMin: salaryMin ? parseFloat(salaryMin) : null,
+  salaryMax: salaryMax ? parseFloat(salaryMax) : null,
+  salaryCurrency,
+  skills,
+  requirements,
+  pipelineId: selectedPipelineId !== "none" ? selectedPipelineId : null,
+  status: publish ? "PUBLISHED" : "DRAFT",
+  metadata: {
+    preScreenQuestions: preScreenQuestions.length > 0 ? preScreenQuestions : undefined,
+  },
+}),
       });
 
       const data = await res.json();
@@ -271,6 +277,11 @@ export default function NewJobPage() {
             )}
           </CardContent>
         </Card>
+                {/* Pre-Screen Questions */}
+        <PreScreenBuilder
+          questions={preScreenQuestions}
+          onChange={setPreScreenQuestions}
+        />
                 {/* External Portals */}
         <Card>
           <CardHeader>

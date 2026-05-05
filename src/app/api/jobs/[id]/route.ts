@@ -23,11 +23,21 @@ export async function GET(
        WHERE j.id = $1`,
       [id]
     );
-
+    // After fetching the job, also fetch pipeline pre-screen config
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
-
+// Pre-screen questions from metadata
+if (job.metadata) {
+  try {
+    const meta = typeof job.metadata === "string"
+      ? JSON.parse(job.metadata)
+      : job.metadata;
+    if (meta.preScreenQuestions?.length > 0) {
+      job.preScreenQuestions = meta.preScreenQuestions;
+    }
+  } catch {}
+}
     return NextResponse.json({
       job: {
         ...job,
@@ -111,6 +121,12 @@ export async function PUT(
     if (body.requirements !== undefined) {
       fields.push(`requirements = $${idx}`);
       values.push(body.requirements);
+      idx++;
+    }
+
+     if (body.metadata !== undefined) {
+      fields.push(`metadata = $${idx}`);
+      values.push(JSON.stringify(body.metadata));
       idx++;
     }
 

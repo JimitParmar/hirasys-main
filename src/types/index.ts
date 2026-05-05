@@ -160,7 +160,9 @@ export const NODE_CATALOG: NodeCatalogItem[] = [
     icon: "Briefcase",
     color: "#10B981",
     costPerUnit: 0.50,
-    defaultConfig: {},
+    defaultConfig: {
+      preScreenQuestions: [],
+    },
   },
 
   // Stage Nodes
@@ -488,3 +490,144 @@ export interface SessionUser {
   firstName: string;
   lastName: string;
 }
+// ==========================================
+// Pre-Screen Questions
+// ==========================================
+
+export interface PreScreenQuestion {
+  id: string;
+  question: string;
+  type: "number" | "select" | "yes_no" | "text" | "salary";
+  required: boolean;
+  options?: string[];  // For "select" type
+  placeholder?: string;
+  filter: {
+    enabled: boolean;
+    operator: "gte" | "lte" | "eq" | "not_eq" | "in" | "contains";
+    value: any;
+    rejectMessage?: string;  // Custom rejection message
+  };
+  category?: "experience" | "legal" | "compensation" | "diversity" | "custom";
+}
+
+export const PRE_SCREEN_TEMPLATES: PreScreenQuestion[] = [
+  {
+    id: "years_experience",
+    question: "How many years of relevant experience do you have?",
+    type: "number",
+    required: true,
+    placeholder: "e.g. 5",
+    filter: {
+      enabled: true,
+      operator: "gte",
+      value: 3,
+      rejectMessage: "This role requires a minimum of {value} years of experience.",
+    },
+    category: "experience",
+  },
+  {
+    id: "visa_sponsorship",
+    question: "Will you now or in the future require visa sponsorship?",
+    type: "yes_no",
+    required: true,
+    filter: {
+      enabled: false,
+      operator: "eq",
+      value: "no",
+      rejectMessage: "Unfortunately, we are unable to provide visa sponsorship for this role.",
+    },
+    category: "legal",
+  },
+  {
+    id: "work_authorization",
+    question: "Are you legally authorized to work in this country?",
+    type: "yes_no",
+    required: true,
+    filter: {
+      enabled: true,
+      operator: "eq",
+      value: "yes",
+      rejectMessage: "This role requires legal work authorization.",
+    },
+    category: "legal",
+  },
+  {
+    id: "expected_salary",
+    question: "What is your expected annual salary (in USD)?",
+    type: "salary",
+    required: false,
+    placeholder: "e.g. 120000",
+    filter: {
+      enabled: false,
+      operator: "lte",
+      value: 150000,
+      rejectMessage: "This role's compensation range doesn't match your expectations.",
+    },
+    category: "compensation",
+  },
+  {
+    id: "notice_period",
+    question: "What is your notice period (in days)?",
+    type: "number",
+    required: false,
+    placeholder: "e.g. 30",
+    filter: {
+      enabled: false,
+      operator: "lte",
+      value: 60,
+      rejectMessage: "We need someone who can start within {value} days.",
+    },
+    category: "experience",
+  },
+  {
+    id: "remote_preference",
+    question: "Are you comfortable working in the specified location/format?",
+    type: "yes_no",
+    required: true,
+    filter: {
+      enabled: true,
+      operator: "eq",
+      value: "yes",
+    },
+    category: "experience",
+  },
+  {
+    id: "gender_identity",
+    question: "What is your gender identity? (Optional — for diversity reporting only)",
+    type: "select",
+    required: false,
+    options: ["Male", "Female", "Non-binary", "Prefer not to say"],
+    filter: {
+      enabled: false,
+      operator: "eq",
+      value: "",
+    },
+    category: "diversity",
+  },
+  {
+    id: "ethnicity",
+    question: "What is your ethnicity? (Optional — for diversity reporting only)",
+    type: "select",
+    required: false,
+    options: ["Asian", "Black / African", "Hispanic / Latino", "White / Caucasian", "Middle Eastern", "Mixed / Multiple", "Prefer not to say"],
+    filter: {
+      enabled: false,
+      operator: "eq",
+      value: "",
+    },
+    category: "diversity",
+  },
+  {
+    id: "disability",
+    question: "Do you have a disability? (Optional — for diversity reporting only)",
+    type: "select",
+    required: false,
+    options: ["Yes", "No", "Prefer not to say"],
+    filter: {
+      enabled: false,
+      operator: "eq",
+      value: "",
+    },
+    category: "diversity",
+  },
+];

@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
 
     const userId = (session.user as any).id;
     const body = await req.json();
-    const { jobId, resumeUrl, resumeText, coverLetter } = body;
+    const { jobId, resumeUrl, resumeText, coverLetter, preScreenAnswers } = body;
 
     if (!jobId) {
       return NextResponse.json(
@@ -206,6 +206,71 @@ if (jobData.status !== "PUBLISHED") {
     { status: 400 }
   );
 }
+        // ==========================================
+    // PRE-SCREEN FILTER — server-side validation
+    // ==========================================
+    if (preScreenAnswers && Object.keys(preScreenAnswers).length > 0) {
+      const jobMeta = await queryOne(
+        "SELECT metadata FROM jobs WHERE id = $1",
+        [jobId]
+      );
+
+      let preScreenQuestions: any[] = [];
+      if (jobMeta?.metadata) {
+        const meta =
+          typeof jobMeta.metadata === "string"
+            ? JSON.parse(jobMeta.metadata)
+            : jobMeta.metadata;
+        preScreenQuestions = meta.preScreenQuestions || [];
+      }
+
+      for (const q of preScreenQuestions) {
+        if (!q.filter?.enabled) continue;
+
+        const answer = preScreenAnswers[q.id];
+        if (!answer && !q.required) continue;
+
+        if (q.required && !answer) {
+          return NextResponse.json(
+            { error: `Please answer: "${q.question}"` },
+            { status: 400 }
+          );
+        }
+
+        let passes = true;
+        const filterValue = q.filter.value;
+
+        switch (q.filter.operator) {
+          case "gte":
+            passes = Number(answer) >= Number(filterValue);
+            break;
+          case "lte":
+            passes = Number(answer) <= Number(filterValue);
+            break;
+          case "eq":
+            passes =
+              String(answer).toLowerCase() ===
+              String(filterValue).toLowerCase();
+            break;
+          case "not_eq":
+            passes =
+              String(answer).toLowerCase() !==
+              String(filterValue).toLowerCase();
+            break;
+        }
+
+        if (!passes) {
+          const message =
+            q.filter.rejectMessage?.replace(
+              "{value}",
+              String(filterValue)
+            ) ||
+            "Based on your responses, you don't meet the requirements for this role.";
+
+          return NextResponse.json({ error: message }, { status: 400 });
+        }
+      }
+    }
 
 const applicantLimit = await checkApplicantLimit(jobId, jobData.posted_by);
 
@@ -223,18 +288,18 @@ if (!applicantLimit.allowed) {
 
     // Create application immediately
     const application = await queryOne(
-      `INSERT INTO applications (job_id, candidate_id, resume_url, resume_text, cover_letter, status)
-       VALUES ($1, $2, $3, $4, $5, 'APPLIED')
-       RETURNING id, status`,
-      [
-        jobId,
-        userId,
-        resumeUrl || null,
-        resumeText || null,
-        coverLetter || null,
-      ]
-    );
-
+  `INSERT INTO applications (job_id, candidate_id, resume_url, resume_text, cover_letter, status, metadata)
+   VALUES ($1, $2, $3, $4, $5, 'APPLIED', $6)
+   RETURNING id, status`,
+  [
+    jobId,
+    userId,
+    resumeUrl || null,
+    resumeText || null,
+    coverLetter || null,
+    JSON.stringify({ preScreenAnswers: preScreenAnswers || {} }),
+  ]
+);
     if (!application) {
       return NextResponse.json(
         { error: "Failed to create application" },
@@ -301,54 +366,54 @@ if (!applicantLimit.allowed) {
     // Fire-and-forget — errors won't affect the response
     // ==========================================
     const doBackgroundWork = async () => {
+  try {
+    console.log(`[BG] Starting resume processing for ${application.id}`);
+    const startTime = Date.now();
+
+    const job = await queryOne(
+      "SELECT id, title, description, skills, requirements, posted_by FROM jobs WHERE id = $1",
+      [jobId]
+    );
+
+    if (!job) {
+      console.error(`[BG] Job not found: ${jobId}`);
+      return;
+    }
+
+    let finalResumeText = resumeText || null;
+
+    // Extract text from file if needed
+    if (resumeUrl && !finalResumeText) {
       try {
-        console.log(`[BG] Starting resume processing for ${application.id}`);
-        const startTime = Date.now();
-
-        const job = await queryOne(
-          "SELECT id, title, description, skills, requirements, posted_by FROM jobs WHERE id = $1",
-          [jobId]
+        const { extractTextFromResume } = await import("@/lib/resume");
+        finalResumeText = await extractTextFromResume(resumeUrl);
+        console.log(
+          `[BG] Extracted ${finalResumeText?.length || 0} chars`
         );
+      } catch (err) {
+        console.error("[BG] Resume extraction failed:", err);
+      }
+    }
 
-        if (!job) {
-          console.error(`[BG] Job not found: ${jobId}`);
-          return;
-        }
+    // AI score
+    let parsedResume: any = null;
+    let resumeScore = 0;
 
-        let finalResumeText = resumeText || null;
+    if (finalResumeText) {
+      try {
+        const { aiJSON } = await import("@/lib/ai");
 
-        // Extract text from file if needed
-        if (resumeUrl && !finalResumeText) {
-          try {
-            const { extractTextFromResume } = await import("@/lib/resume");
-            finalResumeText = await extractTextFromResume(resumeUrl);
-            console.log(
-              `[BG] Extracted ${finalResumeText?.length || 0} chars`
-            );
-          } catch (err) {
-            console.error("[BG] Resume extraction failed:", err);
-          }
-        }
-
-        // AI score
-        let parsedResume: any = null;
-        let resumeScore = 0;
-
-        if (finalResumeText) {
-          try {
-            const { aiJSON } = await import("@/lib/ai");
-
-            const result = await aiJSON<{
-              score: number;
-              matchedSkills: string[];
-              missingSkills: string[];
-              experience: string;
-              education: string;
-              summary: string;
-              strengths: string[];
-              concerns: string[];
-            }>(
-              `Analyze this resume against the job requirements. Be fair and practical.
+        const result = await aiJSON<{
+          score: number;
+          matchedSkills: string[];
+          missingSkills: string[];
+          experience: string;
+          education: string;
+          summary: string;
+          strengths: string[];
+          concerns: string[];
+        }>(
+          `Analyze this resume against the job requirements. Be fair and practical.
 
 JOB TITLE: ${job.title}
 JOB DESCRIPTION: ${(job.description || "").substring(0, 800)}
@@ -367,104 +432,110 @@ Return JSON:
 - summary: 2-3 sentence candidate summary
 - strengths: top 3 strengths
 - concerns: top 3 gaps`,
-              "Score this resume"
-            );
-
-            parsedResume = result;
-            resumeScore = Math.min(100, Math.max(0, result.score || 0));
-
-            console.log(
-              `[BG] Resume scored: ${resumeScore}% in ${Date.now() - startTime}ms`
-            );
-          } catch (err) {
-            console.error("[BG] AI scoring failed:", err);
-          }
-        }
-
-        // Update application with results
-        await query(
-          `UPDATE applications
-           SET resume_text = COALESCE($2, resume_text),
-               resume_parsed = $3,
-               resume_score = $4,
-               updated_at = NOW()
-           WHERE id = $1`,
-          [
-            application.id,
-            finalResumeText,
-            parsedResume ? JSON.stringify(parsedResume) : null,
-            resumeScore,
-          ]
+          "Score this resume"
         );
 
-        // Store resume text on user for future (NOT score — score is per-job)
-        if (finalResumeText) {
-          await query(
-            `UPDATE users
-             SET resume_text = $2,
-                 resume_url = COALESCE($3, resume_url),
-                 updated_at = NOW()
-             WHERE id = $1`,
-            [userId, finalResumeText, resumeUrl]
-          );
-        }
+        parsedResume = result;
+        resumeScore = Math.min(100, Math.max(0, result.score || 0));
 
         console.log(
-          `[BG] Resume saved in ${Date.now() - startTime}ms. Triggering pipeline...`
-        );
-
-        // Trigger pipeline — use internal function call instead of HTTP fetch
-        // This avoids the self-fetch timeout issue on serverless
-        try {
-          const appUrl =
-            process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-          // Use AbortController with timeout to prevent hanging
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
-          await fetch(`${appUrl}/api/pipeline/execute`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              applicationId: application.id,
-              trigger: "application_submitted",
-            }),
-            signal: controller.signal,
-          });
-
-          clearTimeout(timeoutId);
-          console.log(`[BG] Pipeline triggered`);
-        } catch (err: any) {
-          if (err.name === "AbortError") {
-            console.warn("[BG] Pipeline trigger timed out (non-critical)");
-          } else {
-            console.error("[BG] Pipeline trigger failed:", err);
-          }
-        }
-
-        // Track billing
-        try {
-          const { getUserCompanyId } = await import("@/lib/company");
-          const { trackUsage } = await import("@/lib/billing");
-          const companyId = await getUserCompanyId(job.posted_by);
-          if (companyId) {
-            await trackUsage({
-              companyId,
-              nodeType: "ai_resume_screen",
-              jobId,
-              applicationId: application.id,
-            });
-          }
-        } catch {}
-
-        console.log(
-          `[BG] ✅ Complete for ${application.id} in ${Date.now() - startTime}ms`
+          `[BG] Resume scored: ${resumeScore}% in ${Date.now() - startTime}ms`
         );
       } catch (err) {
-        console.error(`[BG] ❌ Failed for ${application.id}:`, err);
+        console.error("[BG] AI scoring failed:", err);
       }
-    };
+    }
+
+    // Update application with results
+    await query(
+      `UPDATE applications
+       SET resume_text = COALESCE($2, resume_text),
+           resume_parsed = $3,
+           resume_score = $4,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        application.id,
+        finalResumeText,
+        parsedResume ? JSON.stringify(parsedResume) : null,
+        resumeScore,
+      ]
+    );
+
+    // Store resume text on user
+    if (finalResumeText) {
+      await query(
+        `UPDATE users
+         SET resume_text = $2,
+             resume_url = COALESCE($3, resume_url),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [userId, finalResumeText, resumeUrl]
+      );
+    }
+
+    console.log(
+      `[BG] Resume saved. Score: ${resumeScore}%. Now triggering pipeline...`
+    );
+
+    // ==========================================
+    // TRIGGER PIPELINE — AFTER score is saved
+    // ==========================================
+    try {
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const pipelineRes = await fetch(`${appUrl}/api/pipeline/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicationId: application.id,
+          trigger: "application_submitted",
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (pipelineRes.ok) {
+        const pipelineResult = await pipelineRes.json();
+        console.log(`[BG] Pipeline result:`, pipelineResult);
+      } else {
+        console.error(`[BG] Pipeline returned ${pipelineRes.status}`);
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.warn("[BG] Pipeline trigger timed out (non-critical)");
+      } else {
+        console.error("[BG] Pipeline trigger failed:", err);
+      }
+    }
+
+    // Track billing
+    try {
+      const { getUserCompanyId } = await import("@/lib/company");
+      const { trackUsage } = await import("@/lib/billing");
+      const companyId = await getUserCompanyId(job.posted_by);
+      if (companyId) {
+        await trackUsage({
+          companyId,
+          nodeType: "ai_resume_screen",
+          jobId,
+          applicationId: application.id,
+        });
+      }
+    } catch {}
+
+    console.log(
+      `[BG] ✅ Complete for ${application.id} in ${Date.now() - startTime}ms`
+    );
+  } catch (err) {
+    console.error(`[BG] ❌ Failed for ${application.id}:`, err);
+  }
+};
 
     // Fire and forget — don't await
     doBackgroundWork().catch((err) =>
