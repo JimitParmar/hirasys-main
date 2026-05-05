@@ -34,28 +34,26 @@ export function ResumeUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    // Validate
-    const allowedTypes = [
-      "application/pdf",
-      "text/plain",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
+  // Validate — PDF only
+  if (file.type !== "application/pdf") {
+    toast.error("Only PDF files are accepted. Please upload your resume as a PDF.", {
+      duration: 5000,
+      icon: "📄",
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    return;
+  }
 
-    if (!allowedTypes.includes(file.type)) {
-      toast.error("Please upload a PDF, TXT, or DOC file");
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("File too large. Max 10MB.");
-      return;
-    }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.error("File too large. Max 10MB.");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    return;
+  }
 
     setUploading(true);
 
@@ -97,6 +95,14 @@ export function ResumeUpload({
 
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
+    if (file.type !== "application/pdf") {
+    toast.error("Only PDF files are accepted. Please upload your resume as a PDF.", {
+      duration: 5000,
+      icon: "📄",
+    });
+    return;
+  }
+
 
     const dt = new DataTransfer();
     dt.items.add(file);
@@ -198,7 +204,7 @@ export function ResumeUpload({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.txt,.doc,.docx"
+                accept=".pdf"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -214,7 +220,7 @@ export function ResumeUpload({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.txt,.doc,.docx"
+                accept=".pdf"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -239,7 +245,7 @@ export function ResumeUpload({
                       Upload your resume
                     </p>
                     <p className="text-xs text-slate-400 mt-1">
-                      PDF, TXT, DOC • Max 10MB
+                      PDF only • Max 10MB
                     </p>
                     <p className="text-xs text-slate-400">
                       Drag & drop or click to browse
