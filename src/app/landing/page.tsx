@@ -367,9 +367,11 @@ export default function LandingPage() {
       <section className="py-12 sm:py-20 bg-slate-50">
         <div className="max-w-5xl mx-auto px-4">
           <div className="text-center mb-10 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900">
-              From job post <ArrowRight/> shortlist in 2 steps
-            </h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 flex items-center justify-center gap-2">
+  <span>From job post</span>
+  <ArrowRight className="w-10 h-10" />
+  <span>shortlist in 2 steps</span>
+</h2>
           </div>
 
           <div className="grid gap-8 sm:gap-12">
